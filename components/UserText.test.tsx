@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { UserText } from "./UserText";
+import { PlainTextBoundary, UserText, safeUserUrl } from "./UserText";
 
 afterEach(cleanup);
 
@@ -38,12 +38,13 @@ describe("UserText: markdown + links", () => {
     expect(c.querySelector("code")).toBeTruthy();
   });
 
-  it("comments allow links and emphasis but not lists or code blocks", () => {
-    const c = html("**b** [l](https://e.test)\n\n- one", "comment");
+  it("comments allow links, emphasis and lists but not code blocks", () => {
+    const c = html("**b** [l](https://e.test)\n\n- one\n\n`x`", "comment");
     expect(c.querySelector("strong")).toBeTruthy();
     expect(c.querySelector("a")).toBeTruthy();
-    expect(c.querySelector("ul, li")).toBeNull();
-    expect(c.textContent).toContain("one");
+    expect(c.querySelector("li")).toBeTruthy();
+    expect(c.querySelector("code, pre")).toBeNull();
+    expect(c.textContent).toContain("x");
   });
 
   it("keeps single newlines visible for plain text", () => {
@@ -140,5 +141,114 @@ describe("UserText: timestamps", () => {
   it("does not re-link timestamps inside a link label", () => {
     const c = html("[at 1:23](https://e.test)");
     expect(c.querySelectorAll("a")).toHaveLength(1);
+  });
+});
+
+describe("UserText: robustness", () => {
+  it.each(["description", "comment"] as const)("renders 5000 nested quote markers without throwing (%s)", (v) => {
+    const c = html(">".repeat(5000) + " x", v);
+    expect(c.textContent).toContain("x");
+  });
+
+  it("renders deeply nested lists and emphasis without throwing", () => {
+    const t0 = Date.now();
+    const c = html("- ".repeat(2500) + "deep");
+    expect(c.textContent).toContain("deep");
+    expect(html("*".repeat(2500) + "e" + "*".repeat(2400)).textContent).toContain("e");
+    expect(html("[".repeat(2500) + "e").textContent).toContain("e");
+    expect(Date.now() - t0).toBeLessThan(2000);
+  });
+
+  it("flattens nesting beyond the depth bound (below the plain-text guard)", () => {
+    const c = html(">".repeat(60) + " x");
+    expect(c.querySelectorAll("blockquote").length).toBeLessThanOrEqual(12);
+    expect(c.textContent).toContain("x");
+  });
+
+  it("stays fast on alternating marker patterns", () => {
+    const t0 = Date.now();
+    html("> 1. ".repeat(1000) + "x");
+    html("*_".repeat(2500) + "x");
+    expect(Date.now() - t0).toBeLessThan(3000);
+  });
+
+  it("falls back to plain text when a render throws", () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    function Boom(): never {
+      throw new Error("boom");
+    }
+    const c = render(
+      <PlainTextBoundary text={"raw **text**"}>
+        <Boom />
+      </PlainTextBoundary>,
+    ).container;
+    spy.mockRestore();
+    expect(c.textContent).toBe("raw **text**");
+  });
+});
+
+describe("UserText: structure", () => {
+  it("does not nest a seek link inside an external link", () => {
+    const c = html("[**1:23**](https://e.test)");
+    expect(c.querySelectorAll("a")).toHaveLength(1);
+    expect(c.querySelector("a a")).toBeNull();
+  });
+
+  it("keeps numbered lists and their seek links in comments", () => {
+    const c = render(
+      <UserText text={"1. 0:00 intro\n2. 1:23 topic"} variant="comment" durationSeconds={600} />,
+    ).container;
+    expect(c.querySelector("ol")).toBeTruthy();
+    expect(c.querySelectorAll("li")).toHaveLength(2);
+    expect(c.querySelectorAll("a[data-timestamp-seconds]")).toHaveLength(2);
+  });
+
+  it("links timestamps in headings but not in code", () => {
+    const c = render(
+      <UserText text={"# at 1:23\n\n`2:00`"} variant="description" durationSeconds={600} />,
+    ).container;
+    expect(c.querySelectorAll("a[data-timestamp-seconds]")).toHaveLength(1);
+  });
+
+  it("keeps heading text (setext) as visible text", () => {
+    expect(html("text\n---").textContent).toContain("text");
+  });
+
+  it("uses newline text, not <br>, for hard breaks", () => {
+    const c = html("a  \nb");
+    expect(c.querySelector("br")).toBeNull();
+    expect(c.textContent).toBe("a\nb");
+  });
+
+  it("mailto links do not open a new tab", () => {
+    const a = html("[m](mailto:a@b.test)").querySelector("a")!;
+    expect(a.getAttribute("target")).toBeNull();
+  });
+
+  it("does not leak footnote chrome", () => {
+    const c = html("hi[^1]\n\n[^1]: note");
+    expect(c.textContent).not.toContain("Footnotes");
+    expect(c.textContent).not.toContain("\u21A9");
+    expect(c.querySelector("sup, section")).toBeNull();
+  });
+});
+
+describe("safeUserUrl", () => {
+  it.each([
+    ["https://e.test/a", "https://e.test/a"],
+    ["HTTP://E.test", "HTTP://E.test"],
+    ["  https://e.test ", "https://e.test"],
+    ["mailto:a@b.test", "mailto:a@b.test"],
+  ])("accepts %j", (input, out) => expect(safeUserUrl(input)).toBe(out));
+
+  it.each([
+    "javascript:alert(1)", " javascript:alert(1)", "java\tscript:alert(1)", "data:text/html,x",
+    "vbscript:x", "file:///etc/passwd", "//evil.test", "/rel", "?t=5", "irc://h/c", "xmpp:a@b",
+    "https:", "", "ftp://h/x", "\u0000https://e.test",
+  ])("rejects %j", (input) => expect(safeUserUrl(input)).toBe(""));
+
+  it("rejects non-strings", () => {
+    expect(safeUserUrl(undefined)).toBe("");
+    expect(safeUserUrl(null)).toBe("");
   });
 });

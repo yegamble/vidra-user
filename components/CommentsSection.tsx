@@ -925,7 +925,6 @@ function CommentItem({
                 text={comment.body}
                 durationSeconds={durationSeconds}
                 onSeek={onSeekToTimestamp}
-                keyPrefix={`c-${comment.id}`}
               />
             </div>
           )}

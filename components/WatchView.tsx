@@ -650,7 +650,6 @@ export function WatchView({
               text={video.description}
               durationSeconds={video.duration_seconds ?? null}
               onSeek={seekToTimestamp}
-              keyPrefix="desc"
               className="rounded-2xl border border-border-subtle bg-surface p-4 text-subhead leading-relaxed text-fg shadow-soft"
             />
           ) : null}
