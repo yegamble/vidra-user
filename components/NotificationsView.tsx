@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import {
@@ -15,14 +15,15 @@ import {
 } from "@/components/icons";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { ListTail } from "@/components/ui/ListTail";
 import { Spinner } from "@/components/ui/Spinner";
 import { api } from "@/lib/api";
 import type { Notification } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { relativeTime } from "@/lib/format";
+import { useAppendingList } from "@/lib/use-appending-list";
+import { useBrowseAutoLoad } from "@/lib/use-browse-auto-load";
 import { SignInGate } from "@/components/SignInGate";
-
-type Status = "loading" | "error" | "ready";
 
 // NotificationTypeIcon maps each notification type to a design-set glyph, rendered
 // inside the round leading chip. The design's Inbox uses message-circle for
@@ -34,7 +35,9 @@ export function NotificationTypeIcon({ type }: { type: string }) {
     case "comment":
     case "comment_held":
     case "comment_reply":
+    case "comment_mention":
     case "message":
+    case "report_message":
       return <MessageCircleIcon size={16} />;
     case "video_rejected":
     case "video_blocked":
@@ -66,6 +69,7 @@ const NOTIF_CHIP: Record<string, string> = {
   follow: "bg-tile-blue/12 text-tile-blue",
   comment: "bg-accent/12 text-accent",
   comment_reply: "bg-accent/12 text-accent",
+  comment_mention: "bg-accent/12 text-accent",
   message: "bg-tile-green/12 text-tile-green",
   video_rejected: "bg-tile-red/12 text-tile-red",
   video_blocked: "bg-tile-red/12 text-tile-red",
@@ -75,6 +79,7 @@ const NOTIF_CHIP: Record<string, string> = {
   // and the same failure class as a missing describeNotification case.
   video_unblocked: "bg-tile-green/12 text-tile-green",
   report_resolved: "bg-tile-orange/12 text-tile-orange",
+  report_message: "bg-tile-orange/12 text-tile-orange",
   new_report: "bg-tile-red/12 text-tile-red",
   new_video: "bg-accent/12 text-accent",
   // Staff approval-queue signals: the amber/orange family reads as "needs a
@@ -98,6 +103,12 @@ export function NotificationIconChip({ type }: { type: string }) {
       <NotificationTypeIcon type={type} />
     </span>
   );
+}
+
+// The reporter's page for a report (My reports), or nowhere when the row
+// carries no report id.
+function myReportHref(n: Notification): string {
+  return n.report_id ? `/settings/reports/${encodeURIComponent(n.report_id)}` : "#";
 }
 
 // describeNotification renders a notification as a human message plus the link
@@ -141,6 +152,17 @@ export function describeNotification(n: Notification): {
       lead: actor,
       rest: `’s comment${where} is awaiting your approval`,
       href: n.video_id ? `/videos/${n.video_id}` : "/studio/content",
+    };
+  }
+  if (n.type === "comment_mention") {
+    // A comment @-mentioned the recipient. The actor is absent when the comment
+    // came from another instance, hence the "Someone" fallback. Like the reply
+    // above, the link goes to the video: comment-level anchors do not exist yet.
+    const where = n.video_title ? ` on “${n.video_title}”` : "";
+    return {
+      lead: actor,
+      rest: ` mentioned you in a comment${where}`,
+      href: n.video_id ? `/videos/${n.video_id}` : "#",
     };
   }
   if (n.type === "message") {
@@ -201,7 +223,17 @@ export function describeNotification(n: Notification): {
         ? n.report_status
         : "resolved";
     const target = n.report_target_type ? `${n.report_target_type} report` : "report";
-    return { lead: "A moderator", rest: ` ${outcome} your ${target}`, href: "#" };
+    return { lead: "A moderator", rest: ` ${outcome} your ${target}`, href: myReportHref(n) };
+  }
+  if (n.type === "report_message") {
+    // A new message on a report's thread (core 0163). It has two audiences:
+    // with an actor, the REPORTER wrote and this recipient is staff, so the
+    // row links to the queue that holds the thread; without one, staff wrote
+    // to the reporter, and the server never names which moderator. The body is
+    // never carried — the thread is the only place it is read.
+    const target = n.report_target_type ? `${n.report_target_type.replaceAll("_", " ")} report` : "report";
+    if (n.actor) return { lead: actor, rest: ` sent a message about their ${target}`, href: "/moderation" };
+    return { lead: "A moderator", rest: ` sent you a message about your ${target}`, href: myReportHref(n) };
   }
   if (n.type === "new_report") {
     // Staff-only: a user filed an abuse report (the moderation queue's push
@@ -285,53 +317,45 @@ export function NotificationsView() {
 }
 
 function Notifications() {
-  const [status, setStatus] = useState<Status>("loading");
-  const [items, setItems] = useState<Notification[]>([]);
+  const autoLoad = useBrowseAutoLoad();
+  // `unread_count` is the account-wide figure and rides on every page, so the
+  // badge always shows the server's number, not a count of the loaded rows.
   const [unread, setUnread] = useState(0);
-  const [reloadKey, setReloadKey] = useState(0);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    api
-      .getNotifications({}, controller.signal)
-      .then((res) => {
-        setItems(res.notifications);
-        setUnread(res.unread_count);
-        setStatus("ready");
-      })
-      .catch((err: unknown) => {
-        void err;
-        if (controller.signal.aborted) return;
-        setStatus("error");
-      });
-    return () => controller.abort();
-  }, [reloadKey]);
+  const list = useAppendingList<Notification>({
+    queryKey: "notifications",
+    getId: (n) => n.id,
+    load: (window, signal) =>
+      api.getNotifications(window, signal).then((res) => {
+        if (!signal.aborted) setUnread(res.unread_count);
+        return { items: res.notifications, total: res.total };
+      }),
+  });
+  const { status, items } = list;
 
   function retry() {
-    setStatus("loading");
-    setReloadKey((k) => k + 1);
+    list.reload();
   }
 
   async function markRead(id: string) {
     const target = items.find((i) => i.id === id);
     if (!target || target.read) return;
-    setItems((list) => list.map((i) => (i.id === id ? { ...i, read: true } : i))); // optimistic
+    list.patch((rows) => rows.map((i) => (i.id === id ? { ...i, read: true } : i))); // optimistic
     setUnread((n) => Math.max(0, n - 1));
     try {
       await api.markNotificationRead(id);
     } catch {
-      setReloadKey((k) => k + 1); // resync on failure
+      list.reload(); // resync on failure
     }
   }
 
   async function markAll() {
     if (unread === 0) return;
-    setItems((list) => list.map((i) => ({ ...i, read: true }))); // optimistic
+    list.patch((rows) => rows.map((i) => ({ ...i, read: true }))); // optimistic
     setUnread(0);
     try {
       await api.markAllNotificationsRead();
     } catch {
-      setReloadKey((k) => k + 1);
+      list.reload();
     }
   }
 
@@ -409,6 +433,13 @@ function Notifications() {
           );
         })}
       </ul>
+      <ListTail
+        hasMore={list.hasMore}
+        autoLoad={autoLoad}
+        busy={list.moreStatus === "loading"}
+        error={list.moreStatus === "error" ? "Could not load more notifications." : null}
+        onLoadMore={list.loadMore}
+      />
     </div>
   );
 }

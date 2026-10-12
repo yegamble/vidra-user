@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useId, useState } from "react";
+import { useId, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import { useWatchSignIn } from "@/components/watch/WatchSignInPrompt";
@@ -22,12 +22,15 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Dropdown, type DropdownItem } from "@/components/ui/Dropdown";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { ListTail } from "@/components/ui/ListTail";
 import { Spinner } from "@/components/ui/Spinner";
 import { Textarea } from "@/components/ui/Textarea";
 import { useToast } from "@/components/ui/Toast";
 import { ApiError, api, errorMessage, userAvatarUrl } from "@/lib/api";
 import type { Comment } from "@/lib/api";
 import { FULL_LIST_LIMIT } from "@/lib/api/pagination";
+import { useAppendingList } from "@/lib/use-appending-list";
+import { useBrowseAutoLoad } from "@/lib/use-browse-auto-load";
 import { buildCommentTree, replyMention } from "@/lib/comments";
 import { useE2EEAvailable } from "@/lib/e2ee/availability";
 import { useMessagingAvailable } from "@/lib/messaging/availability";
@@ -36,7 +39,6 @@ import { useSettledSession } from "@/lib/use-settled-session";
 
 const MAX_COMMENT_LEN = 2000;
 
-type Status = "loading" | "error" | "ready";
 
 // CommentsSection loads a public video's comments client-side and lets an
 // authenticated viewer post, reply, edit, and delete. The flat list the API
@@ -79,52 +81,43 @@ export function CommentsSection({
    */
   canManageComments?: boolean;
 }) {
-  const [status, setStatus] = useState<Status>("loading");
-  const [comments, setComments] = useState<Comment[]>([]);
-  const [reloadKey, setReloadKey] = useState(0);
   // Which comments this list may show is a PER-VIEWER question the server
   // answers: GET /videos/{id}/comments filters out the accounts (and remote
   // instances) the CALLER has muted or blocked, and it can only do that if the
   // request carries the caller's token.
-  const { settled, viewerKey } = useSettledSession();
 
-  useEffect(() => {
-    // Wait for the session restore to settle. Firing on mount sent the request
-    // ANONYMOUSLY — the token is restored asynchronously from the refresh
-    // cookie — so the server had no viewer to filter for and returned the
-    // muted/blocked authors' comments to the very person who hid them. The
-    // effect never re-ran, so every hard load of the watch page undid the mute.
-    // "restoring" always settles to "authed" or "anon", so this delays the read
-    // rather than skipping it, and the spinner already covers the wait.
-    // `useSettledSession` is the shared seam for that wait — see its docblock.
-    if (!settled) return;
-    const controller = new AbortController();
-    api
-      .getVideoComments(videoId, { limit: FULL_LIST_LIMIT }, controller.signal)
-      .then((res) => {
-        setComments(res.comments);
-        setStatus("ready");
-      })
-      .catch(() => {
-        if (controller.signal.aborted) return;
-        setStatus("error");
-      });
-    return () => controller.abort();
-  }, [videoId, reloadKey, settled, viewerKey]);
+  // The request waits for the session restore to settle (`viewer`): firing on
+  // mount sent it ANONYMOUSLY — the token is restored asynchronously from the
+  // refresh cookie — so the server had no viewer to filter for and returned the
+  // muted/blocked authors' comments to the very person who hid them. The hook
+  // holds the request until `settled` and re-asks when the viewer changes; see
+  // `useSettledSession`. Pages of 100 (the backend maximum) append under a
+  // "Load more" instead of silently stopping at the first 100.
+  const viewer = useSettledSession();
+  const list = useAppendingList<Comment>({
+    queryKey: videoId,
+    pageSize: FULL_LIST_LIMIT,
+    getId: (c) => c.id,
+    viewer,
+    load: (window, signal) =>
+      api.getVideoComments(videoId, window, signal).then((res) => ({ items: res.comments, total: res.total })),
+  });
+  const { status, items: comments } = list;
+  const autoLoad = useBrowseAutoLoad();
 
   function retry() {
-    setStatus("loading");
-    setComments([]);
-    setReloadKey((k) => k + 1);
+    list.reload();
   }
 
   // Shared mutations over the flat list (work identically for a top-level comment
   // or a reply, since the tree is derived, not stored).
-  const onPosted = (c: Comment) => setComments((prev) => [c, ...prev]);
-  const onReplied = (c: Comment) => setComments((prev) => [...prev, c]);
+  const setComments = list.patch;
+  const onPosted = list.prepend;
+  // A reply is a new row too: it counts in the heading total like a top-level post.
+  const onReplied = list.append;
   const onEdited = (updated: Comment) =>
     setComments((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
-  const onDeleted = (id: string) => setComments((prev) => prev.filter((x) => x.id !== id));
+  const onDeleted = (id: string) => list.drop((x) => x.id !== id);
   // A creator heart returns the updated comment: map it in place (like an edit).
   const onHearted = (updated: Comment) =>
     setComments((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
@@ -152,10 +145,10 @@ export function CommentsSection({
   // (Block left the comment reading "Blocked"), which asked the reader to
   // believe two controls with the same effect had different ones.
   const onHiddenAuthor = (authorId: string) =>
-    setComments((prev) => prev.filter((x) => x.author_id !== authorId));
+    list.drop((x) => x.author_id !== authorId);
   // An instance mute hides ALL of that origin's comments for the caller.
   const onMutedInstance = (domain: string) =>
-    setComments((prev) => prev.filter((x) => x.author_domain !== domain));
+    list.drop((x) => x.author_domain !== domain);
 
   const threads = buildCommentTree(comments);
   // The same flat list keyed by id: `CommentItem` resolves each reply's target
@@ -166,7 +159,7 @@ export function CommentsSection({
   return (
     <section aria-label="Comments" className="flex flex-col gap-4">
       <h2 className="text-[15px] font-bold tracking-tight">
-        {status === "ready" ? `Comments (${comments.length})` : "Comments"}
+        {status === "ready" ? `Comments (${list.total ?? comments.length})` : "Comments"}
       </h2>
 
       {commentsEnabled ? (
@@ -211,6 +204,15 @@ export function CommentsSection({
           ))}
         </ul>
       )}
+      {status === "ready" ? (
+        <ListTail
+          hasMore={list.hasMore}
+          autoLoad={autoLoad}
+          busy={list.moreStatus === "loading"}
+          error={list.moreStatus === "error" ? "Could not load more comments." : null}
+          onLoadMore={list.loadMore}
+        />
+      ) : null}
     </section>
   );
 }

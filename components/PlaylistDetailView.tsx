@@ -1,10 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
-import { PlaylistIcon } from "@/components/icons";
+import { PlayIcon, PlaylistIcon } from "@/components/icons";
 import { PlaylistThumbnailManager } from "@/components/PlaylistThumbnailManager";
 import { Button, Input, Select, Textarea } from "@/components/ui";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -16,6 +17,7 @@ import { UserText } from "@/components/UserText";
 import { VideoCard } from "@/components/VideoCard";
 import { ApiError, api, errorMessage } from "@/lib/api";
 import type { PlaylistDetail, PlaylistVisibility } from "@/lib/api";
+import { playlistWatchHref } from "@/lib/playlist-queue";
 import { useApiResource } from "@/lib/use-api-resource";
 import { useAppendingList } from "@/lib/use-appending-list";
 import { useBrowseAutoLoad } from "@/lib/use-browse-auto-load";
@@ -136,6 +138,14 @@ function PlaylistForViewer({ id }: { id: string }) {
               </div>
             ) : null}
           </div>
+          {playlist.videos[0] ? (
+            <Link
+              href={playlistWatchHref(playlist.videos[0], playlist.id, 1)}
+              className="focus-ring inline-flex w-fit items-center gap-1.5 rounded-full bg-accent px-4 py-2 text-[13px] font-semibold text-accent-fg transition-opacity hover:opacity-90"
+            >
+              <PlayIcon size={16} /> Play all
+            </Link>
+          ) : null}
           <p className="text-[13px] text-fg-muted tabular-nums">
             {playlist.video_count} {playlist.video_count === 1 ? "video" : "videos"} · {playlist.visibility}
           </p>
@@ -257,6 +267,13 @@ function PlaylistItems({
               playlistId={playlist.id}
               onDeleted={() => list.drop((v) => v.id !== video.id)}
             />
+            <Link
+              href={playlistWatchHref(video, playlist.id, index + 1)}
+              className="focus-ring inline-flex w-fit items-center gap-1 rounded-full px-2 py-1.5 text-[13px] font-semibold text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg"
+              aria-label={`Play ${video.title} in the playlist`}
+            >
+              <PlayIcon size={14} /> Play
+            </Link>
             {isOwner ? (
               <div className="flex items-center justify-between gap-2">
                 <div className="flex gap-2">

@@ -18,6 +18,38 @@ function notif(overrides: Partial<Notification>): Notification {
 }
 
 describe("describeNotification", () => {
+  // report_message has two audiences. The reporter is told by "a moderator" —
+  // the server never names who — and staff are told which reporter wrote,
+  // linked to the queue where the thread lives. Neither carries the body.
+  it("renders report_message for the reporter without naming the moderator", () => {
+    const { lead, rest } = describeNotification(
+      notif({ type: "report_message", report_id: "r-1", report_target_type: "remote_video" }),
+    );
+    expect(lead).toBe("A moderator");
+    expect(rest).toBe(" sent you a message about your remote video report");
+  });
+
+  it("links the reporter's report notifications to that report's page", () => {
+    for (const type of ["report_message", "report_resolved"] as const) {
+      const { href } = describeNotification(notif({ type, report_id: "r-1", report_status: "accepted" }));
+      expect(href).toBe("/settings/reports/r-1");
+    }
+  });
+
+  it("renders report_message for staff as the reporter writing, linking to the queue", () => {
+    const { lead, rest, href } = describeNotification(
+      notif({
+        type: "report_message",
+        actor: { username: "bob", display_name: "" },
+        report_id: "r-1",
+        report_target_type: "video",
+      }),
+    );
+    expect(lead).toBe("bob");
+    expect(rest).toBe(" sent a message about their video report");
+    expect(href).toBe("/moderation");
+  });
+
   it("renders new_report as the reporter filing a report, linking to the admin queue", () => {
     const { lead, rest, href } = describeNotification(
       notif({
@@ -52,6 +84,28 @@ describe("describeNotification", () => {
     expect(rest).toContain("Clip");
     expect(rest).not.toContain("commented on your video");
     expect(href).toBe("/videos/v-1");
+  });
+
+  it("renders comment_mention as being mentioned, linking to the video", () => {
+    const { lead, rest, href } = describeNotification(
+      notif({
+        type: "comment_mention",
+        actor: { username: "cara", display_name: "Cara" },
+        video_id: "v-1",
+        video_title: "Clip",
+        comment_id: "c-2",
+      }),
+    );
+    expect(lead).toBe("Cara");
+    expect(rest).toContain("mentioned you");
+    expect(rest).toContain("Clip");
+    expect(href).toBe("/videos/v-1");
+  });
+
+  it("names a mention from another instance (no actor) without a person", () => {
+    const { lead, rest } = describeNotification(notif({ type: "comment_mention", video_id: "v-1" }));
+    expect(lead).toBe("Someone");
+    expect(rest).toContain("mentioned you");
   });
 
   it("still renders comment as a comment on YOUR video, distinct from a reply", () => {
@@ -183,6 +237,7 @@ describe("notification pref labels", () => {
       "caption_ready",
       "comment",
       "comment_held",
+      "comment_mention",
       "comment_reply",
       "follow",
       "message",
@@ -192,6 +247,7 @@ describe("notification pref labels", () => {
       "federation_follower_request",
       "new_video",
       "report_resolved",
+      "report_message",
       "video_rejected",
       "video_blocked",
       "video_unblocked",
@@ -212,6 +268,7 @@ describe("describeNotification is exhaustive over the type union", () => {
     comment: { href: "/videos/v-1", rest: /commented on/ },
     comment_reply: { href: "/videos/v-1", rest: /replied to your comment/ },
     comment_held: { href: "/videos/v-1", rest: /awaiting your approval/ },
+    comment_mention: { href: "/videos/v-1", rest: /mentioned you/ },
     message: { href: "/messages/conv-1", rest: /sent you a message/ },
     new_video: { href: "/videos/v-1", rest: /published/ },
     new_report: { href: "/admin", rest: /reported a/ },
@@ -225,6 +282,7 @@ describe("describeNotification is exhaustive over the type union", () => {
       rest: /asked to follow/,
     },
     report_resolved: { href: "#", rest: /your report/ },
+    report_message: { href: "#", rest: /message about your report/ },
     video_rejected: { href: "/studio", rest: /rejected/ },
     video_blocked: { href: "/studio/content", rest: /blocked/ },
     video_unblocked: { href: "/videos/v-1", rest: /restored/ },
