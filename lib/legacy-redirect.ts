@@ -9,8 +9,9 @@
 function mapStart(params: URLSearchParams): void {
   const start = params.get("start");
   params.delete("start");
-  // An explicit `t` wins: it is already vidra's own form.
-  if (start !== null && start !== "" && !params.has("t")) params.set("t", start);
+  // An explicit non-empty `t` wins: it is already vidra's own form. An empty
+  // `t` carries no time, so it must not suppress `start`.
+  if (start !== null && start !== "" && (params.get("t") ?? "") === "") params.set("t", start);
 }
 
 function toSearch(params: URLSearchParams): string {

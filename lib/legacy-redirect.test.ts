@@ -22,3 +22,10 @@ describe("legacyEmbedSearch", () => {
     expect(legacyEmbedSearch("?autoplay=1&playlistPosition=3")).toBe("");
   });
 });
+
+describe("empty t", () => {
+  it("is treated as absent, so start still maps", () => {
+    expect(legacyWatchSearch("?start=1m30s&t=")).toBe("?t=1m30s");
+    expect(legacyEmbedSearch("?start=90&t=")).toBe("?t=90");
+  });
+});

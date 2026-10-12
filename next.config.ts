@@ -19,12 +19,12 @@ const nextConfig: NextConfig = {
         destination: "/studio/analytics",
         permanent: true,
       },
-      // PeerTube's /c/{channel} and /a/{account}. `[^@]+` leaves name@host
-      // (a possibly REMOTE actor) unmatched, so it 404s rather than landing on a
+      // PeerTube's /c/{channel} and /a/{account}. `[^@/]+` leaves sub-paths and name@host
+      // (a possibly REMOTE actor; a static rule cannot compare the host to ours) unmatched, so it 404s rather than landing on a
       // local namesake. (/video-channels and /accounts never reach this app:
       // the proxy sends them to vidra-core.)
-      { source: "/c/:handle([^@]+)", destination: "/channels/:handle", permanent: false },
-      { source: "/a/:name([^@]+)", destination: "/users/:name", permanent: false },
+      { source: "/c/:handle([^@/]+)", destination: "/channels/:handle", permanent: false },
+      { source: "/a/:name([^@/]+)", destination: "/users/:name", permanent: false },
       // NOTE: /videos/watch/:id is NOT handled here any more. It moved to
       // app/videos/watch/[id]/route.ts, because a static rewrite cannot do what
       // that path now needs: the uuid in it may be this instance's own id OR the
