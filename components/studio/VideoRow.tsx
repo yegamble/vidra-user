@@ -52,7 +52,7 @@ export function VideoRow({
   initiallyEditing = false,
   basicOnly = false,
   replaceEnabled = false,
-  replaceAccept = "video/*",
+  replaceAccept = "video/*,audio/*",
 }: {
   video: Video;
   config: VideoConfigResponse | null;

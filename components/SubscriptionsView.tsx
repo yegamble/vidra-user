@@ -6,12 +6,14 @@ import { UsersIcon } from "@/components/icons";
 import { RemoteFollowsSection } from "@/components/RemoteFollowsSection";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { ListTail } from "@/components/ui/ListTail";
 import { Spinner } from "@/components/ui/Spinner";
 import { VideoCard } from "@/components/VideoCard";
 import { VideoGrid } from "@/components/VideoGrid";
 import { api } from "@/lib/api";
 import type { Video } from "@/lib/api";
-import { useApiResource } from "@/lib/use-api-resource";
+import { useAppendingList } from "@/lib/use-appending-list";
+import { useBrowseAutoLoad } from "@/lib/use-browse-auto-load";
 import { SignInGate } from "@/components/SignInGate";
 
 // SubscriptionsView shows the signed-in user's feed of videos from the channels
@@ -39,15 +41,17 @@ export function SubscriptionsView() {
 }
 
 function Feed() {
-  const {
-    status,
-    data,
-    retry,
-    setData: setVideos,
-  } = useApiResource<Video[]>((signal) =>
-    api.getSubscriptionVideos({}, signal).then((res) => res.videos),
-  );
-  const videos = data ?? [];
+  const autoLoad = useBrowseAutoLoad();
+  // Paged from the server; the feed used to stop at the backend's default 20.
+  const list = useAppendingList<Video>({
+    queryKey: "subscriptions",
+    getId: (v) => v.id,
+    load: (window, signal) =>
+      api
+        .getSubscriptionVideos(window, signal)
+        .then((res) => ({ items: res.videos, total: res.total })),
+  });
+  const { status, items: videos } = list;
 
   if (status === "loading") {
     return (
@@ -57,7 +61,7 @@ function Feed() {
     );
   }
   if (status === "error") {
-    return <ErrorState message="Could not load your subscriptions." onRetry={retry} />;
+    return <ErrorState message="Could not load your subscriptions." onRetry={list.reload} />;
   }
   if (videos.length === 0) {
     return (
@@ -70,15 +74,21 @@ function Feed() {
   }
 
   return (
-    <VideoGrid>
-      {videos.map((video) => (
-        <li key={video.id}>
-          <VideoCard
-            video={video}
-            onDeleted={() => setVideos((cur) => (cur ?? []).filter((v) => v.id !== video.id))}
-          />
-        </li>
-      ))}
-    </VideoGrid>
+    <div className="flex flex-col gap-6">
+      <VideoGrid>
+        {videos.map((video) => (
+          <li key={video.id}>
+            <VideoCard video={video} onDeleted={() => list.drop((v) => v.id !== video.id)} />
+          </li>
+        ))}
+      </VideoGrid>
+      <ListTail
+        hasMore={list.hasMore}
+        autoLoad={autoLoad}
+        busy={list.moreStatus === "loading"}
+        error={list.moreStatus === "error" ? "Could not load more videos." : null}
+        onLoadMore={list.loadMore}
+      />
+    </div>
   );
 }

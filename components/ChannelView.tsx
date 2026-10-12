@@ -12,29 +12,31 @@ import { SupportButton } from "@/components/SupportButton";
 import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
-import { LoadMoreButton, PAGE_SIZE } from "@/components/ui/LoadMoreButton";
+import { ListTail } from "@/components/ui/ListTail";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, api, channelAvatarUrl, channelBannerUrl } from "@/lib/api";
 import type { Channel, Video } from "@/lib/api";
 import { formatCount, formatMonthYear, pluralize } from "@/lib/format";
 import { useApiResource } from "@/lib/use-api-resource";
+import { useAppendingList } from "@/lib/use-appending-list";
+import { useBrowseAutoLoad } from "@/lib/use-browse-auto-load";
 import { useSettledSession } from "@/lib/use-settled-session";
 import { useViewerModeration } from "@/lib/use-viewer-moderation";
 import { UserText } from "@/components/UserText";
 
 type Section = "videos" | "about";
 
-// Channel-grid sort. Both keys ride on `created_at`, the one card field the
-// channel-videos contract always carries (views is detail-only), so the chips
-// never depend on data the list omits. "Latest" is the backend's natural
-// newest-first order (no client re-sort — the default view is untouched);
-// "Oldest" sorts ascending by created_at.
+// Channel-grid sort. Both chips are SERVER sorts: `GET /channels/{handle}/videos`
+// takes `sort=-published_at` (newest first, its default) or `sort=published_at`
+// (oldest first). Sorting the loaded page client-side would order only the
+// first page, so a channel's real oldest video would never surface.
 type ChannelSort = "latest" | "oldest";
 const CHANNEL_SORTS: { sort: ChannelSort; label: string }[] = [
   { sort: "latest", label: "Latest" },
   { sort: "oldest", label: "Oldest" },
 ];
+const SERVER_SORT = { latest: "-published_at", oldest: "published_at" } as const;
 
 // Channel reads include viewer-specific follow state and video visibility.
 // Wait for restoration and discard data when the session identity changes.
@@ -47,24 +49,34 @@ export function ChannelView({ handle }: { handle: string }) {
 
 function ChannelForViewer({ handle }: { handle: string }) {
   const { user, status: sessionStatus } = useSession();
-  const { status, data, retry, setData } = useApiResource<{
-    channel: Channel | null;
-    videos: Video[];
-  }>(async (signal) => {
-    if (signal.aborted || sessionStatus === "restoring") return new Promise(() => {});
-    try {
-      const [channel, list] = await Promise.all([
-        api.getChannel(handle, signal),
-        api.listChannelVideos(handle, undefined, signal),
-      ]);
-      return { channel, videos: list.videos };
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 404) return { channel: null, videos: [] };
-      throw err;
-    }
-  }, [handle, sessionStatus, user?.id]);
+  const { status, data, retry, setData } = useApiResource<{ channel: Channel | null }>(
+    async (signal) => {
+      if (signal.aborted || sessionStatus === "restoring") return new Promise(() => {});
+      try {
+        return { channel: await api.getChannel(handle, signal) };
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 404) return { channel: null };
+        throw err;
+      }
+    },
+    [handle, sessionStatus, user?.id],
+  );
   const channel = data?.channel ?? null;
-  const serverVideos = useMemo(() => data?.videos ?? [], [data]);
+  const [sort, setSort] = useState<ChannelSort>("latest");
+  const [section, setSection] = useState<Section>("videos");
+  const autoLoad = useBrowseAutoLoad();
+  // The grid pages from the server (limit/offset) and re-asks from page one
+  // when the handle or sort changes. Remounting on a session change is the
+  // outer `key`, so the viewer is fixed for this component's life.
+  const list = useAppendingList<Video>({
+    queryKey: JSON.stringify([handle, sort]),
+    getId: (v) => v.id,
+    load: (window, signal) =>
+      api
+        .listChannelVideos(handle, undefined, signal, { ...window, sort: SERVER_SORT[sort] })
+        .then((res) => ({ items: res.videos, total: res.total })),
+  });
+  const serverVideos = list.items;
   // Has THIS viewer muted or blocked the channel's owner? `GET
   // /channels/{handle}/videos` already answers with none of their videos for
   // such a viewer (A16 ruling), so on a hard load `serverVideos` is empty and
@@ -77,24 +89,11 @@ function ChannelForViewer({ handle }: { handle: string }) {
   const ownerHidden =
     channel !== null && (mutedIds.has(channel.owner_id) || blockedIds.has(channel.owner_id));
   const videos = useMemo(() => (ownerHidden ? [] : serverVideos), [ownerHidden, serverVideos]);
-  // The channel-videos contract has no limit/offset (the backend returns the
-  // full list), so "Load more" is a client-side reveal in PAGE_SIZE chunks.
-  // Switch to server paging if/when the contract grows pagination params.
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  const [sort, setSort] = useState<ChannelSort>("latest");
-  const [section, setSection] = useState<Section>("videos");
-
-  // "latest" keeps the backend's natural (newest-first) order untouched;
-  // "oldest" sorts a copy ascending by the always-present created_at.
-  const sortedVideos = useMemo(() => {
-    if (sort !== "oldest") return videos;
-    return [...videos].sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
-  }, [videos, sort]);
+  // The header count is the server's total, not the length of the loaded pages.
+  const videoCount = ownerHidden ? 0 : (list.total ?? videos.length);
 
   function changeSort(next: ChannelSort) {
-    if (next === sort) return;
-    setSort(next);
-    setVisibleCount(PAGE_SIZE); // reveal the top of the re-sorted list
+    if (next !== sort) setSort(next);
   }
 
   if (status === "loading") {
@@ -148,7 +147,7 @@ function ChannelForViewer({ handle }: { handle: string }) {
               <p className="mt-1 text-subhead tabular-nums text-fg-muted">
                 @{channel.handle} · {formatCount(channel.follower_count)}{" "}
                 {pluralize(channel.follower_count, "follower")} ·{" "}
-                {videos.length} {videos.length === 1 ? "video" : "videos"}
+                {videoCount} {videoCount === 1 ? "video" : "videos"}
               </p>
             </div>
             <div className="order-last flex w-full flex-wrap items-center gap-2 pb-1 sm:order-none sm:w-auto sm:shrink-0">
@@ -216,53 +215,57 @@ function ChannelForViewer({ handle }: { handle: string }) {
           ]}
         />
         {section === "videos" ? (
-          videos.length === 0 ? (
-            ownerHidden ? (
-              // The honest empty state. "No videos yet" would be a lie told to
-              // the one viewer who can see it: the channel publishes, and this
-              // viewer asked not to see it. The unmute is the menu in the
-              // header, two lines up, which is why the header stays.
-              <EmptyState
-                title="Videos hidden"
-                message={
-                  blockedIds.has(channel.owner_id)
-                    ? "You blocked this account, so its videos are hidden from you. Unblock it from the menu above to see them again."
-                    : "You muted this account, so its videos are hidden from you. Unmute it from the menu above to see them again."
-                }
-              />
-            ) : (
-              <EmptyState
-                title="No videos yet"
-                message="This channel has not published anything."
-              />
-            )
+          ownerHidden ? (
+            // The honest empty state. "No videos yet" would be a lie told to
+            // the one viewer who can see it: the channel publishes, and this
+            // viewer asked not to see it. The unmute is the menu in the
+            // header, two lines up, which is why the header stays.
+            <EmptyState
+              title="Videos hidden"
+              message={
+                blockedIds.has(channel.owner_id)
+                  ? "You blocked this account, so its videos are hidden from you. Unblock it from the menu above to see them again."
+                  : "You muted this account, so its videos are hidden from you. Unmute it from the menu above to see them again."
+              }
+            />
+          ) : list.status === "error" ? (
+            <ErrorState message="Could not load this channel's videos." onRetry={list.reload} />
+          ) : list.status === "ready" && videos.length === 0 && sort === "latest" ? (
+            <EmptyState title="No videos yet" message="This channel has not published anything." />
           ) : (
             <div className="flex flex-col gap-5">
               {/* Sort chips in the shared template pill language (filled =
                   active), above the dense channel grid. */}
               <ChannelSortChips sort={sort} onChange={changeSort} />
-              <ul
-                aria-label={`Videos by ${name}`}
-                className="grid grid-cols-2 gap-x-4 gap-y-6 lg:grid-cols-4 lg:gap-x-[18px]"
-              >
-                {sortedVideos.slice(0, visibleCount).map((video) => (
-                  <li key={video.id}>
-                    <ChannelVideoCard
-                      video={video}
-                      onDeleted={() =>
-                        setData((current) => current ? { ...current, videos: current.videos.filter((v) => v.id !== video.id) } : current)
-                      }
-                    />
-                  </li>
-                ))}
-              </ul>
-              {sortedVideos.length > visibleCount ? (
-                <LoadMoreButton onClick={() => setVisibleCount((c) => c + PAGE_SIZE)} />
-              ) : null}
+              {list.status === "loading" ? (
+                <div className="flex justify-center py-12">
+                  <Spinner label="Loading videos" />
+                </div>
+              ) : (
+                <>
+                  <ul
+                    aria-label={`Videos by ${name}`}
+                    className="grid grid-cols-2 gap-x-4 gap-y-6 lg:grid-cols-4 lg:gap-x-[18px]"
+                  >
+                    {videos.map((video) => (
+                      <li key={video.id}>
+                        <ChannelVideoCard video={video} onDeleted={() => list.drop((v) => v.id !== video.id)} />
+                      </li>
+                    ))}
+                  </ul>
+                  <ListTail
+                    hasMore={list.hasMore}
+                    autoLoad={autoLoad}
+                    busy={list.moreStatus === "loading"}
+                    error={list.moreStatus === "error" ? "Could not load more videos." : null}
+                    onLoadMore={list.loadMore}
+                  />
+                </>
+              )}
             </div>
           )
         ) : (
-          <ChannelAbout channel={channel} videoCount={videos.length} />
+          <ChannelAbout channel={channel} videoCount={videoCount} />
         )}
       </div>
     </div>
@@ -316,7 +319,7 @@ function ChannelBanner({ handle }: { handle: string }) {
 // ChannelSortChips is the channel grid's sort switcher in the shared pill-chip
 // language (filled = active, outlined = inactive), a role="group" of
 // aria-pressed buttons — the same vocabulary as the home feed's FeedSortTabs,
-// but client-side (the sort re-orders the already-loaded list, no navigation).
+// but server-side (a chip re-asks the endpoint from page one, no navigation).
 function ChannelSortChips({
   sort,
   onChange,

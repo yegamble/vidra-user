@@ -4,12 +4,14 @@ import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { ListTail } from "@/components/ui/ListTail";
 import { Spinner } from "@/components/ui/Spinner";
 import { api } from "@/lib/api";
 import type { Channel, Video, VideoConfigResponse } from "@/lib/api";
 import { videoAcceptAttr } from "@/lib/upload-accept";
+import { useAppendingList } from "@/lib/use-appending-list";
+import { useBrowseAutoLoad } from "@/lib/use-browse-auto-load";
 
-import { type Status } from "./shared";
 import { VideoRow } from "./VideoRow";
 
 // MyVideosSection lists the owner's videos for the current studio channel (the
@@ -28,9 +30,20 @@ export function MyVideosSection({
   /** The caller's manageable channels; enables moving a video between them. */
   channels?: Channel[];
 }) {
-  const [status, setStatus] = useState<Status>("loading");
-  const [videos, setVideos] = useState<Video[]>([]);
-  const [reloadKey, setReloadKey] = useState(0);
+  const autoLoad = useBrowseAutoLoad();
+  // Paged from the server: the owner view used to fetch once, so a creator with
+  // more than 20 videos could never reach (or manage) the older ones.
+  const list = useAppendingList<Video>({
+    queryKey: handle,
+    getId: (v) => v.id,
+    load: (window, signal) =>
+      handle === ""
+        ? new Promise(() => {})
+        : api
+            .listChannelVideos(handle, undefined, signal, window)
+            .then((res) => ({ items: res.videos, total: res.total })),
+  });
+  const { status, items: videos } = list;
   // Video file replacement availability (features.video_replace, config-parity
   // W14) + the picker accept list (features.upload_additional_extensions) —
   // fetched ONCE per section mount and passed down so each VideoRow's edit
@@ -52,33 +65,11 @@ export function MyVideosSection({
     return () => controller.abort();
   }, []);
 
-  useEffect(() => {
-    if (handle === "") return;
-    const controller = new AbortController();
-    api
-      .listChannelVideos(handle, undefined, controller.signal)
-      .then((res) => {
-        setVideos(res.videos);
-        setStatus("ready");
-      })
-      .catch((err: unknown) => {
-        void err;
-        if (controller.signal.aborted) return;
-        setStatus("error");
-      });
-    return () => controller.abort();
-  }, [handle, reloadKey]);
-
-  function refetch() {
-    setStatus("loading");
-    setReloadKey((k) => k + 1);
-  }
-
   return (
     <section className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-[15px] font-bold tracking-tight">Your videos</h2>
-        <Button variant="secondary" size="sm" onClick={refetch}>
+        <Button variant="secondary" size="sm" onClick={list.reload}>
           Refresh
         </Button>
       </div>
@@ -88,7 +79,7 @@ export function MyVideosSection({
           <Spinner label="Loading your videos" />
         </div>
       ) : status === "error" ? (
-        <ErrorState message="Could not load your videos." onRetry={refetch} />
+        <ErrorState message="Could not load your videos." onRetry={list.reload} />
       ) : videos.length === 0 ? (
         <p className="text-sm text-fg-muted">No videos in this channel yet.</p>
       ) : (
@@ -102,18 +93,25 @@ export function MyVideosSection({
               replaceEnabled={replaceEnabled}
               replaceAccept={videoAcceptAttr(additionalExts)}
               onUpdated={(u) =>
-                setVideos((list) =>
-                  // A moved video leaves this channel's list (T20).
-                  list.flatMap((x) =>
-                    x.id !== u.id ? [x] : u.channel_id && u.channel_id !== x.channel_id ? [] : [u],
-                  ),
-                )
+                u.channel_id && u.channel_id !== v.channel_id
+                  ? // A moved video leaves this channel's list (T20).
+                    list.drop((x) => x.id !== u.id)
+                  : list.patch((rows) => rows.map((x) => (x.id === u.id ? u : x)))
               }
-              onDeleted={() => setVideos((list) => list.filter((x) => x.id !== v.id))}
+              onDeleted={() => list.drop((x) => x.id !== v.id)}
             />
           ))}
         </ul>
       )}
+      {status === "ready" ? (
+        <ListTail
+          hasMore={list.hasMore}
+          autoLoad={autoLoad}
+          busy={list.moreStatus === "loading"}
+          error={list.moreStatus === "error" ? "Could not load more videos." : null}
+          onLoadMore={list.loadMore}
+        />
+      ) : null}
     </section>
   );
 }

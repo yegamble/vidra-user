@@ -5568,7 +5568,7 @@ export interface paths {
         };
         /**
          * List the registration approval queue
-         * @description Returns registration requests, newest first, with the reviewing admin's username, plus a `total` counting the requests that match the same status filter. Restricted to admins. The stored password hash is never exposed.
+         * @description Returns registration requests, newest first, with the reviewing admin's username, plus a `total` counting the requests that match the same status filter. Admins and moderators. The stored password hash is never exposed.
          */
         get: operations["listRegistrationRequests"];
         put?: never;
@@ -5590,7 +5590,7 @@ export interface paths {
         put?: never;
         /**
          * Approve a registration request
-         * @description Approves a pending request, creating the account from the stored credentials (atomically). Admin only. An unknown/already-resolved id is 404; a username/email taken since the request was filed is 409.
+         * @description Approves a pending request, creating the account from the stored credentials (atomically). Admins and moderators. An unknown/already-resolved id is 404; a username/email taken since the request was filed is 409.
          */
         post: operations["approveRegistrationRequest"];
         delete?: never;
@@ -5610,7 +5610,7 @@ export interface paths {
         put?: never;
         /**
          * Reject a registration request
-         * @description Rejects a pending request with an optional internal moderator note. Admin only. An unknown/already-resolved id is 404.
+         * @description Rejects a pending request with an optional internal moderator note. Admins and moderators. An unknown/already-resolved id is 404.
          */
         post: operations["rejectRegistrationRequest"];
         delete?: never;
@@ -5688,7 +5688,7 @@ export interface paths {
         };
         /**
          * List accounts (admin)
-         * @description Returns accounts, newest first, optionally filtered by a username/email substring (q). Restricted to admins. Paginated via limit (1–200, default 50) and offset; `total` counts the accounts matching the same q, so a client can tell how many pages exist.
+         * @description Returns accounts, newest first, optionally filtered by a username/email substring (q). Admins and moderators. Paginated via limit (1–200, default 50) and offset; `total` counts the accounts matching the same q, so a client can tell how many pages exist.
          */
         get: operations["listUsers"];
         put?: never;
@@ -5722,7 +5722,7 @@ export interface paths {
         head?: never;
         /**
          * Edit a user's role / active flag / storage quota (admin)
-         * @description Updates a user's role, active flag, and/or storage quota (partial). Restricted to admins. An admin cannot demote or deactivate their own account (422), and a hard-deleted account cannot be reactivated (422: the tombstone is anonymised in place, so re-enabling it would republish a profile without restoring anything). An unknown id is 404. Deactivating revokes the user's sessions. A role change takes effect on the target's EXISTING sessions immediately — the role is re-read from the account on every authenticated request, not taken from the access token — so a demoted staff member loses the staff routes at once while keeping their ordinary session. storage_quota_bytes is tri-state — omitted: unchanged; null: reset to the instance default; a non-negative integer: per-user override (0 = unlimited).
+         * @description Updates a user's role, active flag, and/or storage quota (partial). Restricted to admins. An admin cannot demote or deactivate their own account (422), and a hard-deleted account cannot be reactivated (422: the tombstone is anonymised in place, so re-enabling it would republish a profile without restoring anything). An unknown id is 404. Deactivating revokes the user's sessions. A role change takes effect on the target's EXISTING sessions immediately — the role is re-read from the account on every authenticated request, not taken from the access token — so a demoted staff member loses the staff routes at once while keeping their ordinary session. storage_quota_bytes is tri-state — omitted: unchanged; null: reset to the instance default; a non-negative integer: per-user override (0 = unlimited). Moderators share ONLY ban and unban (`is_active`, with a required `ban_reason` when banning) and only for accounts whose role is `user`: any other field, a staff or owner target, or themselves is 403. Banning stores the reason, time and actor, and emails the user the reason (best-effort); unbanning clears them and emails a reinstatement. The audit row records the reason's length, never its text.
          */
         patch: operations["updateUser"];
         trace?: never;
@@ -8195,6 +8195,15 @@ export interface components {
              * @description When this account was hard-deleted, or null for a live account. A deleted account stays listed as an anonymised tombstone (`deleted-<suffix>`) so an admin can see it, but deletion is permanent: PATCH with `is_active: true` on such a row is refused with 422, and the console offers no reactivate action for it. Every other admin write to a tombstone is refused the same way.
              */
             deleted_at: string | null;
+            /** @description Why the account was banned; null when not banned. */
+            ban_reason: string | null;
+            /** Format: date-time */
+            banned_at: string | null;
+            /**
+             * Format: uuid
+             * @description The staff account that banned it.
+             */
+            banned_by: string | null;
             /** @description Whether this account is THE instance owner — the account that redeemed the first-run setup token. There is no owner ROLE: the owner holds `admin` like any other administrator, so this flag is the only thing that identifies it. Another administrator cannot demote, deactivate or delete it (422 `owner_protected`), and nobody can remove the last active administrator (422 `last_admin`). False for every account on an instance claimed before the marker existed whose owner could not be determined. */
             is_owner: boolean;
             /** @description Whether this account has a CONFIRMED second factor (TOTP). A pending enrollment reads false, exactly as the account's own GET /api/v1/auth/mfa reports it. It is a boolean and nothing more: no admin route ever returns the shared secret or a recovery code. An admin can remove the factor with DELETE /api/v1/admin/users/{id}/mfa, which is the only operator answer to a user who has lost both their authenticator and their recovery codes. */
@@ -10136,6 +10145,8 @@ export interface components {
             /** @enum {string} */
             role?: "user" | "moderator" | "admin";
             is_active?: boolean;
+            /** @description Why the account is being banned; only valid with `is_active=false`. Required from a moderator, optional from an admin. */
+            ban_reason?: string;
             /** @description Admin-set email verification state: true marks the address confirmed without the token round-trip; false revokes the confirmation. Omit to leave unchanged. */
             email_verified?: boolean;
             /** @description Exempts the account from the QUARANTINE_NEW_UPLOADS gate (its uploads publish directly); false re-subjects it. Omit to leave unchanged. */

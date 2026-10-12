@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 const CHANNEL = /\/api\/v1\/channels\/ada$/;
-const CHANNEL_VIDEOS = /\/api\/v1\/channels\/ada\/videos$/;
+const CHANNEL_VIDEOS = /\/api\/v1\/channels\/ada\/videos(\?|$)/;
 const CHANNEL_DONATIONS = /\/api\/v1\/channels\/ada\/donation-addresses/;
 const CHANNEL_LIVE = /\/api\/v1\/channels\/ada\/live$/;
 
@@ -85,15 +85,19 @@ test("shows the channel header and its videos", async ({ page }) => {
   );
 });
 
-test("load more reveals the rest of a long channel grid", async ({ page }) => {
-  // The channel-videos endpoint has no limit/offset contract: the backend
-  // returns the full list and the grid reveals it in pages of 20 client-side.
+test("load more fetches the next page of a long channel grid", async ({ page }) => {
+  // Mirrors the real contract: GET /channels/{handle}/videos pages by
+  // limit/offset and always answers with total/limit/offset.
   await page.route(CHANNEL, (route) => route.fulfill({ json: channel }));
-  await page.route(CHANNEL_VIDEOS, (route) =>
-    route.fulfill({
-      json: { videos: Array.from({ length: 25 }, (_, i) => video(`v${i}`, `Clip ${i + 1}`)) },
-    }),
-  );
+  await page.route(CHANNEL_VIDEOS, (route) => {
+    const url = new URL(route.request().url());
+    const limit = Number(url.searchParams.get("limit") ?? 20);
+    const offset = Number(url.searchParams.get("offset") ?? 0);
+    const all = Array.from({ length: 25 }, (_, i) => video(`v${i}`, `Clip ${i + 1}`));
+    return route.fulfill({
+      json: { videos: all.slice(offset, offset + limit), total: all.length, limit, offset },
+    });
+  });
 
   await page.goto("/channels/ada");
   await expect(page.getByRole("heading", { name: "Clip 20" })).toBeVisible();
