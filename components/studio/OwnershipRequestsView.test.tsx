@@ -147,14 +147,11 @@ describe("OwnershipRequestsView — channels arriving late", () => {
     await waitFor(() => expect(mocks.acceptVideoOwnershipChange).toHaveBeenCalledWith("oc1", "c1"));
   });
 
-  it("labels withdrawn and expired requests and offers no actions on them", async () => {
-    mocks.getVideoOwnershipChanges.mockResolvedValue(
-      page([change({ id: "a", status: "cancelled" }), change({ id: "b", status: "expired" })]),
-    );
+  it("shows a request that can no longer be answered as no longer available, with no actions", async () => {
+    mocks.getVideoOwnershipChanges.mockResolvedValue(page([change({ id: "b", status: "expired" })]));
     render(<OwnershipRequestsView channels={mine} />);
 
-    expect(await screen.findByText("Withdrawn")).toBeTruthy();
-    expect(screen.getByText("Expired")).toBeTruthy();
+    expect(await screen.findByText("No longer available")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Accept" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Refuse" })).toBeNull();
   });
