@@ -86,6 +86,12 @@ describe("parseVtt / serializeVtt", () => {
     expect(serializeVtt(doc)).toBe("WEBVTT\n\n00:00.000 --> 00:01.000\nA\nB\n");
   });
 
+  it("refuses to serialise cue text containing -->", () => {
+    const doc = parseVtt("WEBVTT\n\n00:00.000 --> 00:01.000\nA\n");
+    (doc.blocks[0] as VttCue).text = "a --> b";
+    expect(() => serializeVtt(doc)).toThrow(/-->/);
+  });
+
   it("rejects input without a WEBVTT header", () => {
     expect(() => parseVtt("00:00.000 --> 00:01.000\nHi")).toThrow(/WEBVTT/);
   });
