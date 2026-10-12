@@ -379,3 +379,21 @@ describe("LiveWatchView polling during a broadcast", () => {
     expect(mocks.getLiveStream).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("LiveWatchView description is untrusted user text", () => {
+  it("renders a markdown link as a safe anchor and keeps a javascript: link inert", async () => {
+    mocks.getLiveStream.mockResolvedValue({
+      id: "s1",
+      title: "A stream",
+      state: "ended",
+      privacy: "public",
+      channel_handle: "film-house",
+      description: "[ok](https://e.test/a) and [bad](javascript:alert(1))",
+    });
+    const { container } = render(<LiveWatchView id="s1" />);
+    const link = await screen.findByRole("link", { name: "ok" });
+    expect(link.getAttribute("href")).toBe("https://e.test/a");
+    expect(screen.queryByRole("link", { name: "bad" })).toBeNull();
+    expect(container.querySelector('a[href^="javascript"]')).toBeNull();
+  });
+});

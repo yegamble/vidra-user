@@ -8,6 +8,7 @@ import { LiveTerminateDialog } from "@/components/LiveTerminateDialog";
 import { InfoIcon } from "@/components/icons";
 import { QualityMenu } from "@/components/QualityMenu";
 import { Button, EmptyState, ErrorState, Spinner } from "@/components/ui";
+import { UserText } from "@/components/UserText";
 import { ApiError, api } from "@/lib/api";
 import type { LiveStream } from "@/lib/api";
 import { terminationHeadline } from "@/lib/live/termination";
@@ -214,9 +215,11 @@ export function LiveWatchView({ id }: { id: string }) {
           </p>
         ) : null}
         {stream.description ? (
-          <p className="whitespace-pre-wrap text-sm leading-relaxed text-fg-muted">
-            {stream.description}
-          </p>
+          <UserText
+            variant="description"
+            text={stream.description}
+            className="text-sm leading-relaxed text-fg-muted"
+          />
         ) : null}
       </div>
 
