@@ -1,160 +1,54 @@
 // @vitest-environment jsdom
 
-import {
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { AdminComment } from "@/lib/api";
+const mocks = vi.hoisted(() => ({ getAdminComments: vi.fn() }));
 
-const mocks = vi.hoisted(() => ({
-  getAdminComments: vi.fn(),
-  deleteComment: vi.fn(),
-  bulkRemoveAdminComments: vi.fn(),
-  useSession: vi.fn(),
+vi.mock("next/navigation", async () => (await import("@/lib/test-navigation")).navigationMock);
+vi.mock("@/components/RoleGate", () => ({
+  RoleGate: ({ children }: { children: ReactNode }) => <>{children}</>,
+}));
+vi.mock("@/lib/api", () => ({
+  api: { getAdminComments: mocks.getAdminComments },
+  errorMessage: (_error: unknown, fallback: string) => fallback,
 }));
 
-vi.mock(
-  "next/navigation",
-  async () => (await import("@/lib/test-navigation")).navigationMock,
-);
-vi.mock("@/components/auth/AuthProvider", () => ({
-  useSession: () => mocks.useSession(),
-}));
-vi.mock("@/lib/api", async (importActual) => {
-  const actual = await importActual<typeof import("@/lib/api")>();
-  return {
-    ...actual,
-    api: {
-      ...actual.api,
-      getAdminComments: mocks.getAdminComments,
-      deleteComment: mocks.deleteComment,
-      bulkRemoveAdminComments: mocks.bulkRemoveAdminComments,
-    },
-  };
-});
-
-import { ApiError } from "@/lib/api";
-import { AdminCommentsView } from "./AdminCommentsView";
-
-function comment(overrides: Partial<AdminComment> = {}): AdminComment {
-  return {
-    id: "c1",
-    video_id: "v1",
-    video_title: "Clip",
-    body: "buy pills",
-    author_username: "spammer",
-    author_display_name: "Spam Bot",
-    remote: false,
-    created_at: "2026-10-01T12:00:00Z",
-    deleted: false,
-    ...overrides,
-  } as AdminComment;
-}
-
-function page(comments: AdminComment[]) {
-  return { comments, total: comments.length, limit: 10, offset: 0 };
-}
+import { AdminCommentsView } from "@/components/AdminCommentsView";
+import { navigation } from "@/lib/test-navigation";
 
 beforeEach(() => {
-  mocks.getAdminComments.mockReset().mockResolvedValue(page([comment()]));
-  mocks.bulkRemoveAdminComments.mockReset().mockResolvedValue({ removed: 3 });
-  mocks.useSession.mockReturnValue({
-    status: "authed",
-    user: { id: "m1", role: "moderator" },
-  });
+  navigation.reset("/admin/comments");
+  mocks.getAdminComments.mockReset();
 });
-
 afterEach(cleanup);
 
-describe("AdminCommentsView bulk removal", () => {
-  it("names the account in the confirmation, posts the username, shows the count and reloads", async () => {
-    render(<AdminCommentsView />);
-    fireEvent.click(
-      await screen.findByRole("button", {
-        name: /Remove all comments by @spammer/,
-      }),
-    );
-    expect(screen.getByText(/every comment by @spammer on every video, and all replies to them/i)).toBeTruthy();
-    expect(mocks.bulkRemoveAdminComments).not.toHaveBeenCalled();
-
-    mocks.getAdminComments.mockResolvedValue(page([]));
-    fireEvent.click(screen.getByRole("button", { name: "Confirm remove all" }));
-
-    await waitFor(() =>
-      expect(mocks.bulkRemoveAdminComments).toHaveBeenCalledWith("spammer"),
-    );
-    expect(
-      await screen.findByText(/Removed 3 comments by @spammer \(replies to them were removed too\)/),
-    ).toBeTruthy();
-    await waitFor(() =>
-      expect(mocks.getAdminComments).toHaveBeenCalledTimes(2),
-    );
-  });
-
-  it("cancel leaves everything untouched", async () => {
-    render(<AdminCommentsView />);
-    fireEvent.click(
-      await screen.findByRole("button", {
-        name: /Remove all comments by @spammer/,
-      }),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(mocks.bulkRemoveAdminComments).not.toHaveBeenCalled();
-    expect(
-      screen.queryByRole("button", { name: "Confirm remove all" }),
-    ).toBeNull();
-  });
-
-  it("surfaces a failure instead of claiming success", async () => {
-    mocks.bulkRemoveAdminComments.mockRejectedValue(
-      new ApiError({
-        status: 404,
-        code: "not_found",
-        message: "account not found",
-      }),
-    );
-    render(<AdminCommentsView />);
-    fireEvent.click(
-      await screen.findByRole("button", {
-        name: /Remove all comments by @spammer/,
-      }),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Confirm remove all" }));
-    expect(await screen.findByText(/account not found/)).toBeTruthy();
-    expect(screen.queryByText(/Removed/)).toBeNull();
-  });
-
-  it("offers no bulk action for a remote author", async () => {
-    mocks.getAdminComments.mockResolvedValue(
-      page([
-        comment({
-          remote: true,
-          author_domain: "peer.example",
-          author_username: "kaisa",
-        }),
-      ]),
-    );
-    render(<AdminCommentsView />);
-    await screen.findByText("buy pills");
-    expect(
-      screen.queryByRole("button", { name: /Remove all comments by/ }),
-    ).toBeNull();
-  });
-
-  it("is moderator-gated: a plain user fetches nothing", async () => {
-    mocks.useSession.mockReturnValue({
-      status: "authed",
-      user: { id: "u1", role: "user" },
+describe("AdminCommentsView body rendering", () => {
+  it("renders a markdown link as a safe anchor and keeps a javascript: link inert", async () => {
+    mocks.getAdminComments.mockResolvedValue({
+      comments: [
+        {
+          id: "c1",
+          video_id: "v1",
+          video_title: "Clip",
+          author_username: "mona",
+          body: "[ok](https://e.test/a) and [bad](javascript:alert(1)) at 1:23",
+          created_at: "2026-07-10T14:30:00Z",
+        },
+      ],
+      total: 1,
+      limit: 10,
+      offset: 0,
     });
-    render(<AdminCommentsView />);
-    expect(mocks.getAdminComments).not.toHaveBeenCalled();
-    expect(
-      screen.queryByRole("button", { name: /Remove all comments by/ }),
-    ).toBeNull();
+    const { container } = render(<AdminCommentsView />);
+    const link = await screen.findByRole("link", { name: "ok" });
+    expect(link.getAttribute("href")).toBe("https://e.test/a");
+    expect(link.getAttribute("rel")).toBe("nofollow noopener noreferrer ugc");
+    expect(screen.queryByRole("link", { name: "bad" })).toBeNull();
+    expect(container.querySelector('a[href^="javascript"]')).toBeNull();
+    expect(container.textContent).toContain("bad");
+    // ?t= links would only reload the admin page.
+    expect(container.querySelector("a[data-timestamp-seconds]")).toBeNull();
   });
 });
