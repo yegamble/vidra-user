@@ -47,7 +47,7 @@ function CommentsList() {
 
   function onBulkRemoved(account: string, removed: number) {
     setNotice(
-      `Removed ${removed} ${removed === 1 ? "comment" : "comments"} by @${account}.`,
+      `Removed ${removed} ${removed === 1 ? "comment" : "comments"} by @${account} (replies to them were removed too).`,
     );
     list.reload();
   }
@@ -168,7 +168,7 @@ function CommentRow({
         {bulkConfirming && bulkAccount ? (
           <>
             <span className="text-[13px] text-fg">
-              Delete every comment by @{bulkAccount} on every video?
+              Delete every comment by @{bulkAccount} on every video, and all replies to them?
             </span>
             <Button
               variant="danger"

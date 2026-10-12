@@ -79,7 +79,7 @@ describe("AdminCommentsView bulk removal", () => {
         name: /Remove all comments by @spammer/,
       }),
     );
-    expect(screen.getByText(/every comment by @spammer/i)).toBeTruthy();
+    expect(screen.getByText(/every comment by @spammer on every video, and all replies to them/i)).toBeTruthy();
     expect(mocks.bulkRemoveAdminComments).not.toHaveBeenCalled();
 
     mocks.getAdminComments.mockResolvedValue(page([]));
@@ -89,7 +89,7 @@ describe("AdminCommentsView bulk removal", () => {
       expect(mocks.bulkRemoveAdminComments).toHaveBeenCalledWith("spammer"),
     );
     expect(
-      await screen.findByText(/Removed 3 comments by @spammer/),
+      await screen.findByText(/Removed 3 comments by @spammer \(replies to them were removed too\)/),
     ).toBeTruthy();
     await waitFor(() =>
       expect(mocks.getAdminComments).toHaveBeenCalledTimes(2),
