@@ -1537,6 +1537,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/videos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the caller's own videos (studio "My videos")
+         * @description Every video on every channel the caller OWNS, in any state or privacy (drafts and private videos included), newest first by default, with discovery-card data. Optional filters combine with AND: q (case- insensitive title substring; LIKE wildcards are literal), privacy, state, and channel_id (one of the caller's channels; another account's channel id simply matches nothing, so the result is empty with total 0, never that account's videos). Unknown privacy/state values and a malformed channel_id are 422. Paginated via limit (1-100, default 20) and offset, and reports the filtered total.
+         */
+        get: operations["listMyVideos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/videos/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bulk delete or change the privacy of the caller's own videos
+         * @description Applies one action to up to 100 of the caller's own videos. Every id must be a video the caller owns: if any id is foreign OR does not exist the whole request answers 404 "video not found" (identically, so it is no existence oracle) and NOTHING is changed. Each item then runs the same pipeline as the single-video route (DELETE /videos/{id} or PATCH /videos/{id} with `privacy`), so federation, the search outbox, storage cleanup, edge purge and audit all fire per item. Items are independent: one that fails (for example `set_privacy` to `password` on a video with no stored password -> 400, exactly as the single route) is reported in `results` and does not stop the others. `privacy` is validated like the single PATCH, including `internal`. Only the caller's own videos are reachable: staff and channel collaborators get no extra reach here.
+         */
+        post: operations["bulkMyVideos"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/channels/{handle}/videos": {
         parameters: {
             query?: never;
@@ -3369,7 +3409,7 @@ export interface paths {
         };
         /**
          * List the caller's own abuse reports
-         * @description "My reports": the reports the caller filed, most recently active first (filing, resolution, or the latest thread message), each with its status, target and thread activity. The moderator's internal note is never included. A video title is shown only while that video is still public and published.
+         * @description "My reports": the reports the caller filed, most recently active first (filing, resolution, or the latest thread message), each with its status, target and thread activity. The moderator's internal note is never included. A video title is shown only while that video is still public, published and not blocked.
          */
         get: operations["listMyReports"];
         put?: never;
@@ -3409,13 +3449,13 @@ export interface paths {
         };
         /**
          * Read a report's message thread
-         * @description The conversation between a report's reporter and the moderation team, oldest first. Open to the report's LOCAL reporter and to admins and moderators; any other caller gets the same 404 as an unknown report, so a report's existence never leaks. The reporter is never told which moderator wrote a message (author_username is filled for staff only). A report another instance filed (a remote Flag) has no local reporter: staff can read its thread, which is empty and reports can_reply=false.
+         * @description The reporter↔staff conversation, oldest first. Open to the report's LOCAL reporter and to admins/moderators; anyone else gets the same 404 as an unknown report. A remote Flag report is readable by staff with can_reply=false.
          */
         get: operations["listReportMessages"];
         put?: never;
         /**
          * Post to a report's message thread
-         * @description Adds a message to the thread. Same access as reading it. A staff member's message notifies the reporter (report_message, with no actor); the reporter's notifies the staff who receive new_report. Notifications never carry the body. A staff message is audited as moderation.report.message by id only. A report another instance filed has no local reporter to write to: 409.
+         * @description Same access as reading. Notifies the other side (report_message, never the body); a staff message is audited by id. 409 on a remote Flag report; posting is limited per user (20/hour by default).
          */
         post: operations["createReportMessage"];
         delete?: never;
@@ -7534,6 +7574,30 @@ export interface components {
              */
             my_rating: "like" | "dislike" | null;
         };
+        BulkVideosRequest: {
+            video_ids: string[];
+            /** @enum {string} */
+            action: "delete" | "set_privacy";
+            /**
+             * @description Required when action is set_privacy; ignored otherwise.
+             * @enum {string}
+             */
+            privacy?: "public" | "unlisted" | "private" | "password" | "internal";
+        };
+        BulkVideoResult: {
+            /** Format: uuid */
+            video_id: string;
+            ok: boolean;
+            /** @description The HTTP status the single-video route would have answered. */
+            status: number;
+            /** @description Client-safe reason; present only when ok is false. */
+            error?: string;
+        };
+        BulkVideosResponse: {
+            results: components["schemas"]["BulkVideoResult"][];
+            succeeded: number;
+            failed: number;
+        };
         VideoListResponse: components["schemas"]["PageMeta"] & {
             videos: components["schemas"]["Video"][];
         };
@@ -8034,14 +8098,14 @@ export interface components {
             by_moderator: boolean;
             /** @description True when the caller wrote it. */
             is_mine: boolean;
-            /** @description Who wrote it. Sent to staff only — the reporter is never told which moderator wrote — and omitted once the author's account is deleted. */
+            /** @description Who wrote it — staff viewers only; the reporter is never told which moderator. */
             author_username?: string;
             /** Format: date-time */
             created_at: string;
         };
         ReportMessageListResponse: components["schemas"]["PageMeta"] & {
             messages: components["schemas"]["ReportMessage"][];
-            /** @description False for a report another instance filed: there is no local reporter, so nobody can post to its thread. */
+            /** @description False for a remote Flag report (no local reporter to write to). */
             can_reply: boolean;
         };
         CreateReportMessageRequest: {
@@ -8071,7 +8135,7 @@ export interface components {
             message_count: number;
             /** Format: uuid */
             video_id?: string;
-            /** @description Omitted unless the video is still public and published. */
+            /** @description Omitted unless the video is still public, published and not blocked. */
             video_title?: string;
             /** @description The reported account (account reports). */
             reported_username?: string;
@@ -14867,6 +14931,107 @@ export interface operations {
             };
         };
     };
+    listMyVideos: {
+        parameters: {
+            query?: {
+                /** @description Title search (at most 200 characters). */
+                q?: string;
+                privacy?: "public" | "unlisted" | "private" | "password" | "internal";
+                state?: "draft" | "processing" | "scheduled" | "quarantined" | "transcoding" | "published" | "failed";
+                channel_id?: string;
+                /** @description `-published_at` (newest first, default) or `published_at` (oldest first); same convention as the per-channel list. */
+                sort?: "-published_at" | "published_at";
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of the caller's videos (possibly empty). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VideoListResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unknown privacy/state, malformed channel_id, or an over-long q. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    bulkMyVideos: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkVideosRequest"];
+            };
+        };
+        responses: {
+            /** @description Per-id results (the request itself was accepted). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkVideosResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description At least one id is not a video the caller owns; nothing was changed. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Zero ids, more than 100, a malformed or duplicate id, an unknown action, or an invalid privacy. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     listChannelVideos: {
         parameters: {
             query?: {
@@ -20472,8 +20637,17 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Validation failed (empty body, or over 3000 characters). */
+            /** @description Validation failed (empty, over 3000 characters, or a NUL character). */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller has posted too many report messages recently. */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
