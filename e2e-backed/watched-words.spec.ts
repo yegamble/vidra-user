@@ -24,7 +24,9 @@ test("an admin adds and removes a watched word and it persists", async ({ page, 
     (r) => /\/admin\/watched-words$/.test(r.url()) && r.request().method() === "POST" && r.ok(),
   );
   await page.getByLabel("Add a watched word").fill(term);
-  await page.getByRole("button", { name: "Add" }).click();
+  // exact: rows other specs leave behind carry "Remove <term>" buttons, and a
+  // hex id like "…eaadd3e" makes a substring "Add" match one of them too.
+  await page.getByRole("button", { name: "Add", exact: true }).click();
   await added;
   await expect(page.getByText(term)).toBeVisible();
 
