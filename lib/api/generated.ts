@@ -3037,7 +3037,7 @@ export interface paths {
         };
         /**
          * Get the caller's notification preferences
-         * @description Returns the caller's per-type notification switchboard: every known notification type (caption_ready, comment, comment_reply, federation_follower_request, follow, message, new_registration_request, new_report, new_video, report_resolved, upload_quarantined, video_blocked, video_rejected, video_unblocked) mapped to whether it is delivered. Types never configured default to enabled. The new_report, new_registration_request, upload_quarantined and federation_follower_request types are only ever delivered to staff (the last to admins only), but the switches are visible to everyone.
+         * @description Returns the caller's per-type notification switchboard: every known notification type (caption_ready, comment, comment_reply, federation_follower_request, follow, message, new_registration_request, new_report, new_video, report_resolved, upload_quarantined, video_blocked, video_rejected, video_unblocked) mapped to whether it is delivered. Types never configured default to enabled. The new_report, new_registration_request, upload_quarantined and federation_follower_request types are only ever delivered to staff (the last to admins only), but the switches are visible to everyone. Alongside it, `email` maps each type that can ALSO be delivered by email (comment, comment_reply, new_video) to whether it is; email is opt-in, so a type never configured is false.
          */
         get: operations["getNotificationPrefs"];
         put?: never;
@@ -3047,7 +3047,7 @@ export interface paths {
         head?: never;
         /**
          * Update the caller's notification preferences
-         * @description Applies a partial preference update: only the types present in the body are changed. Disabling a type suppresses new notifications of that type at creation time (existing notifications are unaffected). An unknown type is 422 and nothing is written. Returns the full updated map.
+         * @description Applies a partial preference update: only the types present in the body are changed, in `prefs` (in-app) and/or `email`. Disabling a type suppresses new notifications of that type at creation time (existing notifications are unaffected). Email rides the in-app notification: it is queued only when that notification is created, so an in-app type that is off sends no email either, and it is delivered in the background, only to a verified address, while the instance has mail configured. An unknown type, or an email switch for a type without email delivery, is 422 and nothing is written. Returns the full updated maps.
          */
         patch: operations["updateNotificationPrefs"];
         trace?: never;
@@ -7641,7 +7641,19 @@ export interface components {
             prefs: {
                 [key: string]: boolean;
             };
+            /**
+             * @description Every type that can also be delivered by email (comment, comment_reply, new_video) mapped to whether it is. Email is opt-in, mirroring PeerTube's web-only defaults for these types: a type with no stored choice is false. Types absent from this map have no email delivery.
+             * @example {
+             *       "comment": false,
+             *       "comment_reply": true,
+             *       "new_video": true
+             *     }
+             */
+            email: {
+                [key: string]: boolean;
+            };
         };
+        /** @description At least one type must be named in prefs or email (an update naming none is 422). */
         UpdateNotificationPrefsRequest: {
             /**
              * @description Partial map of notification type -> enabled. Only the types present are changed. Known types: caption_ready, comment, comment_reply, federation_follower_request, follow, message, new_registration_request, new_report, new_video, report_resolved, upload_quarantined, video_blocked, video_rejected, video_unblocked. An unknown type rejects the whole update (422).
@@ -7649,7 +7661,16 @@ export interface components {
              *       "follow": false
              *     }
              */
-            prefs: {
+            prefs?: {
+                [key: string]: boolean;
+            };
+            /**
+             * @description Partial map of email-capable type -> emailed. Only the types present are changed. Email types: comment, comment_reply, new_video. Any other type rejects the whole update (422).
+             * @example {
+             *       "new_video": true
+             *     }
+             */
+            email?: {
                 [key: string]: boolean;
             };
         };
@@ -19181,7 +19202,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Empty update or unknown notification type. */
+            /** @description Empty update, unknown notification type, or an email switch for a type without email delivery. */
             422: {
                 headers: {
                     [name: string]: unknown;
