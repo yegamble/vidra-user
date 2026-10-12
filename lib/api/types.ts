@@ -418,6 +418,9 @@ export type ReportReporter = Schemas["ReportReporter"];
 export type Report = Schemas["Report"];
 export type ReportListResponse = Schemas["ReportListResponse"];
 export type ResolveReportRequest = Schemas["ResolveReportRequest"];
+/** One message in a report's reporter↔staff thread (core 0163). */
+export type ReportMessage = Schemas["ReportMessage"];
+export type ReportMessageListResponse = Schemas["ReportMessageListResponse"];
 export type BlockVideoRequest = Schemas["BlockVideoRequest"];
 export type BlockedVideo = Schemas["BlockedVideo"];
 export type BlockedVideoListResponse = Schemas["BlockedVideoListResponse"];

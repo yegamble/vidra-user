@@ -7,12 +7,16 @@ import type { Report } from "@/lib/api";
 const mocks = vi.hoisted(() => ({
   getReports: vi.fn(),
   blockVideo: vi.fn(),
+  getReportMessages: vi.fn(),
+  postReportMessage: vi.fn(),
 }));
 
 vi.mock("@/lib/api", () => ({
   api: {
     getReports: mocks.getReports,
     blockVideo: mocks.blockVideo,
+    getReportMessages: mocks.getReportMessages,
+    postReportMessage: mocks.postReportMessage,
   },
   errorMessage: (_error: unknown, fallback: string) => fallback,
 }));
@@ -43,6 +47,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.getReports.mockResolvedValue({ reports: [REPORT], total: 1, limit: 20, offset: 0 });
   mocks.blockVideo.mockResolvedValue(undefined);
+  mocks.getReportMessages.mockResolvedValue({ messages: [], can_reply: true, total: 0, limit: 100, offset: 0 });
   // The queue's two-pane layout auto-selects the first report only on a wide
   // viewport; jsdom has no matchMedia at all.
   window.matchMedia = ((query: string) => ({
@@ -108,5 +113,46 @@ describe("ModerationQueue — blocking a reported video", () => {
 
     expect(screen.queryByLabelText(/block reason/i)).toBeNull();
     expect(mocks.blockVideo).not.toHaveBeenCalled();
+  });
+});
+
+describe("ModerationQueue — the report's message thread", () => {
+  it("shows staff the thread with who wrote each message, and lets them reply to the reporter", async () => {
+    mocks.getReportMessages.mockResolvedValue({
+      messages: [
+        {
+          id: "m-1",
+          body: "It is a re-upload of my video",
+          by_moderator: false,
+          is_mine: false,
+          author_username: "bob",
+          created_at: "2026-10-01T12:00:00Z",
+        },
+      ],
+      can_reply: true,
+      total: 1,
+      limit: 100,
+      offset: 0,
+    });
+    mocks.postReportMessage.mockResolvedValue({
+      id: "m-2",
+      body: "Thanks, looking now",
+      by_moderator: true,
+      is_mine: true,
+      author_username: "mod",
+      created_at: "2026-10-01T12:05:00Z",
+    });
+    const { ModerationQueue } = await import("./ModerationQueue");
+    render(<ModerationQueue />);
+
+    const thread = await screen.findByRole("region", { name: "Messages about this report" });
+    expect(thread.textContent).toContain("bob · Reporter");
+    expect(thread.textContent).toContain("It is a re-upload of my video");
+    expect(mocks.getReportMessages).toHaveBeenCalledWith("r-1", { limit: 100 }, expect.anything());
+
+    fireEvent.change(screen.getByLabelText("Message"), { target: { value: "Thanks, looking now" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(mocks.postReportMessage).toHaveBeenCalledWith("r-1", "Thanks, looking now"));
+    expect(await screen.findByText("Thanks, looking now")).toBeTruthy();
   });
 });
