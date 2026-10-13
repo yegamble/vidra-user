@@ -95,6 +95,10 @@ export type QoEErrorClass = NonNullable<QoEEventInput["error_class"]>;
 // beacon that writes these events and the rollups that read them, so they are
 // declared once — in the admin block below, projected off the rollup schema.
 
+// --- Private subscriptions feed ----------------------------------------------
+export type FeedTokenStatus = Schemas["FeedTokenStatus"];
+export type FeedTokenIssued = Schemas["FeedTokenIssued"];
+
 // --- Search & discovery (search-service W4) ---------------------------------
 // Autocomplete suggestions. The response is inline in the spec (not a named
 // component), so it is derived from the operation. `type` is a string in the
@@ -338,6 +342,9 @@ export type RejectRegistrationRequest = Schemas["RejectRegistrationRequest"];
 export type FederationFollowerRequest = Schemas["FederationFollowerRequest"];
 export type FederationFollowerRequestListResponse =
   Schemas["FederationFollowerRequestListResponse"];
+export type InstanceFollow = Schemas["InstanceFollow"];
+export type InstanceFollowState = InstanceFollow["state"];
+export type InstanceFollowListResponse = Schemas["InstanceFollowListResponse"];
 export type User = Schemas["User"];
 export type PublicUserProfile = Schemas["PublicUserProfile"];
 export type ProfileImage = Schemas["ProfileImage"];
@@ -520,6 +527,11 @@ export type LiveUpcomingListResponse = Schemas["LiveUpcomingListResponse"];
 // --- Comments ---------------------------------------------------------------
 export type Comment = Schemas["Comment"];
 export type CommentListResponse = Schemas["CommentListResponse"];
+// The review queue (core 0161): a comment on a video you manage + its title.
+export type ManagedCommentListResponse = Schemas["ManagedCommentListResponse"];
+export type ManagedComment = ManagedCommentListResponse["comments"][number];
+// A video's comments policy; requires_approval holds comments for review.
+export type CommentsPolicy = NonNullable<Video["comments_policy"]>;
 
 // --- Captions ---------------------------------------------------------------
 export type Caption = Schemas["Caption"];
@@ -528,6 +540,10 @@ export type CaptionJobState = NonNullable<Schemas["CaptionJob"]["state"]>;
 export type CaptionJob = Schemas["CaptionJob"];
 export type CaptionJobResponse = Schemas["CaptionJobResponse"];
 export type AutoCaptionRequest = Schemas["AutoCaptionRequest"];
+
+// --- Video ownership changes (core 0165) -----------------------------------
+export type VideoOwnershipChange = Schemas["VideoOwnershipChange"];
+export type VideoOwnershipChangeListResponse = Schemas["VideoOwnershipChangeListResponse"];
 
 // --- Mutes / blocks ---------------------------------------------------------
 export type MutedAccount = Schemas["MutedAccount"];

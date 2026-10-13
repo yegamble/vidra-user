@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { useFormat } from "@/components/I18nProvider";
 import { FederatedOriginBadge } from "@/components/FederatedOriginBadge";
 import { IpfsIcon } from "@/components/icons";
 import { RestrictedModePlaceholder } from "@/components/RestrictedModePlaceholder";
@@ -12,7 +13,7 @@ import { VideoCardPreview } from "@/components/VideoCardPreview";
 import { channelAvatarUrl } from "@/lib/api";
 import type { Video } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import { formatCount, formatDuration, relativeTime } from "@/lib/format";
+import { formatDuration } from "@/lib/format";
 import { useInstanceDefaults } from "@/lib/instance-defaults";
 import { miniatureDisplayName } from "@/lib/miniature-name";
 import { useVideoCardPresentation } from "@/lib/use-video-card-presentation";
@@ -78,6 +79,7 @@ export function VideoCard({
   // see lib/miniature-name). Same shared instance fetch as the policy above.
   const preferAuthorName =
     useInstanceDefaults()?.miniature_prefer_author_display_name === true;
+  const format = useFormat();
   if (removed) return null;
   if (restrictedHidden) {
     return <RestrictedModePlaceholder className="aspect-video rounded-2xl px-4 text-sm" />;
@@ -87,8 +89,8 @@ export function VideoCard({
     !isRemote && video.channel_handle ? channelAvatarUrl(video.channel_handle) : null;
 
   const meta: string[] = [];
-  if (typeof video.views === "number") meta.push(`${formatCount(video.views)} views`);
-  const when = relativeTime(video.created_at);
+  if (typeof video.views === "number") meta.push(`${format.formatCount(video.views)} views`);
+  const when = format.relativeTime(video.created_at);
   if (when) meta.push(when);
 
   const progressPct =

@@ -3,8 +3,10 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { useT } from "@/components/I18nProvider";
 import { PlusSquareIcon, UploadIcon, VideoIcon } from "@/components/icons";
 import { Modal } from "@/components/ui/Modal";
+import type { PlainMessageKey } from "@/lib/i18n";
 import { useLiveAvailable } from "@/lib/live/availability";
 
 // CreateSheet — the phone "Create" bottom sheet (design "Vidra App": the Create
@@ -17,8 +19,8 @@ import { useLiveAvailable } from "@/lib/live/availability";
 // button on close" contract.
 type CreateRow = {
   href: string;
-  title: string;
-  subtitle: string;
+  title: PlainMessageKey;
+  subtitle: PlainMessageKey;
   /** 18px glyph, or the Go-live status dot. */
   icon: ReactNode;
   /** Render a divider above this row (grouping the primary flows from the rest). */
@@ -31,38 +33,39 @@ type CreateRow = {
 const ROWS: readonly (CreateRow & { live?: true })[] = [
   {
     href: "/studio/content?upload=1",
-    title: "Upload video",
-    subtitle: "Resumable, up to 8 GB",
+    title: "header.uploadVideo",
+    subtitle: "create.upload.subtitle",
     icon: <UploadIcon size={18} className="text-accent-text" />,
   },
   {
     href: "/studio/live?new=1",
     live: true,
-    title: "Go live",
-    subtitle: "Stream via RTMP with optional replay",
+    title: "header.goLive",
+    subtitle: "create.live.subtitle",
     // A `live`-token status dot (not a glyph), matching the design's Go-live cue.
     icon: <span aria-hidden className="h-[9px] w-[9px] rounded-full bg-live" />,
   },
   {
     href: "/studio/channel?create=1",
-    title: "New channel",
-    subtitle: "Start a new channel for your videos",
+    title: "header.newChannel",
+    subtitle: "create.channel.subtitle",
     icon: <PlusSquareIcon size={18} />,
     divider: true,
   },
   {
     href: "/studio",
-    title: "Open Studio",
-    subtitle: "Manage videos, streams and captions",
+    title: "create.studio.title",
+    subtitle: "create.studio.subtitle",
     icon: <VideoIcon size={18} />,
   },
 ];
 
 export function CreateSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const t = useT();
   const liveAvailable = useLiveAvailable();
   if (!open) return null;
   return (
-    <Modal title="Create" variant="sheet" hideClose onClose={onClose}>
+    <Modal title={t("header.create")} variant="sheet" hideClose onClose={onClose}>
       <ul className="flex flex-col">
         {ROWS.filter((row) => liveAvailable || row.live !== true).map((row) => (
           <li key={row.href} className={row.divider ? "mt-1 border-t border-border-subtle pt-1" : undefined}>
@@ -75,8 +78,8 @@ export function CreateSheet({ open, onClose }: { open: boolean; onClose: () => v
                 {row.icon}
               </span>
               <span className="min-w-0">
-                <span className="block text-[15px] font-semibold">{row.title}</span>
-                <span className="block text-[12.5px] text-fg-muted">{row.subtitle}</span>
+                <span className="block text-[15px] font-semibold">{t(row.title)}</span>
+                <span className="block text-[12.5px] text-fg-muted">{t(row.subtitle)}</span>
               </span>
             </Link>
           </li>

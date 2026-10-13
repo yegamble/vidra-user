@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Video } from "@/lib/api";
@@ -13,7 +13,7 @@ vi.mock("next/navigation", async () => (await import("@/lib/test-navigation")).n
 
 // The session the watch page sees.
 let sessionStatus: "restoring" | "anon" | "authed" = "anon";
-let sessionUser: { id: string } | null = null;
+let sessionUser: { id: string; role?: string } | null = null;
 vi.mock("@/components/auth/AuthProvider", () => ({
   useSession: () => ({ status: sessionStatus, user: sessionUser }),
   useOptionalSession: () => ({ status: sessionStatus, user: sessionUser }),
@@ -23,7 +23,14 @@ vi.mock("@/components/auth/AuthProvider", () => ({
 // file asserts (which requests go out, and when) — stub them so jsdom has no
 // media, HLS or IntersectionObserver work to do.
 vi.mock("@/components/player/VideoPlayer", () => ({ VideoPlayer: () => <div /> }));
-vi.mock("@/components/CommentsSection", () => ({ CommentsSection: () => <div /> }));
+// The props the comments section was last rendered with (reviewer gating).
+const commentsProps = vi.hoisted(() => ({ last: null as null | { canManageComments?: boolean } }));
+vi.mock("@/components/CommentsSection", () => ({
+  CommentsSection: (p: { canManageComments?: boolean }) => {
+    commentsProps.last = p;
+    return <div />;
+  },
+}));
 vi.mock("@/components/RelatedVideos", () => ({ RelatedVideos: () => <div /> }));
 vi.mock("@/components/RatingControls", () => ({ RatingControls: () => <div /> }));
 vi.mock("@/components/DownloadButton", () => ({ DownloadButton: () => <div /> }));
@@ -56,6 +63,7 @@ const mocks = vi.hoisted(() => ({
   getWatchProgress: vi.fn(),
   recordVideoView: vi.fn(),
   recordWatchProgress: vi.fn(),
+  getMyChannels: vi.fn(),
 }));
 
 vi.mock("@/lib/api", () => ({
@@ -78,6 +86,8 @@ vi.mock("@/lib/api", () => ({
   setPlaybackToken: () => {},
   ipfsHlsMasterUrl: () => undefined,
 }));
+
+import { invalidateVideoActionPermissionCache } from "@/lib/use-video-action-permissions";
 
 import { WatchView } from "./WatchView";
 
@@ -110,6 +120,9 @@ beforeEach(() => {
   mocks.getCaptions.mockResolvedValue({ captions: [] });
   mocks.getWatchProgress.mockResolvedValue({ position_seconds: 0 });
   mocks.recordVideoView.mockResolvedValue(undefined);
+  mocks.getMyChannels.mockResolvedValue({ channels: [] });
+  commentsProps.last = null;
+  invalidateVideoActionPermissionCache();
 });
 
 afterEach(() => {
@@ -146,6 +159,44 @@ describe("WatchView session settling", () => {
     await act(async () => {});
     expect(mocks.getChannel).toHaveBeenCalledTimes(1);
     expect(mocks.getChannel).toHaveBeenCalledWith("film-house", expect.any(AbortSignal));
+  });
+});
+
+// Comment approval (core 0161): every reviewer the server accepts — the owner,
+// an editor member, staff — gets the inline Approve/Reject (and pin/heart)
+// controls, through the shared video-permissions seam; nobody else does.
+describe("WatchView comment reviewer controls", () => {
+  const reviewerFlag = async (user: { id: string; role?: string }, myChannels: string[]) => {
+    sessionStatus = "authed";
+    sessionUser = user;
+    mocks.getMyChannels.mockResolvedValue({ channels: myChannels.map((id) => ({ id })) });
+    render(<WatchView id="v1" initialVideo={video()} />);
+    await act(async () => {});
+    return commentsProps.last?.canManageComments;
+  };
+
+  it("gives the channel owner the controls from the video's own channel alone", async () => {
+    // The owner is known from the channel the page already loaded; their Pin/
+    // Heart (and Approve/Reject) must never wait on, or depend on, /me/channels.
+    mocks.getChannel.mockResolvedValue({ handle: "film-house", display_name: "Film House", owner_id: "u-owner" });
+    mocks.getMyChannels.mockReturnValue(new Promise(() => {}));
+    sessionStatus = "authed";
+    sessionUser = { id: "u-owner" };
+    render(<WatchView id="v1" initialVideo={video()} />);
+    await waitFor(() => expect(commentsProps.last?.canManageComments).toBe(true));
+  });
+
+  it("gives a channel editor the reviewer controls", async () => {
+    await reviewerFlag({ id: "u-editor" }, ["c1"]);
+    await waitFor(() => expect(commentsProps.last?.canManageComments).toBe(true));
+  });
+
+  it("gives staff the reviewer controls", async () => {
+    expect(await reviewerFlag({ id: "u-mod", role: "moderator" }, [])).toBe(true);
+  });
+
+  it("withholds them from a viewer who manages none of the video's channels", async () => {
+    expect(await reviewerFlag({ id: "u-viewer" }, ["some-other-channel"])).toBe(false);
   });
 });
 

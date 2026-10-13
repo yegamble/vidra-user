@@ -1,9 +1,31 @@
 // Small pure formatting helpers for UI display. Pure + dependency-free so they
 // unit-test in the node environment.
+//
+// Locale: the four locale-sensitive helpers (formatCount, relativeTime,
+// formatDateTime, formatMonthYear) take an optional `locale`. English keeps its
+// hand-built output byte-for-byte (e2e selects by it: "5m ago", "1.2K"); any
+// other locale goes through Intl. Components should not pass a locale by hand:
+// `useFormat()` (client) / `getI18n().format` (server) return `createFormat(
+// activeLocale)`, so the formatters follow the same per-request locale as t().
 
-/** formatCount renders a view/follower count compactly: 942, 1.2K, 3.4M, 1.0B. */
-export function formatCount(n: number): string {
+const isEnglish = (locale: string | undefined) => locale === undefined || /^en(-|$)/i.test(locale);
+
+const intlCache = new Map<string, unknown>();
+/** One Intl instance per (kind, locale, options): construction is the slow part. */
+function cached<T>(kind: string, locale: string, options: object, make: () => T): T {
+  const key = `${kind}|${locale}|${JSON.stringify(options)}`;
+  let value = intlCache.get(key) as T | undefined;
+  if (value === undefined) intlCache.set(key, (value = make()));
+  return value;
+}
+
+/** formatCount renders a view/follower count compactly: 942, 1.2K, 3.4M, 1.0B (en); "1,2 k" in fr. */
+export function formatCount(n: number, locale?: string): string {
   if (!Number.isFinite(n) || n < 0) return "0";
+  if (!isEnglish(locale)) {
+    const opts = { notation: "compact", maximumFractionDigits: 1 } as const;
+    return cached("count", locale!, opts, () => new Intl.NumberFormat(locale, opts)).format(Math.floor(n));
+  }
   if (n < 1000) return String(Math.floor(n));
   const units = [
     { v: 1_000_000_000, s: "B" },
@@ -47,10 +69,11 @@ export function formatBytes(bytes: number): string {
 }
 
 /** relativeTime renders an ISO timestamp as a coarse "x ago" relative to now. */
-export function relativeTime(iso: string, now: Date = new Date()): string {
+export function relativeTime(iso: string, now: Date = new Date(), locale?: string): string {
   const then = new Date(iso).getTime();
   if (Number.isNaN(then)) return "";
   const secs = Math.floor((now.getTime() - then) / 1000);
+  if (!isEnglish(locale)) return localizedRelative(secs, locale!);
   if (secs < 0) return "just now";
   const steps: Array<{ limit: number; div: number; unit: string }> = [
     { limit: 60, div: 1, unit: "s" },
@@ -68,6 +91,26 @@ export function relativeTime(iso: string, now: Date = new Date()): string {
     }
   }
   return `${Math.floor(secs / 31557600)}y ago`;
+}
+
+const REL_STEPS: Array<{ limit: number; div: number; unit: Intl.RelativeTimeFormatUnit }> = [
+  { limit: 60, div: 1, unit: "second" },
+  { limit: 3600, div: 60, unit: "minute" },
+  { limit: 86400, div: 3600, unit: "hour" },
+  { limit: 604800, div: 86400, unit: "day" },
+  { limit: 2629800, div: 604800, unit: "week" },
+  { limit: 31557600, div: 2629800, unit: "month" },
+];
+
+/** The same buckets as the English path, worded by Intl ("il y a 5 min", "maintenant"). */
+function localizedRelative(secs: number, locale: string): string {
+  const opts = { numeric: "auto", style: "short" } as const;
+  const rtf = cached("rel", locale, opts, () => new Intl.RelativeTimeFormat(locale, opts));
+  if (secs < 5) return rtf.format(0, "second");
+  for (const { limit, div, unit } of REL_STEPS) {
+    if (secs < limit) return rtf.format(-Math.floor(secs / div), unit);
+  }
+  return rtf.format(-Math.floor(secs / 31557600), "year");
 }
 
 /** formatUptime renders a second count as a compact "1d 2h 3m" string. */
@@ -88,16 +131,12 @@ export function formatUptime(seconds: number): string {
  * the viewer's locale/zone (e.g. "Jul 10, 2026, 2:30 PM"). Used where an exact
  * future moment matters (scheduled publish), unlike relativeTime's "x ago".
  */
-export function formatDateTime(iso: string): string {
+export function formatDateTime(iso: string, locale?: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  const opts = { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" } as const;
+  const tag = isEnglish(locale) ? undefined : locale; // English follows the viewer, as before
+  return cached("dt", tag ?? "", opts, () => new Intl.DateTimeFormat(tag, opts)).format(d);
 }
 
 /**
@@ -125,11 +164,25 @@ export function formatCountdown(iso: string, now: Date = new Date()): string {
  * viewer's locale (e.g. "July 2026") — the "Joined …" affordance on a channel's
  * About panel, where the day-level precision of formatDateTime is unwanted.
  */
-export function formatMonthYear(iso: string): string {
+export function formatMonthYear(iso: string, locale?: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString(undefined, { year: "numeric", month: "long" });
+  const opts = { year: "numeric", month: "long" } as const;
+  const tag = isEnglish(locale) ? undefined : locale; // English follows the viewer, as before
+  return cached("my", tag ?? "", opts, () => new Intl.DateTimeFormat(tag, opts)).format(d);
 }
+
+/** The four locale-sensitive formatters bound to one locale (see the header note). */
+export function createFormat(locale: string) {
+  return {
+    locale,
+    formatCount: (n: number) => formatCount(n, locale),
+    relativeTime: (iso: string, now?: Date) => relativeTime(iso, now, locale),
+    formatDateTime: (iso: string) => formatDateTime(iso, locale),
+    formatMonthYear: (iso: string) => formatMonthYear(iso, locale),
+  };
+}
+export type Format = ReturnType<typeof createFormat>;
 
 /** formatDuration renders whole seconds as m:ss, or h:mm:ss past an hour. */
 export function formatDuration(totalSeconds: number): string {

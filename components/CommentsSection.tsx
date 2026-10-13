@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useId, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { useFormat, useT } from "@/components/I18nProvider";
 import { useWatchSignIn } from "@/components/watch/WatchSignInPrompt";
 import { FederatedOriginBadge } from "@/components/FederatedOriginBadge";
 import {
@@ -18,6 +19,7 @@ import { ReportDialog, type ReportKind } from "@/components/ReportButton";
 import { UserText } from "@/components/UserText";
 import { Alert } from "@/components/ui/Alert";
 import { Avatar } from "@/components/ui/Avatar";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Dropdown, type DropdownItem } from "@/components/ui/Dropdown";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -33,7 +35,6 @@ import { useBrowseAutoLoad } from "@/lib/use-browse-auto-load";
 import { buildCommentTree, replyMention } from "@/lib/comments";
 import { useE2EEAvailable } from "@/lib/e2ee/availability";
 import { useMessagingAvailable } from "@/lib/messaging/availability";
-import { relativeTime } from "@/lib/format";
 import { useSettledSession } from "@/lib/use-settled-session";
 
 const MAX_COMMENT_LEN = 2000;
@@ -92,6 +93,7 @@ export function CommentsSection({
   // holds the request until `settled` and re-asks when the viewer changes; see
   // `useSettledSession`. Pages of 100 (the backend maximum) append under a
   // "Load more" instead of silently stopping at the first 100.
+  const t = useT();
   const viewer = useSettledSession();
   const list = useAppendingList<Comment>({
     queryKey: videoId,
@@ -156,28 +158,30 @@ export function CommentsSection({
   const byId = new Map(comments.map((c) => [c.id, c] as const));
 
   return (
-    <section aria-label="Comments" className="flex flex-col gap-4">
+    <section aria-label={t("watch.comments.label")} className="flex flex-col gap-4">
       <h2 className="text-[15px] font-bold tracking-tight">
-        {status === "ready" ? `Comments (${list.total ?? comments.length})` : "Comments"}
+        {status === "ready"
+          ? t("watch.comments.heading", { total: String(list.total ?? comments.length) })
+          : t("watch.comments.label")}
       </h2>
 
       {commentsEnabled ? (
         <CommentForm videoId={videoId} onPosted={onPosted} />
       ) : (
         <p className="rounded-2xl bg-surface-muted px-4 py-3 text-sm text-fg-muted">
-          Comments are turned off for this video.
+          {t("watch.comments.off")}
         </p>
       )}
 
       {status === "loading" ? (
         <div className="flex justify-center py-8">
-          <Spinner label="Loading comments" />
+          <Spinner label={t("watch.comments.loading")} />
         </div>
       ) : status === "error" ? (
-        <ErrorState message="Could not load comments." onRetry={retry} />
+        <ErrorState message={t("watch.comments.error")} onRetry={retry} />
       ) : comments.length === 0 ? (
         <p className="text-sm text-fg-muted">
-          No comments yet. Be the first to comment.
+          {t("watch.comments.empty")}
         </p>
       ) : (
         <ul className="flex flex-col gap-5">
@@ -208,7 +212,7 @@ export function CommentsSection({
           hasMore={list.hasMore}
           autoLoad={autoLoad}
           busy={list.moreStatus === "loading"}
-          error={list.moreStatus === "error" ? "Could not load more comments." : null}
+          error={list.moreStatus === "error" ? t("watch.comments.moreError") : null}
           onLoadMore={list.loadMore}
         />
       ) : null}
@@ -225,6 +229,7 @@ function CommentForm({
   videoId: string;
   onPosted: (c: Comment) => void;
 }) {
+  const t = useT();
   const { status } = useSession();
   const requestSignIn = useWatchSignIn();
   const [body, setBody] = useState("");
@@ -235,7 +240,7 @@ function CommentForm({
     if (requestSignIn) return <button type="button" disabled={status === "restoring"}
       onClick={() => requestSignIn("leave a comment")}
       className="focus-ring min-h-11 w-full rounded-lg border-b border-border px-3 text-left text-sm text-fg-muted hover:bg-surface-muted">
-      Add a comment…
+      {t("comments.add.placeholder")}
     </button>;
     return (
       <p className="text-sm text-fg-muted">
@@ -243,9 +248,9 @@ function CommentForm({
           href="/login"
           className="focus-ring rounded font-semibold text-fg underline hover:no-underline"
         >
-          Sign in
+          {t("comments.signIn")}
         </Link>{" "}
-        to leave a comment.
+        {t("comments.signIn.toComment")}
       </p>
     );
   }
@@ -260,7 +265,7 @@ function CommentForm({
       onPosted(created);
       setBody("");
     } catch (err: unknown) {
-      setError(errorMessage(err, "Could not post your comment."));
+      setError(errorMessage(err, t("comments.add.error")));
     } finally {
       setBusy(false);
     }
@@ -275,8 +280,8 @@ function CommentForm({
       }}
     >
       <Textarea
-        aria-label="Add a comment"
-        placeholder="Add a comment…"
+        aria-label={t("comments.add.label")}
+        placeholder={t("comments.add.placeholder")}
         rows={3}
         maxLength={MAX_COMMENT_LEN}
         value={body}
@@ -285,7 +290,7 @@ function CommentForm({
       />
       <div className="flex justify-end">
         <Button type="submit" size="sm" disabled={busy || body.trim() === ""}>
-          Post
+          {t("comments.add.post")}
         </Button>
       </div>
     </form>
@@ -311,6 +316,7 @@ function ReplyComposer({
   onReplied: (c: Comment) => void;
   onCancel: () => void;
 }) {
+  const t = useT();
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -318,8 +324,8 @@ function ReplyComposer({
   // A tombstoned/absent parent has no handle to show — the composer names it
   // neutrally rather than rendering a broken "@". (In practice the Reply control
   // is absent on a tombstone, so this is a defensive fallback.)
-  const target = parentUsername ? `@${parentUsername}` : "a deleted comment";
-  const replyLabel = `Write a reply to ${target}`;
+  const target = parentUsername ? `@${parentUsername}` : t("comments.reply.deletedTarget");
+  const replyLabel = t("comments.reply.label", { target });
 
   async function submit() {
     const trimmed = body.trim();
@@ -332,7 +338,7 @@ function ReplyComposer({
       setBody("");
       onCancel();
     } catch (err: unknown) {
-      setError(errorMessage(err, "Could not post your reply."));
+      setError(errorMessage(err, t("comments.reply.error")));
     } finally {
       setBusy(false);
     }
@@ -352,16 +358,16 @@ function ReplyComposer({
       >
         {parentUsername ? (
           <>
-            Replying to <span className="font-semibold text-fg">@{parentUsername}</span>
+            {t("comments.reply.chip")}<span className="font-semibold text-fg">@{parentUsername}</span>
           </>
         ) : (
-          "Replying to a deleted comment"
+          t("comments.reply.chipDeleted")
         )}
       </span>
       <Textarea
         aria-label={replyLabel}
         aria-describedby={chipId}
-        placeholder="Write a reply…"
+        placeholder={t("comments.reply.placeholder")}
         rows={2}
         maxLength={MAX_COMMENT_LEN}
         value={body}
@@ -370,10 +376,10 @@ function ReplyComposer({
       />
       <div className="flex justify-end gap-2">
         <Button variant="secondary" size="sm" onClick={onCancel}>
-          Cancel
+          {t("comments.reply.cancel")}
         </Button>
         <Button type="submit" size="sm" disabled={busy || body.trim() === ""}>
-          {busy ? "Posting…" : "Post reply"}
+          {busy ? t("comments.reply.posting") : t("comments.reply.post")}
         </Button>
       </div>
     </form>
@@ -428,6 +434,8 @@ function CommentItem({
   onHiddenAuthor: (authorId: string) => void;
   onMutedInstance: (domain: string) => void;
 }) {
+  const t = useT();
+  const { relativeTime } = useFormat();
   const { user, status } = useSession();
   const requestSignIn = useWatchSignIn();
   const router = useRouter();
@@ -436,6 +444,7 @@ function CommentItem({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [pinBusy, setPinBusy] = useState(false);
   const [heartBusy, setHeartBusy] = useState(false);
+  const [approving, setApproving] = useState(false);
   const [muting, setMuting] = useState(false);
   const [blocking, setBlocking] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -451,6 +460,9 @@ function CommentItem({
   // reply is visible.
   const [repliesOpen, setRepliesOpen] = useState(false);
   const isRemote = comment.remote === true;
+  // Held for review (core 0161): only its author and the video's reviewers ever
+  // receive one, and nobody may reply to or pin it until it is approved.
+  const held = comment.held_for_review === true;
   // Only a top-level comment can be pinned (server rule); a reply carries a
   // parent_id, so it never offers the Pin action.
   const isTopLevel = !comment.parent_id;
@@ -484,7 +496,7 @@ function CommentItem({
       onEdited(updated);
       setEditing(false);
     } catch (err: unknown) {
-      setEditError(errorMessage(err, "Could not save your edit."));
+      setEditError(errorMessage(err, t("comments.error.edit")));
     } finally {
       setSaving(false);
     }
@@ -499,7 +511,7 @@ function CommentItem({
       onDeleted(comment.id);
     } catch (err) {
       // Keep the comment until deletion is confirmed; retry is an explicit action.
-      setDeleteError(errorMessage(err, "Could not delete your comment. Please try again."));
+      setDeleteError(errorMessage(err, t("comments.error.delete")));
       setBusy(false);
     }
   }
@@ -518,12 +530,36 @@ function CommentItem({
       toast({
         message: errorMessage(
           err,
-          pin ? "Could not pin this comment." : "Could not unpin this comment.",
+          pin ? t("comments.error.pin") : t("comments.error.unpin"),
         ),
         variant: "error",
       });
     } finally {
       setPinBusy(false);
+    }
+  }
+
+  // A reviewer publishes the held comment AS SHOWN (its updated_at); the
+  // endpoint returns it unheld, so it maps in place like an edit. A 409 means
+  // it was edited since this page loaded: show what is there now, still held,
+  // for another look. Rejecting is the plain delete (remove()).
+  async function approve() {
+    if (approving) return;
+    setApproving(true);
+    try {
+      onEdited(await api.approveComment(videoId, comment.id, comment.updated_at));
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        toast({ message: t("comments.error.changed"), variant: "error" });
+        const res = await api.getVideoComments(videoId, { limit: FULL_LIST_LIMIT }).catch(() => null);
+        const fresh = res?.comments.find((c) => c.id === comment.id);
+        if (fresh) onEdited(fresh);
+        else if (res) onDeleted(comment.id);
+      } else {
+        toast({ message: errorMessage(err, t("comments.error.approve")), variant: "error" });
+      }
+    } finally {
+      setApproving(false);
     }
   }
 
@@ -539,7 +575,7 @@ function CommentItem({
       toast({
         message: errorMessage(
           err,
-          heart ? "Could not heart this comment." : "Could not remove the heart.",
+          heart ? t("comments.error.heart") : t("comments.error.unheart"),
         ),
         variant: "error",
       });
@@ -608,12 +644,12 @@ function CommentItem({
       );
     } catch (err) {
       if (err instanceof ApiError && err.status === 403) {
-        toast({ message: "You can't message this user.", variant: "error" });
+        toast({ message: t("comments.error.cannotMessage"), variant: "error" });
       } else {
         toast({
           message: errorMessage(
             err,
-            encrypted ? "Could not start an encrypted conversation." : "Could not open a conversation.",
+            encrypted ? t("comments.error.encrypted") : t("comments.error.conversation"),
           ),
           variant: "error",
         });
@@ -647,14 +683,12 @@ function CommentItem({
             className={repliesOpen ? "rotate-180 transition-transform" : "transition-transform"}
           />
           {repliesOpen
-            ? "Hide replies"
-            : replies.length === 1
-              ? "View 1 reply"
-              : `View ${replies.length} replies`}
+            ? t("comments.replies.hide")
+            : t("comments.replies.view", { count: String(replies.length) })}
         </button>
         {repliesOpen ? (
           <ul
-            aria-label="Replies"
+            aria-label={t("comments.replies.label")}
             className="flex flex-col gap-4 border-l-2 border-border-subtle pl-4"
           >
             {replies.map((r) => (
@@ -696,7 +730,7 @@ function CommentItem({
           >
             ·
           </span>
-          <p className="pt-1 text-sm italic text-fg-muted">[deleted]</p>
+          <p className="pt-1 text-sm italic text-fg-muted">{t("comments.deleted")}</p>
         </div>
         {repliesBlock}
       </li>
@@ -714,17 +748,17 @@ function CommentItem({
   if (canManageComments) {
     // Pin only a top-level comment (server rule); heart works at any depth,
     // replies and remote-authored comments included.
-    if (isTopLevel) {
+    if (isTopLevel && !held) {
       actionItems.push(
         comment.pinned
           ? {
-              label: "Unpin",
+              label: t("comments.menu.unpin"),
               icon: <PinIcon size={16} />,
               disabled: pinBusy,
               onSelect: () => void togglePin(false),
             }
           : {
-              label: "Pin",
+              label: t("comments.menu.pin"),
               icon: <PinIcon size={16} />,
               disabled: pinBusy,
               onSelect: () => void togglePin(true),
@@ -734,13 +768,13 @@ function CommentItem({
     actionItems.push(
       comment.hearted
         ? {
-            label: "Unheart",
+            label: t("comments.menu.unheart"),
             icon: <HeartFilledIcon size={16} />,
             disabled: heartBusy,
             onSelect: () => void toggleHeart(false),
           }
         : {
-            label: "Heart",
+            label: t("comments.menu.heart"),
             icon: <HeartIcon size={16} />,
             disabled: heartBusy,
             onSelect: () => void toggleHeart(true),
@@ -754,29 +788,29 @@ function CommentItem({
     if (isRemote) {
       if (comment.author_domain) {
         moderationItems.push({
-          label: "Mute instance",
+          label: t("comments.menu.muteInstance"),
           disabled: muting,
           onSelect: () => void muteInstance(),
         });
       }
-      moderationItems.push({ label: "Report", onSelect: () => setReporting("comment") });
+      moderationItems.push({ label: t("comments.menu.report"), onSelect: () => setReporting("comment") });
     } else if (authorId) {
-      moderationItems.push({ label: "Mute", disabled: muting, onSelect: () => void mute() });
+      moderationItems.push({ label: t("comments.menu.mute"), disabled: muting, onSelect: () => void mute() });
       // The contact actions go when the operator has turned messaging off:
       // POST /conversations then answers 403 feature_disabled either way. Mute /
       // Block / Report are unrelated and stay.
       if (messagingAvailable) {
-        moderationItems.push({ label: "Message", onSelect: () => void openConversation(false) });
+        moderationItems.push({ label: t("comments.menu.message"), onSelect: () => void openConversation(false) });
         if (e2eeAvailable === true) {
           moderationItems.push({
-            label: "Encrypted message",
+            label: t("comments.menu.encrypted"),
             onSelect: () => void openConversation(true),
           });
         }
       }
-      moderationItems.push({ label: "Block", disabled: blocking, onSelect: () => void block() });
-      moderationItems.push({ label: "Report user", onSelect: () => setReporting("account") });
-      moderationItems.push({ label: "Report", onSelect: () => setReporting("comment") });
+      moderationItems.push({ label: t("comments.menu.block"), disabled: blocking, onSelect: () => void block() });
+      moderationItems.push({ label: t("comments.menu.reportUser"), onSelect: () => setReporting("account") });
+      moderationItems.push({ label: t("comments.menu.report"), onSelect: () => setReporting("comment") });
     }
   }
   if (moderationItems.length > 0) {
@@ -804,10 +838,10 @@ function CommentItem({
           {comment.pinned ? (
             <span
               className="inline-flex w-fit items-center gap-1 rounded-full bg-surface-muted px-2 py-0.5 text-[11px] font-medium text-fg-muted"
-              title="Pinned by creator"
+              title={t("comments.pinnedTitle")}
             >
               <PinIcon size={12} className="shrink-0" />
-              Pinned
+              {t("comments.pinned")}
             </span>
           ) : null}
           <div className="flex flex-wrap items-center gap-2 text-footnote">
@@ -819,26 +853,49 @@ function CommentItem({
               // profile to link), plus the shared protocol label.
               <FederatedOriginBadge
                 domain={comment.author_domain}
-                title={`Federated comment from ${comment.author_domain}`}
+                title={t("comments.federatedFrom", { domain: comment.author_domain })}
                 withProtocol
               />
             ) : null}
             {when ? <span className="text-fg-muted">{when}</span> : null}
             {comment.edited ? (
-              <span className="text-xs text-fg-muted">(edited)</span>
+              <span className="text-xs text-fg-muted">{t("comments.edited")}</span>
             ) : null}
+            {held ? <Badge variant="warning">{t("comments.pending")}</Badge> : null}
             {/* Creator-heart marker: a filled heart carrying its own accessible
                 name (role=img + title), so the meaning survives without adjacent
                 text. Suppressed on tombstones via the early return above. */}
             {comment.hearted ? (
               <HeartFilledIcon
                 size={14}
-                label="Hearted by creator"
+                label={t("comments.heartedBy")}
                 className="shrink-0 text-fg-muted"
               />
             ) : null}
             <span className="ml-auto flex items-center gap-3">
-              {!editing ? (
+              {held && canManageComments ? (
+                <>
+                  <button
+                    type="button"
+                    disabled={approving}
+                    onClick={() => void approve()}
+                    className="focus-ring rounded text-xs font-semibold text-accent-text transition-colors hover:text-fg disabled:opacity-60"
+                  >
+                    {t("comments.approve")}
+                  </button>
+                  {!isAuthor ? (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void remove()}
+                      className="focus-ring rounded text-xs font-semibold text-fg-muted transition-colors hover:text-danger disabled:opacity-60"
+                    >
+                      {t("comments.reject")}
+                    </button>
+                  ) : null}
+                </>
+              ) : null}
+              {!editing && !held ? (
                 <button
                   type="button"
                   aria-expanded={replying}
@@ -849,7 +906,7 @@ function CommentItem({
                   }}
                   className="focus-ring rounded text-xs font-semibold text-fg-muted transition-colors hover:text-fg"
                 >
-                  Reply
+                  {t("comments.reply")}
                 </button>
               ) : null}
               {isAuthor ? (
@@ -860,7 +917,7 @@ function CommentItem({
                       onClick={startEdit}
                       className="focus-ring rounded text-xs font-semibold text-fg-muted transition-colors hover:text-fg"
                     >
-                      Edit
+                      {t("comments.edit")}
                     </button>
                   ) : null}
                   <button
@@ -869,7 +926,7 @@ function CommentItem({
                     onClick={() => void remove()}
                     className="focus-ring rounded text-xs font-semibold text-fg-muted transition-colors hover:text-danger disabled:opacity-60"
                   >
-                    Delete
+                    {t("comments.delete")}
                   </button>
                 </>
               ) : null}
@@ -879,7 +936,7 @@ function CommentItem({
                 // Edit/Delete, stay inline). Each menu item keeps its prior label.
                 <Dropdown
                   trigger={<MoreVerticalIcon size={20} />}
-                  triggerLabel="Comment actions"
+                  triggerLabel={t("comments.actions")}
                   items={actionItems}
                   align="end"
                   triggerVariant="icon"
@@ -897,7 +954,7 @@ function CommentItem({
               }}
             >
               <Textarea
-                aria-label="Edit comment"
+                aria-label={t("comments.edit.label")}
                 rows={3}
                 maxLength={MAX_COMMENT_LEN}
                 value={draft}
@@ -906,10 +963,10 @@ function CommentItem({
               />
               <div className="flex justify-end gap-2">
                 <Button variant="secondary" size="sm" onClick={() => setEditing(false)}>
-                  Cancel
+                  {t("comments.reply.cancel")}
                 </Button>
                 <Button type="submit" size="sm" disabled={saving || draft.trim() === ""}>
-                  {saving ? "Saving…" : "Save"}
+                  {saving ? t("comments.edit.saving") : t("comments.edit.save")}
                 </Button>
               </div>
             </form>
@@ -952,9 +1009,9 @@ function CommentItem({
                 href="/login"
                 className="focus-ring rounded font-semibold text-fg underline hover:no-underline"
               >
-                Sign in
+                {t("comments.signIn")}
               </Link>{" "}
-              to reply.
+              {t("comments.signIn.toReply")}
             </p>
           )}
         </div>

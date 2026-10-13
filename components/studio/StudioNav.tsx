@@ -13,7 +13,7 @@ import { useLiveAvailable } from "@/lib/live/availability";
 import { ChannelProtocolBadges } from "./ChannelProtocolBadges";
 import { useStudio } from "./StudioContext";
 
-// The studio tab strip — the five surfaces the studio is split into. Active state
+// The studio tab strip — the six surfaces the studio is split into. Active state
 // is derived from the pathname (exact match; the sub-routes are distinct paths).
 // The Live tab is dropped when the instance reports `features.live: false` (the
 // operator's switch AND the RTMP ingest capability); the route itself stays
@@ -22,8 +22,12 @@ const TABS: ReadonlyArray<{ href: string; label: string; live?: true }> = [
   { href: "/studio", label: "Dashboard" },
   { href: "/studio/content", label: "Content" },
   { href: "/studio/live", label: "Live", live: true },
+  // "Comment queue", not "Comments": the dashboard/analytics stat grids
+  // already label a column "Comments", and the tab must not read as one.
+  { href: "/studio/comments", label: "Comment queue" },
   { href: "/studio/analytics", label: "Analytics" },
   { href: "/studio/channel", label: "Channel" },
+  { href: "/studio/ownership", label: "Ownership" },
 ];
 
 // StudioNav is the sticky row under the studio page title: the current-channel

@@ -28,7 +28,7 @@ type Status = "loading" | "error" | "ready";
 
 // A revealed stream key, shown exactly once (after create or regenerate) — it is
 // never refetched, so once dismissed it's gone.
-type RevealedKey = { id: string; key: string; rtmp?: string };
+type RevealedKey = { id: string; key: string; rtmp?: string; rtmps?: string };
 
 // LiveStreamsSection lets a channel owner create live streams and manage their
 // stream keys. Scoped to the studio's current channel (`handle`); the create
@@ -133,7 +133,7 @@ export function LiveStreamsSection({
         ...(scheduleToIso(scheduledStart) ? { scheduled_start_at: scheduleToIso(scheduledStart) } : {}),
       });
       setStreams((prev) => [res.live_stream, ...prev]);
-      setRevealed({ id: res.live_stream.id, key: res.stream_key, rtmp: res.rtmp_url });
+      setRevealed({ id: res.live_stream.id, key: res.stream_key, rtmp: res.rtmp_url, rtmps: res.rtmps_url });
       setTitle("");
       setPermanent(false);
       setReplayEnabled(false);
@@ -149,7 +149,7 @@ export function LiveStreamsSection({
   async function regenerate(id: string) {
     try {
       const res = await api.regenerateLiveStreamKey(id);
-      setRevealed({ id, key: res.stream_key, rtmp: res.rtmp_url });
+      setRevealed({ id, key: res.stream_key, rtmp: res.rtmp_url, rtmps: res.rtmps_url });
     } catch {
       // Leave the stream as-is on failure.
     }
@@ -511,7 +511,7 @@ function CopyIconButton({ value, label }: { value: string; label: string }) {
 // and a Show/Hide blur toggle, and closes on an "encoder waiting" hint. Rotate /
 // Delete are the stream row's affordances (regenerate = POST /live/{id}/key);
 // this panel just Dismisses once the key is copied.
-function StreamKeyReveal({ revealed, onDismiss }: { revealed: RevealedKey; onDismiss: () => void }) {
+export function StreamKeyReveal({ revealed, onDismiss }: { revealed: RevealedKey; onDismiss: () => void }) {
   // Default shown (keyShown in the design) — the whole point is "copy it now";
   // Hide blurs it as a shoulder-surfing guard.
   const [hidden, setHidden] = useState(false);
@@ -526,9 +526,31 @@ function StreamKeyReveal({ revealed, onDismiss }: { revealed: RevealedKey; onDis
         </span>
       </div>
 
+      {revealed.rtmps ? (
+        <div>
+          <p className="mb-1.5 text-[13px] font-semibold text-fg">
+            RTMPS server <span className="font-normal text-fg-muted">(recommended, encrypted)</span>
+          </p>
+          <div className="flex items-center gap-2 rounded-xl border border-border bg-surface px-3.5 py-2.5">
+            <span className="min-w-0 flex-1 truncate font-mono text-[13.5px] text-fg">
+              {revealed.rtmps}
+            </span>
+            <CopyIconButton value={revealed.rtmps} label="Copy RTMPS server URL" />
+          </div>
+        </div>
+      ) : null}
+
       {revealed.rtmp ? (
         <div>
-          <p className="mb-1.5 text-[13px] font-semibold text-fg">RTMP server</p>
+          <p className="mb-1.5 text-[13px] font-semibold text-fg">
+            {revealed.rtmps ? "RTMP server (fallback)" : "RTMP server"}
+          </p>
+          {revealed.rtmps ? (
+            <p className="mb-1.5 text-[12.5px] text-fg-muted">
+              Plain RTMP sends your stream key unencrypted. Use it only if your encoder cannot do
+              RTMPS.
+            </p>
+          ) : null}
           <div className="flex items-center gap-2 rounded-xl border border-border bg-surface px-3.5 py-2.5">
             <span className="min-w-0 flex-1 truncate font-mono text-[13.5px] text-fg">
               {revealed.rtmp}

@@ -23,6 +23,10 @@ export const TYPE_LABELS: Record<string, { label: string; help: string }> = {
     label: "Comments",
     help: "Someone comments on one of your videos.",
   },
+  comment_held: {
+    label: "Comments awaiting approval",
+    help: "A comment on a video you manage needs your approval before it appears.",
+  },
   comment_mention: {
     label: "Mentions",
     help: "Someone @-mentions you in a comment.",
@@ -83,12 +87,17 @@ export const TYPE_LABELS: Record<string, { label: string; help: string }> = {
     label: "Captions ready",
     help: "Auto-captions finish for one of your videos.",
   },
+  video_ownership_request: {
+    label: "Video ownership offers",
+    help: "Someone on this instance offers to give you one of their videos.",
+  },
 };
 
 // A stable display order for the known types; unknown-but-returned types sort
 // after them, alphabetically.
 const TYPE_ORDER = [
   "comment",
+  "comment_held",
   "comment_reply",
   "comment_mention",
   "follow",
@@ -104,6 +113,7 @@ const TYPE_ORDER = [
   "video_blocked",
   "video_unblocked",
   "caption_ready",
+  "video_ownership_request",
 ];
 
 function orderedTypes(prefs: Record<string, boolean>): string[] {

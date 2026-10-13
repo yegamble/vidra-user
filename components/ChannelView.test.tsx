@@ -5,13 +5,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   getChannel: vi.fn(),
   listChannelVideos: vi.fn(),
+  listChannelPlaylists: vi.fn(),
 }));
 vi.mock("@/components/auth/AuthProvider", () => ({
   useSession: () => ({ status: "anon", user: null }),
 }));
 vi.mock("@/lib/api", async () => ({
   ...(await vi.importActual("@/lib/api")),
-  api: { getChannel: mocks.getChannel, listChannelVideos: mocks.listChannelVideos },
+  api: {
+    getChannel: mocks.getChannel,
+    listChannelVideos: mocks.listChannelVideos,
+    listChannelPlaylists: mocks.listChannelPlaylists,
+  },
 }));
 vi.mock("@/lib/use-viewer-moderation", () => ({
   useViewerModeration: () => ({ mutedIds: new Set(), blockedIds: new Set() }),
@@ -58,6 +63,16 @@ beforeEach(() => {
   mocks.getChannel.mockResolvedValue(channel);
 });
 afterEach(cleanup);
+
+describe("ChannelView feed link placement", () => {
+  it("keeps the podcast feed link out of the non-shrinking actions row (640px clip regression)", async () => {
+    mocks.listChannelVideos.mockResolvedValue({ videos: [], total: 0, limit: 20, offset: 0 });
+    render(<ChannelView handle="creator" />);
+    const link = await screen.findByRole("link", { name: /Podcast feed for/ });
+    expect(link.closest(".shrink-0")).toBeNull();
+    expect(link.getAttribute("aria-label")).toBeTruthy();
+  });
+});
 
 describe("ChannelView paging", () => {
   it("requests page 2 at offset 20, appends it, and drops Load more at the total", async () => {
@@ -121,6 +136,29 @@ describe("ChannelView support text", () => {
     render(<ChannelView handle="creator" />);
     await waitFor(() =>
       expect(supportButton).toHaveBeenCalledWith(expect.objectContaining({ text: "Ko-fi: creator" })),
+    );
+  });
+});
+
+describe("ChannelView Playlists tab", () => {
+  it("loads the channel's playlists only once the tab is opened", async () => {
+    mocks.listChannelVideos.mockResolvedValue({ videos: videos(0, 1), total: 1, limit: 20, offset: 0 });
+    mocks.listChannelPlaylists.mockResolvedValue({
+      playlists: [{ id: "p1", title: "Road trip", visibility: "public", video_count: 0, has_thumbnail: false }],
+      total: 1,
+      limit: 20,
+      offset: 0,
+    });
+    render(<ChannelView handle="creator" />);
+    await screen.findByText("Video 0");
+    expect(mocks.listChannelPlaylists).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Playlists" }));
+    expect(await screen.findByText("Road trip")).toBeTruthy();
+    expect(mocks.listChannelPlaylists).toHaveBeenCalledWith(
+      "creator",
+      expect.anything(),
+      expect.objectContaining({ limit: 20, offset: 0 }),
     );
   });
 });
