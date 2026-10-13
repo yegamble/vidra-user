@@ -100,7 +100,8 @@ export function ReportDialog({
   const [reasons, setReasons] = useState<ReportReason[]>([]);
   const [startAt, setStartAt] = useState("");
   const [endAt, setEndAt] = useState("");
-  const [rangeError, setRangeError] = useState<string | null>(null);
+  const [startError, setStartError] = useState<string | null>(null);
+  const [endError, setEndError] = useState<string | null>(null);
   const [state, setState] = useState<DialogState>("idle");
   const [error, setError] = useState<string | null>(null);
 
@@ -111,21 +112,26 @@ export function ReportDialog({
     if (kind === "video") {
       const start = startAt.trim() === "" ? undefined : parseTimestamp(startAt);
       const end = endAt.trim() === "" ? undefined : parseTimestamp(endAt);
-      if (start === null || end === null) {
-        setRangeError(t("report.timeInvalid"));
-        return;
-      }
-      if (end !== undefined && (start === undefined || end <= start)) {
-        setRangeError(t("report.timeOrder"));
-        return;
-      }
+      // Each message lands on the field that is actually wrong.
+      const nextStart =
+        start === null ? t("report.timeInvalid") : end != null && start === undefined ? t("report.timeNeedStart") : null;
+      const nextEnd =
+        end === null
+          ? t("report.timeInvalid")
+          : end !== undefined && start != null && end <= start
+            ? t("report.timeOrder")
+            : null;
+      setStartError(nextStart);
+      setEndError(nextEnd);
+      if (nextStart || nextEnd) return;
       detail = {
         ...(reasons.length > 0 ? { reasons } : {}),
-        ...(start !== undefined ? { start_seconds: start } : {}),
-        ...(end !== undefined ? { end_seconds: end } : {}),
+        ...(start != null ? { start_seconds: start } : {}),
+        ...(end != null ? { end_seconds: end } : {}),
       };
     }
-    setRangeError(null);
+    setStartError(null);
+    setEndError(null);
     setState("submitting");
     setError(null);
     try {
@@ -205,6 +211,7 @@ export function ReportDialog({
                     inputMode="numeric"
                     value={startAt}
                     onChange={(e) => setStartAt(e.target.value)}
+                    error={startError ?? undefined}
                   />
                   <Input
                     label={t("report.timeEnd")}
@@ -212,7 +219,7 @@ export function ReportDialog({
                     inputMode="numeric"
                     value={endAt}
                     onChange={(e) => setEndAt(e.target.value)}
-                    error={rangeError ?? undefined}
+                    error={endError ?? undefined}
                   />
                 </div>
               </fieldset>

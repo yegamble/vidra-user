@@ -302,16 +302,19 @@ function ReportRow({
 
 // The reporter's predefined categories (core 0170), as quiet chips. Renders
 // nothing for the common case of a report with none.
+// Spans only (no list): the row renders these inside a <button>, where block
+// and list content is invalid HTML. The labels read as one sentence to AT.
 function ReasonChips({ report }: { report: Report }) {
   if (report.reasons.length === 0) return null;
   return (
-    <ul aria-label="Report categories" className="flex flex-wrap gap-1">
+    <span className="flex flex-wrap gap-1">
+      <span className="sr-only">Categories: </span>
       {report.reasons.map((r) => (
-        <li key={r}>
-          <Badge variant="strong">{reasonLabel(r)}</Badge>
-        </li>
+        <Badge key={r} variant="strong">
+          {reasonLabel(r)}
+        </Badge>
       ))}
-    </ul>
+    </span>
   );
 }
 

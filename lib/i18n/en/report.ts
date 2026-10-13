@@ -8,6 +8,7 @@ export const report = {
   "report.timeStart": "From (m:ss)",
   "report.timeEnd": "To (m:ss, optional)",
   "report.timeInvalid": "Use a time like 90 or 1:30.",
+  "report.timeNeedStart": "Add a start time too.",
   "report.timeOrder": "The end must come after the start.",
   "report.submit": "Submit report",
   "report.signedInThanks": "Thanks — your report has been sent to the moderators.",

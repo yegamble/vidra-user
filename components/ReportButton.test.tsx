@@ -57,6 +57,20 @@ describe("ReportDialog — video categories and time range", () => {
     expect(mocks.reportVideo).not.toHaveBeenCalled();
   });
 
+  it("puts each range error on the field that is wrong", async () => {
+    render(<ReportDialog kind="video" targetId="v-1" onClose={() => {}} />);
+    fillReason();
+    fireEvent.change(screen.getByLabelText("To (m:ss, optional)"), { target: { value: "30" } });
+    fireEvent.click(screen.getByRole("button", { name: "Submit report" }));
+    expect(screen.getByLabelText("From (m:ss)").getAttribute("aria-invalid")).toBe("true");
+    expect(screen.getByLabelText("To (m:ss, optional)").getAttribute("aria-invalid")).not.toBe("true");
+
+    fireEvent.change(screen.getByLabelText("From (m:ss)"), { target: { value: "abc" } });
+    fireEvent.click(screen.getByRole("button", { name: "Submit report" }));
+    expect(screen.getByLabelText("From (m:ss)").getAttribute("aria-invalid")).toBe("true");
+    expect(mocks.reportVideo).not.toHaveBeenCalled();
+  });
+
   it("offers no categories or time range for a comment report", () => {
     render(<ReportDialog kind="comment" targetId="c-1" onClose={() => {}} />);
     expect(screen.queryByLabelText("Captions")).toBeNull();
