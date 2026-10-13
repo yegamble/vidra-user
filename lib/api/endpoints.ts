@@ -1486,6 +1486,25 @@ export const api = {
       signal,
     }),
 
+  /**
+   * POST /api/v1/videos/{id}/give-ownership — offer the caller's video to
+   * another local user, who must accept it (204; owner only).
+   */
+  giveVideoOwnership: (videoId: string, username: string) =>
+    apiRequest<void>(`/api/v1/videos/${encodeURIComponent(videoId)}/give-ownership`, {
+      method: "POST",
+      body: { username },
+    }),
+
+  /**
+   * DELETE /api/v1/videos/{id}/give-ownership — withdraw the caller's pending
+   * offer of the video (204; 404 when there is none).
+   */
+  cancelVideoOwnership: (videoId: string) =>
+    apiRequest<void>(`/api/v1/videos/${encodeURIComponent(videoId)}/give-ownership`, {
+      method: "DELETE",
+    }),
+
   /** POST …/{id}/accept — take the offered video into one of the caller's channels (204). */
   acceptVideoOwnershipChange: (id: string, channelId: string) =>
     apiRequest<void>(`/api/v1/me/video-ownership-changes/${encodeURIComponent(id)}/accept`, {
