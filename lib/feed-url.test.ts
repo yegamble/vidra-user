@@ -79,3 +79,13 @@ describe("readFeedFilters", () => {
     expect(readFeedFilters({}).scope).toBeUndefined();
   });
 });
+
+describe("feedHref - parity sorts", () => {
+  it("keeps the new sorts on the home route, in the query string", () => {
+    expect(feedHref("likes")).toBe("/?sort=likes");
+    expect(feedHref("originally_published_at", { tag: "x" })).toBe(
+      "/?sort=originally_published_at&tag=x",
+    );
+    expect(feedHref("name")).toBe("/?sort=name");
+  });
+});

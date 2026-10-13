@@ -31,7 +31,14 @@ export const FALLBACK_BROWSE_SCROLL_MODE: BrowseScrollMode = "button";
 export type LandingPage = "home-recent" | "trending" | "local" | "home";
 
 function isFeedSort(value: unknown): value is FeedSort {
-  return value === "recent" || value === "popular" || value === "trending";
+  return (
+    value === "recent" ||
+    value === "popular" ||
+    value === "trending" ||
+    value === "likes" ||
+    value === "originally_published_at" ||
+    value === "name"
+  );
 }
 
 function isFeedScope(value: unknown): value is FeedScope {
