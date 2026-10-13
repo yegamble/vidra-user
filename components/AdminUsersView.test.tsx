@@ -475,6 +475,38 @@ describe("AdminUsersView owner protection", () => {
     );
   });
 
+  it("sets, shows and resets the per-user daily upload quota", async () => {
+    const GIB = 1024 ** 3;
+    mocks.getAdminUsers.mockResolvedValue({
+      users: [account(1, { daily_quota_bytes: 2 * GIB, daily_used_bytes: GIB })],
+      total: 1,
+      limit: PAGE,
+      offset: 0,
+    });
+    mocks.updateAdminUser.mockResolvedValue(account(1, { daily_quota_bytes: 5 * GIB }));
+    render(<AdminUsersView />);
+    fireEvent.click(await screen.findByRole("button", { name: "Open person1" }));
+
+    // The card shows the trailing-24h usage against the override.
+    expect(desktop().getByText("Daily upload quota")).toBeTruthy();
+    expect(desktop().getByText(/1.0 GB of 2.0 GB/)).toBeTruthy();
+
+    fireEvent.click(desktop().getByRole("button", { name: "Change daily upload quota for person1" }));
+    fireEvent.change(desktop().getByRole("spinbutton", { name: "Daily upload quota in GB for person1" }), {
+      target: { value: "5" },
+    });
+    fireEvent.click(desktop().getByRole("button", { name: "Save daily upload quota for person1" }));
+    await waitFor(() =>
+      expect(mocks.updateAdminUser).toHaveBeenCalledWith("user-1", { daily_quota_bytes: 5 * GIB }),
+    );
+
+    // Reset sends null on the daily field only.
+    fireEvent.click(desktop().getByRole("button", { name: "Reset person1 to the instance default daily upload quota" }));
+    await waitFor(() =>
+      expect(mocks.updateAdminUser).toHaveBeenCalledWith("user-1", { daily_quota_bytes: null }),
+    );
+  });
+
   it("does not restrain a plain admin who is not the owner", async () => {
     mocks.getAdminUsers.mockResolvedValue({
       users: [owner(), otherAdmin()],
