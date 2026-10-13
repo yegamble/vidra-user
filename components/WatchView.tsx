@@ -64,7 +64,7 @@ import { trackSearchEvent } from "@/lib/search-events";
 import { useSettledSession } from "@/lib/use-settled-session";
 import { useShortWatchUrl } from "@/lib/use-short-watch-url";
 import { parseStartTime } from "@/lib/start-time";
-import { useSensitiveContentPolicy } from "@/lib/use-sensitive-policy";
+import { useVideoSensitivePolicy } from "@/lib/use-video-sensitive-policy";
 import { useRestrictedMode } from "@/lib/device-preferences";
 import { dequeueVideo, useVideoQueue } from "@/lib/video-queue";
 import { useVideoActionPermissions } from "@/lib/use-video-action-permissions";
@@ -199,7 +199,7 @@ export function WatchView({
   // viewer explicitly proceeds. `hide` normally drops flagged videos from
   // listings server-side, but a direct link can still reach this watch page, so
   // it is gated here too. `display` (or an absent policy) plays normally.
-  const sensitivePolicy = useSensitiveContentPolicy();
+  const sensitivePolicy = useVideoSensitivePolicy(video ?? {});
   const restrictedMode = useRestrictedMode();
   const [sensitiveAccepted, setSensitiveAccepted] = useState(false);
   // The engine reports the source it selected, including automatic fallback.

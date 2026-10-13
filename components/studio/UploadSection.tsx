@@ -21,6 +21,7 @@ import {
   resumableUpload,
 } from "@/lib/api";
 import type {
+  SensitiveFlag,
   Channel,
   CommentsPolicy,
   ImportJob,
@@ -37,6 +38,7 @@ import { logger } from "@/lib/logger";
 import { isAcceptedVideoFile, videoAcceptAttr } from "@/lib/upload-accept";
 import { titleFromFilename } from "@/lib/upload-queue";
 import { watchPath } from "@/lib/watch-path";
+import { SensitiveFlagsField } from "./SensitiveFlagsField";
 import { VIDEO_PRIVACY_CHOICES } from "@/lib/video-privacy";
 import {
   IMPORT_STAGES,
@@ -96,6 +98,9 @@ export function UploadSection({
   // (sensitive_reason, ≤280 chars, trimmed server-side). Only revealed and sent
   // while the sensitive flag is on.
   const [sensitiveReason, setSensitiveReason] = useState("");
+  // Which kinds of sensitive content (violent / shocking / sex); a viewer can
+  // set a different policy per kind. Sent only while the sensitive flag is on.
+  const [sensitiveFlags, setSensitiveFlags] = useState<SensitiveFlag[]>([]);
   // Per-video publish policies (config-parity W9), prefilled from the
   // instance's defaults.publish block once GET /instance resolves.
   const [commentsPolicy, setCommentsPolicy] = useState<CommentsPolicy>("enabled");
@@ -718,6 +723,7 @@ export function UploadSection({
       is_sensitive: sensitive,
       // Clear the reason when the flag is off; otherwise send the trimmed text.
       sensitive_reason: sensitive ? sensitiveReason.trim() : "",
+      sensitive_flags: sensitive ? sensitiveFlags : [],
       comments_policy: commentsPolicy,
       download_enabled: downloadEnabled,
       // Harmless when unchanged (the flip already synced it) — keeps the final
@@ -885,6 +891,7 @@ export function UploadSection({
         ...(scheduleIso ? { publish_at: scheduleIso } : {}),
         ...(sensitive ? { is_sensitive: true } : {}),
         ...(sensitive && sensitiveReason.trim() ? { sensitive_reason: sensitiveReason.trim() } : {}),
+        ...(sensitive && sensitiveFlags.length > 0 ? { sensitive_flags: sensitiveFlags } : {}),
         ...(publishAfterTranscode ? { publish_after_transcode: true } : {}),
         // Per-video publish policies (W9): the visible form state is what is
         // saved (it was prefilled from defaults.publish, so an untouched form
@@ -1471,6 +1478,13 @@ export function UploadSection({
                   </div>
                   {/* Optional creator content-warning, revealed only while the
                       flag is on. Shown to viewers on the sensitive-content gate. */}
+                  {sensitive ? (
+                    <SensitiveFlagsField
+                      value={sensitiveFlags}
+                      onChange={setSensitiveFlags}
+                      disabled={formLocked}
+                    />
+                  ) : null}
                   {sensitive ? (
                     <label className="flex flex-col gap-1 text-sm">
                       <span className="font-medium text-fg">Content warning (optional)</span>

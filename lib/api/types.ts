@@ -675,3 +675,8 @@ export type UpdatePlayerSettingsRequest = Schemas["UpdatePlayerSettingsRequest"]
 export type QuarantinedVideo = Schemas["QuarantinedVideo"];
 export type QuarantinedVideoListResponse = Schemas["QuarantinedVideoListResponse"];
 export type RejectQuarantinedVideoRequest = Schemas["RejectQuarantinedVideoRequest"];
+
+// --- Content preferences (per-flag sensitive policies) -----------------------
+export type SensitiveFlag = Schemas["SensitiveFlag"];
+export type ContentPreferences = Schemas["ContentPreferences"];
+export type UpdateContentPreferencesRequest = Schemas["UpdateContentPreferencesRequest"];
