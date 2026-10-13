@@ -95,6 +95,10 @@ export type QoEErrorClass = NonNullable<QoEEventInput["error_class"]>;
 // beacon that writes these events and the rollups that read them, so they are
 // declared once — in the admin block below, projected off the rollup schema.
 
+// --- Private subscriptions feed ----------------------------------------------
+export type FeedTokenStatus = Schemas["FeedTokenStatus"];
+export type FeedTokenIssued = Schemas["FeedTokenIssued"];
+
 // --- Search & discovery (search-service W4) ---------------------------------
 // Autocomplete suggestions. The response is inline in the spec (not a named
 // component), so it is derived from the operation. `type` is a string in the
@@ -423,6 +427,12 @@ export type ReportReporter = Schemas["ReportReporter"];
 export type Report = Schemas["Report"];
 export type ReportListResponse = Schemas["ReportListResponse"];
 export type ResolveReportRequest = Schemas["ResolveReportRequest"];
+/** One message in a report's reporter↔staff thread (core 0163). */
+export type ReportMessage = Schemas["ReportMessage"];
+export type ReportMessageListResponse = Schemas["ReportMessageListResponse"];
+/** One of the caller's own reports ("My reports") — never the moderator's note. */
+export type MyReport = Schemas["MyReport"];
+export type MyReportListResponse = Schemas["MyReportListResponse"];
 export type BlockVideoRequest = Schemas["BlockVideoRequest"];
 export type BlockedVideo = Schemas["BlockedVideo"];
 export type BlockedVideoListResponse = Schemas["BlockedVideoListResponse"];
@@ -511,6 +521,11 @@ export type LivePublicListResponse = Schemas["LivePublicListResponse"];
 // --- Comments ---------------------------------------------------------------
 export type Comment = Schemas["Comment"];
 export type CommentListResponse = Schemas["CommentListResponse"];
+// The review queue (core 0161): a comment on a video you manage + its title.
+export type ManagedCommentListResponse = Schemas["ManagedCommentListResponse"];
+export type ManagedComment = ManagedCommentListResponse["comments"][number];
+// A video's comments policy; requires_approval holds comments for review.
+export type CommentsPolicy = NonNullable<Video["comments_policy"]>;
 
 // --- Captions ---------------------------------------------------------------
 export type Caption = Schemas["Caption"];

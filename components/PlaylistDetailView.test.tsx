@@ -6,6 +6,8 @@ const mocks = vi.hoisted(() => ({
   getPlaylist: vi.fn(),
   getMyPlaylists: vi.fn(),
   deletePlaylist: vi.fn(),
+  updatePlaylist: vi.fn(),
+  getMyChannels: vi.fn(),
   movePlaylistItem: vi.fn(),
   removeFromPlaylist: vi.fn(),
   session: { status: "authed", user: { id: "owner" } as { id: string } | null },
@@ -17,6 +19,8 @@ vi.mock("@/lib/api", async () => ({
     getPlaylist: mocks.getPlaylist,
     getMyPlaylists: mocks.getMyPlaylists,
     deletePlaylist: mocks.deletePlaylist,
+    updatePlaylist: mocks.updatePlaylist,
+    getMyChannels: mocks.getMyChannels,
     movePlaylistItem: mocks.movePlaylistItem,
     removeFromPlaylist: mocks.removeFromPlaylist,
   },
@@ -45,6 +49,8 @@ beforeEach(() => {
   mocks.getPlaylist.mockResolvedValue(playlist);
   mocks.getMyPlaylists.mockResolvedValue({ playlists: [playlist] });
   mocks.deletePlaylist.mockResolvedValue(undefined);
+  mocks.updatePlaylist.mockResolvedValue(undefined);
+  mocks.getMyChannels.mockResolvedValue({ channels: [{ id: "c1", handle: "ada", display_name: "Ada TV", role: "owner" }], total: 1 });
   mocks.movePlaylistItem.mockResolvedValue(undefined);
   mocks.removeFromPlaylist.mockResolvedValue(undefined);
   mocks.session.status = "authed";
@@ -247,5 +253,29 @@ describe("PlaylistDetailView play all", () => {
     render(<PlaylistDetailView id="p1" />);
     await screen.findByText("This playlist is empty");
     expect(screen.queryByRole("link", { name: /Play all/ })).toBeNull();
+  });
+});
+
+describe("PlaylistDetailView channel link", () => {
+  it("attaches, leaves alone, and detaches the channel", async () => {
+    mocks.getPlaylist.mockResolvedValue({ ...playlist, channel_id: "c1" });
+    render(<PlaylistDetailView id="p1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    await screen.findByRole("option", { name: "Ada TV" });
+    const picker = screen.getByLabelText("Channel") as HTMLSelectElement;
+    expect(picker.value).toBe("c1");
+
+    // Unchanged: no channel_id key, so core leaves the link as it is.
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(mocks.updatePlaylist).toHaveBeenCalledTimes(1));
+    expect(mocks.updatePlaylist.mock.calls[0][1]).not.toHaveProperty("channel_id");
+
+    // None: an explicit null detaches it.
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    await screen.findByRole("option", { name: "Ada TV" });
+    fireEvent.change(screen.getByLabelText("Channel"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(mocks.updatePlaylist).toHaveBeenCalledTimes(2));
+    expect(mocks.updatePlaylist.mock.calls[1][1]).toHaveProperty("channel_id", null);
   });
 });

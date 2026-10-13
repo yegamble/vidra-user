@@ -2,7 +2,7 @@ import { apiBaseUrl } from "@/lib/config";
 import { clientSearchEventHeaders, searchSessionHeaders } from "@/lib/search-session";
 
 import { getAccessToken } from "./auth-store";
-import { ApiError, apiRequest } from "./client";
+import { ApiError, apiRequest, restoreSession } from "./client";
 import { pageQuery, type PageParams } from "./pagination";
 import { uploadWithProgress, type UploadProgress } from "./upload";
 import type { SearchEventInput } from "./types";
@@ -75,6 +75,7 @@ import type {
   VerifyDonationAddressRequest,
   Comment,
   CommentListResponse,
+  ManagedCommentListResponse,
   BlockedUserListResponse,
   Conversation,
   ConversationListResponse,
@@ -160,7 +161,11 @@ import type {
   RegistrationRequestFilter,
   RegistrationRequestListResponse,
   RejectRegistrationRequest,
+  MyReport,
+  MyReportListResponse,
   ReportListResponse,
+  ReportMessage,
+  ReportMessageListResponse,
   ReportStatusFilter,
   ResolveReportRequest,
   UnreadCountResponse,
@@ -186,6 +191,8 @@ import type {
   ChannelSearchResponse,
   SearchSuggestionsResponse,
   RecommendationsResponse,
+  FeedTokenIssued,
+  FeedTokenStatus,
   SearchHistoryResponse,
   SuggestionBanListResponse,
   SuggestionBanResponse,
@@ -550,6 +557,18 @@ export const api = {
   clearSearchHistory: () =>
     apiRequest<void>("/api/v1/me/search-history", { method: "DELETE" }),
 
+  /** GET /api/v1/me/feed-token — whether a private subscriptions-feed token exists (auth). */
+  getFeedToken: () => apiRequest<FeedTokenStatus>("/api/v1/me/feed-token"),
+
+  /**
+   * POST /api/v1/me/feed-token — create or rotate the token. The raw token and
+   * ready-made feed URL are returned ONCE; the old URL dies immediately (auth).
+   */
+  rotateFeedToken: () => apiRequest<FeedTokenIssued>("/api/v1/me/feed-token", { method: "POST" }),
+
+  /** DELETE /api/v1/me/feed-token — revoke the token (auth). */
+  revokeFeedToken: () => apiRequest<void>("/api/v1/me/feed-token", { method: "DELETE" }),
+
   /**
    * DELETE /api/v1/me/search-history/{query} — remove one normalized query from
    * the caller's history (auth). The query is path-escaped.
@@ -625,6 +644,32 @@ export const api = {
     apiRequest<BulkVideosResponse>("/api/v1/me/videos/bulk", { method: "POST", body }),
 
   /**
+   * GET /api/v1/users/{username}/videos — an account's public videos across ALL
+   * its channels (the profile Videos tab). Same paging and sort as
+   * listChannelVideos; 404 when the profile is private or unknown.
+   */
+  listUserVideos: (
+    username: string,
+    signal?: AbortSignal,
+    params: PageParams & { sort?: "-published_at" | "published_at" } = {},
+  ) =>
+    apiRequest<VideoListResponse>(
+      `/api/v1/users/${encodeURIComponent(username)}/videos`,
+      { signal, query: { sort: params.sort, ...pageQuery(params) } },
+    ),
+
+  /**
+   * GET /api/v1/channels/{handle}/playlists — a channel's playlists (the
+   * Playlists tab), newest first, paginated. Public ones for everyone; the
+   * playlist owner also gets their own unlisted/private ones.
+   */
+  listChannelPlaylists: (handle: string, signal?: AbortSignal, params: PageParams = {}) =>
+    apiRequest<PlaylistListResponse>(
+      `/api/v1/channels/${encodeURIComponent(handle)}/playlists`,
+      { signal, query: pageQuery(params) },
+    ),
+
+  /**
    * GET /api/v1/videos/{id}/stats — creator statistics for a video (auth, owner
    * only; a non-owner/unknown id is 404 so existence is not leaked).
    */
@@ -665,12 +710,12 @@ export const api = {
       { method: "PUT", body: { notification_setting: notificationSetting } },
     ),
 
-  /** GET /api/v1/me/channels — the caller's own channels (auth). */
-  getMyChannels: (signal?: AbortSignal, params?: PageParams) =>
-    apiRequest<ChannelListResponse>("/api/v1/me/channels", {
-      signal,
-      ...(params ? { query: pageQuery(params) } : {}),
-    }),
+  /**
+   * GET /api/v1/me/channels — the caller's channels (owned + editor-shared),
+   * paginated by core (default 20); pass a window to read past the first page.
+   */
+  getMyChannels: (signal?: AbortSignal, params: PageParams = {}) =>
+    apiRequest<ChannelListResponse>("/api/v1/me/channels", { signal, query: pageQuery(params) }),
 
   /**
    * GET /api/v1/me/quota — the caller's storage usage + effective quota (auth):
@@ -1175,6 +1220,33 @@ export const api = {
     ),
 
   /**
+   * GET /api/v1/videos/{id}/captions/{lang} — a caption track's raw WebVTT, as
+   * text, with the bearer token so an owner can read a private video's track.
+   * Feeds the cue editor; saving goes back through uploadCaption (replace-by-language).
+   */
+  downloadCaptionText: async (videoId: string, language: string, signal?: AbortSignal) => {
+    const url = `${apiBaseUrl}/api/v1/videos/${encodeURIComponent(videoId)}/captions/${encodeURIComponent(language)}`;
+    const get = (bearer: string | null) =>
+      fetch(url, { headers: bearer ? { authorization: `Bearer ${bearer}` } : {}, signal });
+    const stored = getAccessToken();
+    let res = await get(stored);
+    // Same one-shot silent refresh apiRequest does: an expired access token must
+    // not strand an owner who has been editing for a while.
+    if (res.status === 401 && stored) {
+      const restored = await restoreSession();
+      if (restored) res = await get(restored.token);
+    }
+    if (!res.ok) {
+      throw new ApiError({
+        status: res.status,
+        code: "caption_unavailable",
+        message: "could not load this caption track",
+      });
+    }
+    return res.text();
+  },
+
+  /**
    * GET /api/v1/videos/{id}/chapters — a video's seek-bar chapters (CORE-15),
    * ascending by start_seconds, empty when none. Same visibility as the detail
    * endpoint (private → owner only); the detail's has_chapters flag gates the
@@ -1369,6 +1441,28 @@ export const api = {
    */
   unheartComment: (id: string) =>
     apiRequest<Comment>(`/api/v1/comments/${encodeURIComponent(id)}/heart`, { method: "DELETE" }),
+
+  /**
+   * POST /api/v1/videos/{id}/comments/{commentId}/approve — publish a comment
+   * held for review (auth; the video's owner/editors/staff). `updatedAt` is the
+   * version the reviewer saw: an edit since then answers 409. Idempotent.
+   * Rejecting a held comment is `deleteComment`.
+   */
+  approveComment: (videoId: string, commentId: string, updatedAt: string) =>
+    apiRequest<Comment>(
+      `/api/v1/videos/${encodeURIComponent(videoId)}/comments/${encodeURIComponent(commentId)}/approve`,
+      { method: "POST", body: { updated_at: updatedAt } },
+    ),
+
+  /**
+   * GET /api/v1/me/videos/comments — the review queue: comments on every video
+   * the caller manages, newest first. `held: true` = awaiting approval only.
+   */
+  listManagedComments: (params: PageParams & { held?: boolean } = {}, signal?: AbortSignal) =>
+    apiRequest<ManagedCommentListResponse>("/api/v1/me/videos/comments", {
+      query: { held: params.held, ...pageQuery(params) },
+      signal,
+    }),
 
   /** POST /api/v1/me/mutes/accounts/{id} — mute an account (auth; idempotent 204). */
   muteAccount: (userId: string) =>
@@ -2225,6 +2319,33 @@ export const api = {
    */
   deleteReport: (id: string) =>
     apiRequest<void>(`/api/v1/admin/reports/${encodeURIComponent(id)}`, { method: "DELETE" }),
+
+  /**
+   * GET /api/v1/reports/{id}/messages — a report's reporter↔staff thread, oldest
+   * first. Open to the report's reporter and to staff; anyone else gets the same
+   * 404 as an unknown report. `can_reply` is false for a report another instance
+   * filed (no local reporter to write to).
+   */
+  getReportMessages: (id: string, params: PageParams = {}, signal?: AbortSignal) =>
+    apiRequest<ReportMessageListResponse>(`/api/v1/reports/${encodeURIComponent(id)}/messages`, {
+      query: pageQuery(params),
+      signal,
+    }),
+
+  /** GET /api/v1/me/reports — the caller's own reports, most recently active first. */
+  getMyReports: (params: PageParams = {}, signal?: AbortSignal) =>
+    apiRequest<MyReportListResponse>("/api/v1/me/reports", { query: pageQuery(params), signal }),
+
+  /** GET /api/v1/me/reports/{id} — one of the caller's own reports (anyone else's is 404). */
+  getMyReport: (id: string, signal?: AbortSignal) =>
+    apiRequest<MyReport>(`/api/v1/me/reports/${encodeURIComponent(id)}`, { signal }),
+
+  /** POST /api/v1/reports/{id}/messages — add to the thread (1–3000 chars; 409 when read-only). */
+  postReportMessage: (id: string, body: string) =>
+    apiRequest<ReportMessage>(`/api/v1/reports/${encodeURIComponent(id)}/messages`, {
+      method: "POST",
+      body: { body },
+    }),
 
   /**
    * GET /api/v1/admin/users — accounts newest first (admin only). Optional `q`

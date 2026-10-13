@@ -1,6 +1,7 @@
 import { cookies, headers } from "next/headers";
 import { cache } from "react";
 
+import { createFormat } from "@/lib/format";
 import { getInstanceConfig } from "@/lib/instance-config.server";
 
 import { CATALOGS } from "./catalogs";
@@ -23,5 +24,5 @@ export const getI18n = cache(async () => {
     instanceDefault: instance?.default_language,
   });
   const messages = CATALOGS[locale];
-  return { locale, dir: localeDir(locale), messages, t: createTranslator(locale, messages) };
+  return { locale, dir: localeDir(locale), messages, t: createTranslator(locale, messages), format: createFormat(locale) };
 });
