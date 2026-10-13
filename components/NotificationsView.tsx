@@ -8,6 +8,7 @@ import {
   FlagIcon,
   GlobeIcon,
   MessageCircleIcon,
+  ShareIcon,
   ShieldIcon,
   UserIcon,
   UsersIcon,
@@ -54,6 +55,8 @@ export function NotificationTypeIcon({ type }: { type: string }) {
       return <GlobeIcon size={16} />;
     case "new_video":
       return <VideoIcon size={16} />;
+    case "video_ownership_request":
+      return <ShareIcon size={16} />;
     default:
       return <UserIcon size={16} />;
   }
@@ -87,6 +90,9 @@ const NOTIF_CHIP: Record<string, string> = {
   new_registration_request: "bg-tile-orange/12 text-tile-orange",
   upload_quarantined: "bg-tile-orange/12 text-tile-orange",
   federation_follower_request: "bg-tile-orange/12 text-tile-orange",
+  // An offer waiting on the reader's decision, but good news rather than a
+  // queue: the accent family, like a comment.
+  video_ownership_request: "bg-accent/12 text-accent",
   comment_held: "bg-tile-orange/12 text-tile-orange",
 };
 const NOTIF_CHIP_DEFAULT = "bg-surface-muted text-fg-muted";
@@ -286,6 +292,17 @@ export function describeNotification(n: Notification): {
       lead: channelName,
       rest: ` published ${title}`,
       href: n.video_id ? `/videos/${n.video_id}` : "#",
+    };
+  }
+  if (n.type === "video_ownership_request") {
+    // Another local user offered the reader one of their videos (core 0165).
+    // The link goes to where it can be answered, not to the watch page: the
+    // offered video may be private, and the reader does not own it yet.
+    const what = n.video_title ? `“${n.video_title}”` : "a video";
+    return {
+      lead: actor,
+      rest: ` offered you ${what} — accept or refuse it in Studio`,
+      href: "/studio/ownership",
     };
   }
   // follow

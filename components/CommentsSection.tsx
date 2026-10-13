@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useId, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { useT } from "@/components/I18nProvider";
 import { useWatchSignIn } from "@/components/watch/WatchSignInPrompt";
 import { FederatedOriginBadge } from "@/components/FederatedOriginBadge";
 import {
@@ -93,6 +94,7 @@ export function CommentsSection({
   // holds the request until `settled` and re-asks when the viewer changes; see
   // `useSettledSession`. Pages of 100 (the backend maximum) append under a
   // "Load more" instead of silently stopping at the first 100.
+  const t = useT();
   const viewer = useSettledSession();
   const list = useAppendingList<Comment>({
     queryKey: videoId,
@@ -157,28 +159,30 @@ export function CommentsSection({
   const byId = new Map(comments.map((c) => [c.id, c] as const));
 
   return (
-    <section aria-label="Comments" className="flex flex-col gap-4">
+    <section aria-label={t("watch.comments.label")} className="flex flex-col gap-4">
       <h2 className="text-[15px] font-bold tracking-tight">
-        {status === "ready" ? `Comments (${list.total ?? comments.length})` : "Comments"}
+        {status === "ready"
+          ? t("watch.comments.heading", { total: String(list.total ?? comments.length) })
+          : t("watch.comments.label")}
       </h2>
 
       {commentsEnabled ? (
         <CommentForm videoId={videoId} onPosted={onPosted} />
       ) : (
         <p className="rounded-2xl bg-surface-muted px-4 py-3 text-sm text-fg-muted">
-          Comments are turned off for this video.
+          {t("watch.comments.off")}
         </p>
       )}
 
       {status === "loading" ? (
         <div className="flex justify-center py-8">
-          <Spinner label="Loading comments" />
+          <Spinner label={t("watch.comments.loading")} />
         </div>
       ) : status === "error" ? (
-        <ErrorState message="Could not load comments." onRetry={retry} />
+        <ErrorState message={t("watch.comments.error")} onRetry={retry} />
       ) : comments.length === 0 ? (
         <p className="text-sm text-fg-muted">
-          No comments yet. Be the first to comment.
+          {t("watch.comments.empty")}
         </p>
       ) : (
         <ul className="flex flex-col gap-5">
@@ -209,7 +213,7 @@ export function CommentsSection({
           hasMore={list.hasMore}
           autoLoad={autoLoad}
           busy={list.moreStatus === "loading"}
-          error={list.moreStatus === "error" ? "Could not load more comments." : null}
+          error={list.moreStatus === "error" ? t("watch.comments.moreError") : null}
           onLoadMore={list.loadMore}
         />
       ) : null}
