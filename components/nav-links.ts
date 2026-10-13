@@ -1,5 +1,7 @@
 import type { ReactElement } from "react";
 
+import type { PlainMessageKey } from "@/lib/i18n";
+
 import {
   ClockIcon,
   GridIcon,
@@ -22,22 +24,23 @@ import {
 
 export interface NavLinkDef {
   href: string;
-  label: string;
+  /** Catalog key of the visible label; render with `t(labelKey)`. */
+  labelKey: PlainMessageKey;
   Icon: (props: IconProps) => ReactElement;
 }
 
 export const NAV_LINKS: readonly NavLinkDef[] = [
-  { href: "/", label: "Home", Icon: HomeIcon },
-  { href: "/trending", label: "Trending", Icon: TrendingUpIcon },
-  { href: "/subscriptions", label: "Subscriptions", Icon: TvIcon },
-  { href: "/library", label: "Library", Icon: LibraryIcon },
+  { href: "/", labelKey: "nav.home", Icon: HomeIcon },
+  { href: "/trending", labelKey: "nav.trending", Icon: TrendingUpIcon },
+  { href: "/subscriptions", labelKey: "nav.subscriptions", Icon: TvIcon },
+  { href: "/library", labelKey: "nav.library", Icon: LibraryIcon },
   // Playlists is intentionally NOT a primary sidebar destination: the desktop
   // template (backport W0.2) lists exactly Home/Trending/Subscriptions/Library/
   // History/Messages/Studio. Playlists is reached from the Library page (its
   // route lives on and the BottomTabBar already groups /playlists under Library).
-  { href: "/history", label: "History", Icon: ClockIcon },
-  { href: "/messages", label: "Messages", Icon: MessageCircleIcon },
-  { href: "/studio", label: "Studio", Icon: VideoIcon },
+  { href: "/history", labelKey: "nav.history", Icon: ClockIcon },
+  { href: "/messages", labelKey: "nav.messages", Icon: MessageCircleIcon },
+  { href: "/studio", labelKey: "nav.studio", Icon: VideoIcon },
 ] as const;
 
 /** The Messages destination's href — the one primary entry an operator can turn off. */
@@ -56,7 +59,7 @@ export function primaryNavLinks(messagingAvailable: boolean): NavLinkDef[] {
 /** Moderation entry (moderators + admins only). */
 export const MODERATION_LINK: NavLinkDef = {
   href: "/moderation",
-  label: "Moderation",
+  labelKey: "nav.moderation",
   Icon: ShieldIcon,
 };
 
@@ -68,7 +71,7 @@ export const MODERATION_LINK: NavLinkDef = {
  */
 export const ADMIN_LINK: NavLinkDef = {
   href: "/admin",
-  label: "Admin",
+  labelKey: "nav.admin",
   Icon: GridIcon,
 };
 

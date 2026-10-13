@@ -1229,6 +1229,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/users/{username}/videos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List an account's public videos
+         * @description The profile Videos tab: an account's public, published videos across ALL of its channels, newest first, paginated with a `total`. Gated like GET /users/{username}/profile (a private, inactive or unknown profile is 404; a signed-in owner may preview their own). Carries the same visibility filters as GET /channels/{handle}/videos for a non-manager: no private, unlisted, draft, quarantined or moderator-blocked video, the signed-in viewer's mute/block clause, and the viewer's sensitive-content setting.
+         */
+        get: operations["listUserVideos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users/{id}/donation-addresses": {
         parameters: {
             query?: never;
@@ -1517,6 +1537,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/feed-token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Whether the caller has a private subscriptions-feed token
+         * @description Reports whether a private feed token exists and when it was issued. The token itself is stored only as a hash and is never returned here; it is shown once, by POST.
+         */
+        get: operations["getFeedToken"];
+        put?: never;
+        /**
+         * Create or rotate the private subscriptions-feed token
+         * @description Mints a fresh random token, replacing any previous one (the old feed URL stops working immediately), and returns it together with the ready-made feed URL (GET /feeds/subscriptions.xml?token=…). This is the only time the raw token is visible. The token grants read access to that one feed and nothing else.
+         */
+        post: operations["rotateFeedToken"];
+        /**
+         * Revoke the private subscriptions-feed token
+         * @description Deletes the token (idempotent); the feed URL then answers 404.
+         */
+        delete: operations["revokeFeedToken"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/subscriptions/videos": {
         parameters: {
             query?: never;
@@ -1531,6 +1579,66 @@ export interface paths {
         get: operations["listSubscriptionVideos"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/{handle}/playlists": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a channel's playlists
+         * @description The channel page's Playlists tab, newest first, paginated with a `total`. Anyone sees the channel's public playlists; a playlist's owner (bearer token) also sees their own unlisted and private ones. Other users and anonymous callers never see those.
+         */
+        get: operations["listChannelPlaylists"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/videos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the caller's own videos (studio "My videos")
+         * @description Every video on every channel the caller OWNS, in any state or privacy (drafts and private videos included), newest first by default, with discovery-card data. Optional filters combine with AND: q (case- insensitive title substring; LIKE wildcards are literal), privacy, state, and channel_id (one of the caller's channels; another account's channel id simply matches nothing, so the result is empty with total 0, never that account's videos). Unknown privacy/state values and a malformed channel_id are 422. Paginated via limit (1-100, default 20) and offset, and reports the filtered total.
+         */
+        get: operations["listMyVideos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/videos/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bulk delete or change the privacy of the caller's own videos
+         * @description Applies one action to up to 100 of the caller's own videos. Every id must be a video the caller owns: if any id is foreign OR does not exist the whole request answers 404 "video not found" (identically, so it is no existence oracle) and NOTHING is changed. Each item then runs the same pipeline as the single-video route (DELETE /videos/{id} or PATCH /videos/{id} with `privacy`), so federation, the search outbox, storage cleanup, edge purge and audit all fire per item. Items are independent: one that fails (for example `set_privacy` to `password` on a video with no stored password -> 400, exactly as the single route) is reported in `results` and does not stop the others. `privacy` is validated like the single PATCH, including `internal`. Only the caller's own videos are reachable: staff and channel collaborators get no extra reach here.
+         */
+        post: operations["bulkMyVideos"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2348,6 +2456,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/videos/comments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The review queue — comments on the videos you manage
+         * @description Comments on every video whose channel the caller owns or is an editor member of, newest first, each with its video's title. held=true lists only comments awaiting approval (approve with POST /videos/{id}/comments/{commentId}/approve, reject with DELETE /comments/{id}), held=false only published ones; omitted lists both. The caller's own mutes do not filter this moderation surface.
+         */
+        get: operations["listManagedVideoComments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/uploads": {
         parameters: {
             query?: never;
@@ -2657,15 +2785,35 @@ export interface paths {
         };
         /**
          * List a video's comments
-         * @description Returns a public, published video's comments newest-first, each with its author's identity. Auth is optional: an authenticated viewer's muted accounts are hidden from the list (mutes are per-viewer), while an anonymous viewer sees all comments. A non-public/unpublished or unknown video is 404. Paginated via limit (1–100, default 20) and offset.
+         * @description Returns a public, published video's comments newest-first, each with its author's identity. Auth is optional: an authenticated viewer's muted accounts are hidden from the list (mutes are per-viewer), while an anonymous viewer sees all comments. A non-public/unpublished or unknown video is 404. Paginated via limit (1–100, default 20) and offset. Held comments appear only for their author and the video's reviewers (owner, editor members, staff), in both the page and total.
          */
         get: operations["listComments"];
         put?: never;
         /**
          * Post a comment on a video
-         * @description Adds a comment by the authenticated user to a public, published video. Posting requires the instance-wide comments_enabled setting AND the video's comments_policy to be "enabled" (403 feature_disabled otherwise, config-parity W9); reading comments stays open either way. Best-effort notifications follow: the video's owner gets a "comment" notification, and when parent_id names another user's comment its author gets a "comment_reply" one. A user who is both (the owner replying under their own video) receives comment_reply only — one reply, one notification.
+         * @description Adds a comment by the authenticated user to a public, published video. Posting requires the instance-wide comments_enabled setting AND the video's comments_policy to not be "disabled" (403 feature_disabled otherwise, config-parity W9); reading comments stays open either way. Best-effort notifications follow: the video's owner gets a "comment" notification, and when parent_id names another user's comment its author gets a "comment_reply" one. A user who is both (the owner replying under their own video) receives comment_reply only — one reply, one notification. On a "requires_approval" video a non-reviewer's comment is held (held_for_review): seen only by its author and the reviewers, not federated, and announcing nothing (comment, comment_reply, mentions) until approved — only the video's managers get a "comment_held" notification; a held parent is a 422 like an unknown one.
          */
         post: operations["createComment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/videos/{id}/comments/{commentId}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve a comment held for review
+         * @description Publishes a held comment: reviewers only (owner, editor members, staff; else 403), and the comment must be on this video (else 404). Idempotent — only the first approval federates it, raises the comment/comment_reply notifications (only while the video is public; never to an approving owner) and is audited (content.comment.approve). Reject with DELETE /comments/{id}. updated_at names the version the reviewer saw: a held comment edited since answers 409, unpublished.
+         */
+        post: operations["approveComment"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2684,14 +2832,14 @@ export interface paths {
         post?: never;
         /**
          * Delete a comment
-         * @description Deletes a comment. The comment's author may always delete it; a moderator/admin may delete anyone's. An unknown id is 404; a non-author non-moderator is 403.
+         * @description Deletes a comment. The comment's author may always delete it; a moderator/admin may delete anyone's; the video's owner or an editor member may delete a comment held for review (rejecting it, audited as content.comment.reject). An unknown id is 404; anyone else is 403.
          */
         delete: operations["deleteComment"];
         options?: never;
         head?: never;
         /**
          * Edit a comment
-         * @description Edits the caller's own comment body. Only the author may edit (moderators delete, not edit): another user's comment is 403, an unknown id is 404, and a blank or too-long body is 422. Bumps updated_at so `edited` becomes true.
+         * @description Edits the caller's own comment body. Only the author may edit (moderators delete, not edit): another user's comment is 403, an unknown id is 404, and a blank or too-long body is 422. Bumps updated_at so `edited` becomes true. On a requires_approval video, a changed body from anyone but the video's reviewers sends the comment back to held_for_review until re-approved.
          */
         patch: operations["updateComment"];
         trace?: never;
@@ -2706,7 +2854,7 @@ export interface paths {
         get?: never;
         /**
          * Pin a comment
-         * @description Pins a top-level comment as its video's single pinned comment (a YouTube-style creator pin). The caller must be able to manage the comment's video (its channel owner or an editor) or be a moderator/admin. Pinning replaces any existing pin. Only a top-level, non-tombstoned comment can be pinned (422 otherwise). This is local metadata — it never edits the comment body and never federates.
+         * @description Pins a top-level comment as its video's single pinned comment (a YouTube-style creator pin). The caller must be able to manage the comment's video (its channel owner or an editor) or be a moderator/admin. Pinning replaces any existing pin. Only a top-level, non-tombstoned comment that is not held for review can be pinned (422 otherwise). This is local metadata — it never edits the comment body and never federates.
          */
         put: operations["pinComment"];
         post?: never;
@@ -3037,7 +3185,7 @@ export interface paths {
         };
         /**
          * Get the caller's notification preferences
-         * @description Returns the caller's per-type notification switchboard: every known notification type (caption_ready, comment, comment_mention, comment_reply, federation_follower_request, follow, message, new_registration_request, new_report, new_video, report_resolved, upload_quarantined, video_blocked, video_rejected, video_unblocked) mapped to whether it is delivered. Types never configured default to enabled. The new_report, new_registration_request, upload_quarantined and federation_follower_request types are only ever delivered to staff (the last to admins only), but the switches are visible to everyone. Alongside it, `email` maps each type that can ALSO be delivered by email (comment, comment_reply, new_video) to whether it is; email is opt-in, so a type never configured is false.
+         * @description Returns the caller's per-type notification switchboard: every known notification type (caption_ready, comment, comment_held, comment_mention, comment_reply, federation_follower_request, follow, message, new_registration_request, new_report, new_video, report_message, report_resolved, upload_quarantined, video_blocked, video_rejected, video_unblocked) mapped to whether it is delivered. Types never configured default to enabled. The new_report, new_registration_request, upload_quarantined and federation_follower_request types are only ever delivered to staff (the last to admins only), but the switches are visible to everyone. Alongside it, `email` maps each type that can ALSO be delivered by email (comment, comment_reply, new_video) to whether it is; email is opt-in, so a type never configured is false.
          */
         get: operations["getNotificationPrefs"];
         put?: never;
@@ -3355,6 +3503,70 @@ export interface paths {
          * @description Permanently removes a report row (admin purge). Restricted to admins — moderators resolve reports but cannot delete them. Idempotent like the other admin deletes: deleting an unknown or already-deleted report still returns 204. Notifications referencing the report are removed with it. Audited as moderation.report.delete.
          */
         delete: operations["deleteReport"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the caller's own abuse reports
+         * @description "My reports": the reports the caller filed, most recently active first (filing, resolution, or the latest thread message), each with its status, target and thread activity. The moderator's internal note is never included. A video title is shown only while that video is still public, published and not blocked.
+         */
+        get: operations["listMyReports"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/reports/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get one of the caller's own abuse reports
+         * @description One report the caller filed. Anyone else's report (staff included — this is the reporter's view) is the same 404 as an unknown one.
+         */
+        get: operations["getMyReport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reports/{id}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read a report's message thread
+         * @description The reporter↔staff conversation, oldest first. Open to the report's LOCAL reporter and to admins/moderators; anyone else gets the same 404 as an unknown report. A remote Flag report is readable by staff with can_reply=false.
+         */
+        get: operations["listReportMessages"];
+        put?: never;
+        /**
+         * Post to a report's message thread
+         * @description Same access as reading. Notifies the other side (report_message, never the body); a staff message is audited by id. 409 on a remote Flag report; posting is limited per user (20/hour by default).
+         */
+        post: operations["createReportMessage"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -5877,6 +6089,19 @@ export interface components {
             /** @description Present only when the ledger could not be read for some reason other than "not migrated yet". The response is still 200. */
             error?: string;
         };
+        FeedTokenStatus: {
+            configured: boolean;
+            /** Format: date-time */
+            created_at?: string;
+        };
+        FeedTokenIssued: {
+            /** @description The raw token; shown only once. */
+            token: string;
+            /** @description Ready-to-paste feed URL; absent when the instance has no public origin configured. */
+            url?: string;
+            /** Format: date-time */
+            created_at: string;
+        };
         /** @description The single, consistent error envelope returned by every endpoint for non-2xx responses (except the readiness probe, which returns ReadinessResponse on 503). */
         ErrorResponse: {
             error: {
@@ -6090,7 +6315,7 @@ export interface components {
                      */
                     licence: number;
                     /** @enum {string} */
-                    comment_policy: "enabled" | "disabled";
+                    comment_policy: "enabled" | "disabled" | "requires_approval";
                     download_enabled: boolean;
                 };
             };
@@ -6631,11 +6856,11 @@ export interface components {
             /** @description Optional content-license id from GET /videos/config; omitted when unset. */
             license?: string;
             /**
-             * @description The per-video comment policy (config-parity W9). Present on the create/update/detail views; omitted on list/feed views and remote cards.
+             * @description The per-video comment policy (config-parity W9; requires_approval holds comments for the video's reviewers to approve). Present on the create/update/detail views; omitted on list/feed views and remote cards.
              * @enum {string}
              */
-            comments_policy?: "enabled" | "disabled";
-            /** @description EFFECTIVE comment availability on the DETAIL view only: the instance-wide comments_enabled setting AND this video's comments_policy. Reading existing comments stays open either way; this reports whether posting is possible. */
+            comments_policy?: "enabled" | "disabled" | "requires_approval";
+            /** @description EFFECTIVE comment availability on the DETAIL view only: the instance-wide comments_enabled setting AND this video's comments_policy (true for requires_approval, which still accepts comments). Reading existing comments stays open either way; this reports whether posting is possible. */
             comments_enabled?: boolean;
             /** @description The per-video download policy (config-parity W9). Present on the create/update/detail views; omitted on list/feed views. Effective availability for regular viewers is this flag AND the instance downloads feature (GET /instance features.downloads); moderators/admins bypass both. */
             download_enabled?: boolean;
@@ -7038,10 +7263,10 @@ export interface components {
             /** @description Optional creator content-warning text, trimmed and capped at 280 characters (-> 422 over the cap). Storable regardless of is_sensitive; the frontend pairs them. */
             sensitive_reason?: string;
             /**
-             * @description Per-video comment policy (config-parity W9). Omitted/empty seeds the instance's default_comment_policy setting. PeerTube's requires_approval tier is deliberately not supported -> 422.
+             * @description Per-video comment policy (config-parity W9). Omitted/empty seeds the instance's default_comment_policy setting.
              * @enum {string}
              */
-            comments_policy?: "enabled" | "disabled";
+            comments_policy?: "enabled" | "disabled" | "requires_approval";
             /** @description Per-video download policy (config-parity W9), layered on the instance-wide downloads_enabled gate (both must be on for regular viewers). Omitted (null) seeds the instance's default_download_enabled setting. */
             download_enabled?: boolean;
             /** @description Opt into publish-after-transcode (default false). When true, the video is held (state "transcoding") off every public surface until its HLS transcode completes, then publishes automatically. Ignored when transcoding is disabled/unavailable (the video publishes immediately) and when publish_at is set (time-gating takes precedence). */
@@ -7078,10 +7303,10 @@ export interface components {
             /** @description Set the creator content-warning text (omit to leave unchanged; an empty string clears it). Trimmed and capped at 280 characters -> 422 over the cap. */
             sensitive_reason?: string;
             /**
-             * @description Set the per-video comment policy (omit to leave unchanged). "disabled" makes new comments answer 403 feature_disabled while reading existing comments stays open.
+             * @description Set the per-video comment policy (omit to leave unchanged). "disabled" makes new comments answer 403 feature_disabled while reading existing comments stays open; "requires_approval" holds them.
              * @enum {string}
              */
-            comments_policy?: "enabled" | "disabled";
+            comments_policy?: "enabled" | "disabled" | "requires_approval";
             /** @description Set the per-video download policy (omit to leave unchanged), layered on the instance-wide downloads_enabled gate. */
             download_enabled?: boolean;
             /** @description Set the publish-after-transcode opt-in (omit to leave unchanged). Setting it true on an already-published video that has never been publicly visible and still has a live transcode job holds the video (state "transcoding") until that transcode completes; a publicly-visible video is never pulled back to hidden. */
@@ -7138,6 +7363,14 @@ export interface components {
             pinned: boolean;
             /** @description True when the video's creator has hearted this comment (a like from the uploader). */
             hearted: boolean;
+            /** @description True while the comment awaits approval; only its author and the video's reviewers ever receive it. It cannot be pinned or replied to. */
+            held_for_review: boolean;
+        };
+        ManagedCommentListResponse: components["schemas"]["PageMeta"] & {
+            comments: (components["schemas"]["Comment"] & {
+                /** @description Title of the video the comment is on. */
+                video_title: string;
+            })[];
         };
         CommentListResponse: components["schemas"]["PageMeta"] & {
             comments: components["schemas"]["Comment"][];
@@ -7470,6 +7703,30 @@ export interface components {
              */
             my_rating: "like" | "dislike" | null;
         };
+        BulkVideosRequest: {
+            video_ids: string[];
+            /** @enum {string} */
+            action: "delete" | "set_privacy";
+            /**
+             * @description Required when action is set_privacy; ignored otherwise.
+             * @enum {string}
+             */
+            privacy?: "public" | "unlisted" | "private" | "password" | "internal";
+        };
+        BulkVideoResult: {
+            /** Format: uuid */
+            video_id: string;
+            ok: boolean;
+            /** @description The HTTP status the single-video route would have answered. */
+            status: number;
+            /** @description Client-safe reason; present only when ok is false. */
+            error?: string;
+        };
+        BulkVideosResponse: {
+            results: components["schemas"]["BulkVideoResult"][];
+            succeeded: number;
+            failed: number;
+        };
         VideoListResponse: components["schemas"]["PageMeta"] & {
             videos: components["schemas"]["Video"][];
         };
@@ -7596,10 +7853,10 @@ export interface components {
             /** Format: uuid */
             id: string;
             /**
-             * @description What happened. follow = someone followed your channel; comment = someone commented on your video (addressed to the video's OWNER); comment_reply = someone replied to a comment you wrote (addressed to the comment's AUTHOR, who is usually not the video's owner; actor = the replier, video_id/video_title = the video the thread lives on, comment_id = the reply). A reply to a comment written by the video's own owner delivers comment_reply only, never both; message = someone sent you a direct message; new_video = a channel you follow published a new public video (actor = the channel owner, channel_handle/channel_display_name = the channel, video_id/video_title = the video; sent only while your bell for that channel is "all"); new_report = a user filed an abuse report (delivered only to admins/moderators; actor = the reporter, report_id/report_status/report_target_type carry the report); new_registration_request = a registration request awaits approval (delivered only to admins/moderators; no actor, the applicant has no account yet); upload_quarantined = an upload entered the quarantine review queue (delivered only to admins/moderators; actor = the uploader, video_id/video_title/channel_handle carry which one); federation_follower_request = a remote actor asked to follow a channel while follower approval is on (delivered only to admins; channel_handle/channel_display_name = the followed channel); report_resolved = a moderator resolved an abuse report you filed; video_rejected = a moderator rejected your quarantined upload (video_id/video_title carry which one, moderation_note carries the moderator's written reason when they gave one; the moderator's identity is never included); video_blocked = a moderator blocked one of your PUBLISHED videos, so it is no longer available to viewers (video_id/video_title carry which one; distinct from video_rejected, which is the quarantine outcome for an upload that never published — a block takes down live content and is reversible). The moderator's identity is never included, but moderation_note carries their block reason while the block stands (the A16 ruling made it creator-facing) and is absent once the block is lifted; video_unblocked = a moderator LIFTED the block on one of your videos, so it is available again (video_id/video_title carry which one; no moderator identity and no prose — there is nothing to explain about a restoration). It closes the loop video_blocked opens, and a repeated unblock of the same video delivers only one; caption_ready = an auto-generated caption track finished for your video (video_id/video_title carry which one).
+             * @description What happened. follow = someone followed your channel; comment = someone commented on your video (addressed to the video's OWNER); comment_held = a comment on a requires_approval video you manage (as its channel owner or an editor) awaits your approval (actor = the commenter, absent for a federated one; video_id/video_title/comment_id carry which; one per comment, re-surfaced unread when an edit sends an approved comment back for review); comment_reply = someone replied to a comment you wrote (addressed to the comment's AUTHOR, who is usually not the video's owner; actor = the replier, video_id/video_title = the video the thread lives on, comment_id = the reply). A reply to a comment written by the video's own owner delivers comment_reply only, never both; message = someone sent you a direct message; new_video = a channel you follow published a new public video (actor = the channel owner, channel_handle/channel_display_name = the channel, video_id/video_title = the video; sent only while your bell for that channel is "all"); new_report = a user filed an abuse report (delivered only to admins/moderators; actor = the reporter, report_id/report_status/report_target_type carry the report); new_registration_request = a registration request awaits approval (delivered only to admins/moderators; no actor, the applicant has no account yet); upload_quarantined = an upload entered the quarantine review queue (delivered only to admins/moderators; actor = the uploader, video_id/video_title/channel_handle carry which one); federation_follower_request = a remote actor asked to follow a channel while follower approval is on (delivered only to admins; channel_handle/channel_display_name = the followed channel); report_resolved = a moderator resolved an abuse report you filed; report_message = a new message on an abuse report's thread (the reporter is told when staff write, with no actor — the moderator is never named; staff who receive new_report are told when the reporter writes, actor = the reporter; report_id/report_status/report_target_type carry the report, and the message body is never included); video_rejected = a moderator rejected your quarantined upload (video_id/video_title carry which one, moderation_note carries the moderator's written reason when they gave one; the moderator's identity is never included); video_blocked = a moderator blocked one of your PUBLISHED videos, so it is no longer available to viewers (video_id/video_title carry which one; distinct from video_rejected, which is the quarantine outcome for an upload that never published — a block takes down live content and is reversible). The moderator's identity is never included, but moderation_note carries their block reason while the block stands (the A16 ruling made it creator-facing) and is absent once the block is lifted; video_unblocked = a moderator LIFTED the block on one of your videos, so it is available again (video_id/video_title carry which one; no moderator identity and no prose — there is nothing to explain about a restoration). It closes the loop video_blocked opens, and a repeated unblock of the same video delivers only one; caption_ready = an auto-generated caption track finished for your video (video_id/video_title carry which one).
              * @enum {string}
              */
-            type: "follow" | "comment" | "comment_reply" | "comment_mention" | "message" | "new_video" | "new_report" | "new_registration_request" | "upload_quarantined" | "federation_follower_request" | "report_resolved" | "video_rejected" | "video_blocked" | "video_unblocked" | "caption_ready";
+            type: "follow" | "comment" | "comment_held" | "comment_reply" | "comment_mention" | "message" | "new_video" | "new_report" | "new_registration_request" | "upload_quarantined" | "federation_follower_request" | "report_resolved" | "report_message" | "video_rejected" | "video_blocked" | "video_unblocked" | "caption_ready";
             read: boolean;
             /** Format: date-time */
             created_at: string;
@@ -7627,16 +7884,16 @@ export interface components {
             conversation_id?: string;
             /**
              * Format: uuid
-             * @description The report's id (new_report and report_resolved notifications). On report_resolved the resolving moderator's identity is never included (actor is absent); on new_report the actor is the reporter.
+             * @description The report's id (new_report, report_resolved and report_message notifications). On report_resolved the resolving moderator's identity is never included (actor is absent); on new_report the actor is the reporter.
              */
             report_id?: string;
             /**
-             * @description The report's current status (new_report and report_resolved notifications).
+             * @description The report's current status (new_report, report_resolved and report_message notifications).
              * @enum {string}
              */
             report_status?: "open" | "accepted" | "rejected";
             /**
-             * @description What the report targeted (new_report and report_resolved notifications).
+             * @description What the report targeted (new_report, report_resolved and report_message notifications).
              * @enum {string}
              */
             report_target_type?: "video" | "comment" | "account" | "remote_video" | "message";
@@ -7661,6 +7918,7 @@ export interface components {
              * @example {
              *       "caption_ready": true,
              *       "comment": true,
+             *       "comment_held": true,
              *       "comment_mention": true,
              *       "comment_reply": true,
              *       "federation_follower_request": true,
@@ -7669,6 +7927,7 @@ export interface components {
              *       "new_registration_request": true,
              *       "new_report": true,
              *       "new_video": true,
+             *       "report_message": true,
              *       "report_resolved": true,
              *       "upload_quarantined": true,
              *       "video_blocked": true,
@@ -7694,7 +7953,7 @@ export interface components {
         /** @description At least one type must be named in prefs or email (an update naming none is 422). */
         UpdateNotificationPrefsRequest: {
             /**
-             * @description Partial map of notification type -> enabled. Only the types present are changed. Known types: caption_ready, comment, comment_mention, comment_reply, federation_follower_request, follow, message, new_registration_request, new_report, new_video, report_resolved, upload_quarantined, video_blocked, video_rejected, video_unblocked. An unknown type rejects the whole update (422).
+             * @description Partial map of notification type -> enabled. Only the types present are changed. Known types: caption_ready, comment, comment_held, comment_mention, comment_reply, federation_follower_request, follow, message, new_registration_request, new_report, new_video, report_message, report_resolved, upload_quarantined, video_blocked, video_rejected, video_unblocked. An unknown type rejects the whole update (422).
              * @example {
              *       "follow": false
              *     }
@@ -7777,6 +8036,11 @@ export interface components {
              * @description The owning user. Compare it with the signed-in user to decide owner controls; GET /me/playlists is paged and cannot answer that.
              */
             owner_id: string;
+            /**
+             * Format: uuid
+             * @description The owner's channel this playlist is shown under (its Playlists tab, GET /channels/{handle}/playlists). Omitted when the playlist is not attributed to a channel, or after that channel was deleted.
+             */
+            channel_id?: string;
             /** @example Watch later picks */
             title: string;
             description: string;
@@ -7809,6 +8073,11 @@ export interface components {
              * @enum {string}
              */
             visibility?: "public" | "unlisted" | "private";
+            /**
+             * Format: uuid
+             * @description Optional channel to show the playlist under. It must be a channel the caller owns; otherwise the request fails with 404.
+             */
+            channel_id?: string;
         };
         /** @description Partial update; provide at least one field. */
         UpdatePlaylistRequest: {
@@ -7816,6 +8085,11 @@ export interface components {
             description?: string;
             /** @enum {string} */
             visibility?: "public" | "unlisted" | "private";
+            /**
+             * Format: uuid
+             * @description Attach the playlist to a channel the caller owns (404 otherwise), or null to detach it. Omit to leave it unchanged.
+             */
+            channel_id?: string | null;
         };
         AddPlaylistItemRequest: {
             /** Format: uuid */
@@ -7958,6 +8232,63 @@ export interface components {
         };
         ReportListResponse: components["schemas"]["PageMeta"] & {
             reports: components["schemas"]["Report"][];
+        };
+        /** @description One message in a report's thread. */
+        ReportMessage: {
+            /** Format: uuid */
+            id: string;
+            /** @description Plain text, as written. Never render it as HTML. */
+            body: string;
+            /** @description True when written by staff rather than the report's reporter. */
+            by_moderator: boolean;
+            /** @description True when the caller wrote it. */
+            is_mine: boolean;
+            /** @description Who wrote it — staff viewers only; the reporter is never told which moderator. */
+            author_username?: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        ReportMessageListResponse: components["schemas"]["PageMeta"] & {
+            messages: components["schemas"]["ReportMessage"][];
+            /** @description False for a remote Flag report (no local reporter to write to). */
+            can_reply: boolean;
+        };
+        CreateReportMessageRequest: {
+            /** @description The message, 1–3000 characters after trimming. */
+            body: string;
+        };
+        /** @description One of the caller's own reports. There is deliberately no moderator_note: it is staff-internal. */
+        MyReport: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            target_type: "video" | "comment" | "account" | "remote_video" | "message";
+            /** @enum {string} */
+            status: "open" | "accepted" | "rejected";
+            /** @description The caller's own words when filing. */
+            reason: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            resolved_at?: string;
+            /**
+             * Format: date-time
+             * @description The latest of filing, resolution and the newest thread message.
+             */
+            last_activity_at: string;
+            /** Format: int64 */
+            message_count: number;
+            /** Format: uuid */
+            video_id?: string;
+            /** @description Omitted unless the video is still public, published and not blocked. */
+            video_title?: string;
+            /** @description The reported account (account reports). */
+            reported_username?: string;
+            /** @description The reported federated video (remote_video reports). */
+            remote_video_title?: string;
+        };
+        MyReportListResponse: components["schemas"]["PageMeta"] & {
+            reports: components["schemas"]["MyReport"][];
         };
         /** @description A currently-blocked video, for the moderation block-list. */
         BlockedVideo: {
@@ -13840,6 +14171,44 @@ export interface operations {
             };
         };
     };
+    listUserVideos: {
+        parameters: {
+            query?: {
+                /** @description `-published_at` (newest first, the default) or `published_at` (oldest first). */
+                sort?: "-published_at" | "published_at";
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path: {
+                username: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The account's public videos (possibly empty). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VideoListResponse"];
+                };
+            };
+            /** @description The profile is private, inactive, or unknown. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     listUserDonationAddresses: {
         parameters: {
             query?: never;
@@ -14711,6 +15080,91 @@ export interface operations {
             };
         };
     };
+    getFeedToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Token status. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedTokenStatus"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    rotateFeedToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The new token. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedTokenIssued"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    revokeFeedToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revoked (or none existed). */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     listSubscriptionVideos: {
         parameters: {
             query?: {
@@ -14736,6 +15190,143 @@ export interface operations {
             };
             /** @description Missing, invalid, or expired token. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listChannelPlaylists: {
+        parameters: {
+            query?: {
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path: {
+                handle: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The channel's playlists visible to the caller. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaylistListResponse"];
+                };
+            };
+            /** @description No channel with that handle. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listMyVideos: {
+        parameters: {
+            query?: {
+                /** @description Title search (at most 200 characters). */
+                q?: string;
+                privacy?: "public" | "unlisted" | "private" | "password" | "internal";
+                state?: "draft" | "processing" | "scheduled" | "quarantined" | "transcoding" | "published" | "failed";
+                channel_id?: string;
+                /** @description `-published_at` (newest first, default) or `published_at` (oldest first); same convention as the per-channel list. */
+                sort?: "-published_at" | "published_at";
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of the caller's videos (possibly empty). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VideoListResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unknown privacy/state, malformed channel_id, or an over-long q. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    bulkMyVideos: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkVideosRequest"];
+            };
+        };
+        responses: {
+            /** @description Per-id results (the request itself was accepted). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkVideosResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description At least one id is not a video the caller owns; nothing was changed. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Zero ids, more than 100, a malformed or duplicate id, an unknown action, or an invalid privacy. */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -16933,6 +17524,50 @@ export interface operations {
             };
         };
     };
+    listManagedVideoComments: {
+        parameters: {
+            query?: {
+                held?: boolean;
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of the queue (possibly empty). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedCommentListResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description held is not true or false. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     listMyUploads: {
         parameters: {
             query?: {
@@ -18117,6 +18752,84 @@ export interface operations {
                 };
             };
             /** @description Validation failed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    approveComment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                commentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /**
+                     * Format: date-time
+                     * @description The comment's updated_at as the reviewer saw it.
+                     */
+                    updated_at: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The comment, no longer held. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Comment"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller cannot review this video's comments. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such comment on this video. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The held comment changed since that version; review it again. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description updated_at is missing. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -20171,6 +20884,196 @@ export interface operations {
             };
             /** @description Malformed report id. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listMyReports: {
+        parameters: {
+            query?: {
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of the caller's reports (possibly empty). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyReportListResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getMyReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The report. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyReport"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such report among the caller's own. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listReportMessages: {
+        parameters: {
+            query?: {
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of the thread (possibly empty). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportMessageListResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such report, or the caller is neither its reporter nor staff. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createReportMessage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateReportMessageRequest"];
+            };
+        };
+        responses: {
+            /** @description The message was added. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportMessage"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such report, or the caller is neither its reporter nor staff. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The report was filed by another instance and has no local reporter to message. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation failed (empty, over 3000 characters, or a NUL character). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller has posted too many report messages recently. */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -33,13 +33,18 @@ export function legacyWatchSearch(search: string): string {
  * not short and word-shaped: the embed re-validates, but a redirect should not
  * relay arbitrary text into a Location header.
  */
-export function legacyEmbedSearch(search: string): string {
+export function legacyEmbedSearch(search: string, extraKeys: readonly string[] = []): string {
   const params = new URLSearchParams(search);
   mapStart(params);
   const out = new URLSearchParams();
-  for (const key of ["t", ...EMBED_PARAM_KEYS]) {
+  for (const key of ["t", ...EMBED_PARAM_KEYS, ...extraKeys]) {
     const v = params.get(key);
     if (v !== null && /^[\w-]{1,64}$/.test(v)) out.set(key, v);
   }
   return toSearch(out);
+}
+
+/** legacyPlaylistEmbedSearch is legacyEmbedSearch plus PeerTube's `playlistPosition`. */
+export function legacyPlaylistEmbedSearch(search: string): string {
+  return legacyEmbedSearch(search, ["playlistPosition"]);
 }
