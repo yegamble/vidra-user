@@ -150,6 +150,48 @@ describe("VideoRow — move to another channel", () => {
   });
 });
 
+// Comment approval (core 0161): the edit form's comments control is a three-way
+// policy — on, held for the creator's approval, or off — and round-trips the
+// value the server sent rather than collapsing approval into "on".
+describe("VideoRow — comments policy", () => {
+  function renderPolicy(policy: Video["comments_policy"]) {
+    render(
+      <VideoRow
+        video={row({ comments_policy: policy })}
+        config={null}
+        initiallyEditing
+        basicOnly
+        onUpdated={() => {}}
+        onDeleted={() => {}}
+      />,
+    );
+    return screen.getByLabelText("Edit comments") as HTMLSelectElement;
+  }
+
+  it("offers Require approval and saves it", async () => {
+    updateVideo.mockReset();
+    updateVideo.mockResolvedValue(row({ comments_policy: "requires_approval" }));
+    const select = renderPolicy("enabled");
+    expect(Array.from(select.options).map((o) => [o.value, o.textContent])).toEqual([
+      ["enabled", "On"],
+      ["requires_approval", "Require approval"],
+      ["disabled", "Off"],
+    ]);
+    fireEvent.change(select, { target: { value: "requires_approval" } });
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    await waitFor(() => expect(updateVideo).toHaveBeenCalledTimes(1));
+    expect(updateVideo.mock.calls[0][1]).toMatchObject({ comments_policy: "requires_approval" });
+  });
+
+  it("prefills each stored policy, defaulting an absent one to On", () => {
+    expect(renderPolicy("requires_approval").value).toBe("requires_approval");
+    cleanup();
+    expect(renderPolicy("disabled").value).toBe("disabled");
+    cleanup();
+    expect(renderPolicy(undefined).value).toBe("enabled");
+  });
+});
+
 // PeerTube's members-only tier: the creator can pick it in the edit form and the
 // row says what it means.
 describe("VideoRow — internal privacy", () => {
@@ -223,5 +265,37 @@ describe("VideoRow — support text", () => {
     fireEvent.click(screen.getByRole("button", { name: /save/i }));
     await waitFor(() => expect(updateVideo).toHaveBeenCalledTimes(1));
     expect(updateVideo.mock.calls[0][1]).not.toHaveProperty("support");
+  });
+});
+
+// Only the OWNER may give a video away (core 0165), and only once its upload
+// has settled — the server answers 409 for a draft or a processing video, so
+// the row never offers a control that cannot work.
+describe("VideoRow — transfer ownership", () => {
+  function renderTransferRow(video: Video, canTransfer: boolean) {
+    render(
+      <VideoRow
+        video={video}
+        config={null}
+        canTransfer={canTransfer}
+        onUpdated={() => {}}
+        onDeleted={() => {}}
+      />,
+    );
+  }
+
+  it("opens the transfer dialog for the owner of a settled video", () => {
+    renderTransferRow(row(), true);
+    fireEvent.click(screen.getByRole("button", { name: "Transfer" }));
+    expect(screen.getByRole("dialog", { name: "Transfer ownership" })).toBeTruthy();
+    expect(screen.getByLabelText("Recipient's username")).toBeTruthy();
+  });
+
+  it("offers no transfer to a collaborator or while the upload is unsettled", () => {
+    renderTransferRow(row(), false);
+    expect(screen.queryByRole("button", { name: "Transfer" })).toBeNull();
+    cleanup();
+    renderTransferRow(row({ state: "processing" }), true);
+    expect(screen.queryByRole("button", { name: "Transfer" })).toBeNull();
   });
 });

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { useFormat, useT } from "@/components/I18nProvider";
 import { BellIcon } from "@/components/icons";
 import {
   NotificationIconChip,
@@ -13,7 +14,6 @@ import {
 import { Spinner } from "@/components/ui/Spinner";
 import { api } from "@/lib/api";
 import type { Notification } from "@/lib/api";
-import { relativeTime } from "@/lib/format";
 
 // How many recent notifications the popover shows; the full list lives on
 // /notifications ("See all notifications").
@@ -31,6 +31,8 @@ type PanelStatus = "loading" | "error" | "ready";
 // close, Escape / outside-click / route-change dismiss. Renders nothing for
 // anonymous visitors.
 export function NotificationsBell() {
+  const t = useT();
+  const { relativeTime } = useFormat();
   const { status } = useSession();
   const pathname = usePathname();
   const [count, setCount] = useState(0);
@@ -115,7 +117,8 @@ export function NotificationsBell() {
 
   if (status !== "authed") return null;
 
-  const label = count > 0 ? `Notifications (${count} unread)` : "Notifications";
+  const label =
+    count > 0 ? t("notifications.labelUnread", { count: String(count) }) : t("notifications.label");
 
   function markReadQuietly(n: Notification) {
     if (n.read) return;
@@ -155,25 +158,24 @@ export function NotificationsBell() {
         <div
           id={panelId}
           ref={panelRef}
-          aria-label="Notifications"
+          aria-label={t("notifications.label")}
           className="fixed inset-x-3 top-16 z-30 flex max-h-[70vh] flex-col overflow-hidden rounded-2xl border border-border-subtle bg-surface-raised shadow-soft-strong sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-96"
         >
           <div className="flex items-center justify-between border-b border-border-subtle px-4 py-3">
-            <span className="text-[15px] font-bold tracking-tight text-fg">Notifications</span>
+            <span className="text-[15px] font-bold tracking-tight text-fg">{t("notifications.label")}</span>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto p-2">
             {panelStatus === "loading" ? (
               <div className="flex justify-center py-8">
-                <Spinner label="Loading your notifications" />
+                <Spinner label={t("notifications.loading")} />
               </div>
             ) : panelStatus === "error" ? (
               <p className="px-3 py-8 text-center text-sm text-fg-muted">
-                Could not load your notifications.
+                {t("notifications.error")}
               </p>
             ) : items.length === 0 ? (
               <p className="px-3 py-8 text-center text-sm text-fg-muted">
-                Nothing here yet — when someone follows your channel or comments on your
-                video, you&apos;ll see it here.
+                {t("notifications.empty")}
               </p>
             ) : (
               <ul className="flex flex-col">
@@ -217,7 +219,7 @@ export function NotificationsBell() {
               href="/notifications"
               className="focus-ring flex items-center justify-center rounded-xl px-3 py-2.5 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted"
             >
-              See all notifications
+              {t("notifications.seeAll")}
             </Link>
           </div>
         </div>

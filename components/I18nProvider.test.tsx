@@ -7,7 +7,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { Spinner } from "@/components/ui";
 import { fr } from "@/lib/i18n/fr";
 
-import { I18nProvider, useT } from "./I18nProvider";
+import { I18nProvider, useFormat, useT } from "./I18nProvider";
 
 afterEach(cleanup);
 
@@ -57,5 +57,20 @@ describe("I18nProvider", () => {
     expect(screen.getByText("Apparence")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Réessayer" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Une erreur est survenue" })).toBeTruthy();
+  });
+
+  it("useFormat follows the provider's locale and defaults to en", () => {
+    function Count() {
+      return <p>{useFormat().formatCount(1234)}</p>;
+    }
+    render(<Count />);
+    expect(screen.getByText("1.2K")).toBeTruthy();
+    cleanup();
+    render(
+      <I18nProvider locale="fr" messages={{}}>
+        <Count />
+      </I18nProvider>,
+    );
+    expect(screen.getByText(/^1,2\s?k$/)).toBeTruthy();
   });
 });
