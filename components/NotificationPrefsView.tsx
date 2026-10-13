@@ -97,6 +97,7 @@ export const TYPE_LABELS: Record<string, { label: string; help: string }> = {
 // after them, alphabetically.
 const TYPE_ORDER = [
   "comment",
+  "comment_held",
   "comment_reply",
   "comment_mention",
   "follow",
