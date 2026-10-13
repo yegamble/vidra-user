@@ -63,6 +63,16 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
+describe("ChannelView feed link placement", () => {
+  it("keeps the podcast feed link out of the non-shrinking actions row (640px clip regression)", async () => {
+    mocks.listChannelVideos.mockResolvedValue({ videos: [], total: 0, limit: 20, offset: 0 });
+    render(<ChannelView handle="creator" />);
+    const link = await screen.findByRole("link", { name: /Podcast feed for/ });
+    expect(link.closest(".shrink-0")).toBeNull();
+    expect(link.getAttribute("aria-label")).toBeTruthy();
+  });
+});
+
 describe("ChannelView paging", () => {
   it("requests page 2 at offset 20, appends it, and drops Load more at the total", async () => {
     mocks.listChannelVideos.mockImplementation(
