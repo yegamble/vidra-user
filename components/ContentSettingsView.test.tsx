@@ -24,6 +24,13 @@ const updateContentPreferences = vi.fn();
 vi.mock("@/lib/api", () => ({
   errorMessage: (_err: unknown, fallback: string) => fallback,
   api: { updateContentPreferences: (...a: unknown[]) => updateContentPreferences(...a) },
+  getVideoConfigCached: () =>
+    Promise.resolve({
+      languages: [
+        { id: "en", label: "English" },
+        { id: "fr", label: "French" },
+      ],
+    }),
 }));
 
 import { hydrateContentPreferences, resetContentPreferences } from "@/lib/content-preferences";
@@ -141,5 +148,40 @@ describe("ContentSettingsView per-kind policies", () => {
     fireEvent.change(screen.getByLabelText("Sexual content"), { target: { value: "hide" } });
     expect(await screen.findByText("Could not save that change.")).toBeTruthy();
     expect((screen.getByLabelText("Sexual content") as HTMLSelectElement).value).toBe("blur");
+  });
+});
+
+describe("ContentSettingsView video languages", () => {
+  it("lists the taxonomy and shows the saved selection", async () => {
+    hydrateContentPreferences({ sensitive_flag_policies: {}, preferred_languages: ["fr"] });
+    render(<ContentSettingsView />);
+    expect(((await screen.findByLabelText("French")) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText("English") as HTMLInputElement).checked).toBe(false);
+  });
+
+  it("PUTs only preferred_languages with the toggled language added", async () => {
+    hydrateContentPreferences({ sensitive_flag_policies: {}, preferred_languages: ["fr"] });
+    updateContentPreferences.mockResolvedValue({
+      sensitive_flag_policies: {},
+      preferred_languages: ["fr", "en"],
+    });
+    render(<ContentSettingsView />);
+    fireEvent.click(await screen.findByLabelText("English"));
+    await waitFor(() =>
+      expect(updateContentPreferences).toHaveBeenCalledWith({ preferred_languages: ["fr", "en"] }),
+    );
+    await waitFor(() =>
+      expect((screen.getByLabelText("English") as HTMLInputElement).checked).toBe(true),
+    );
+  });
+
+  it("unticking the last language sends [] to clear the filter", async () => {
+    hydrateContentPreferences({ sensitive_flag_policies: {}, preferred_languages: ["fr"] });
+    updateContentPreferences.mockResolvedValue({ sensitive_flag_policies: {}, preferred_languages: [] });
+    render(<ContentSettingsView />);
+    fireEvent.click(await screen.findByLabelText("French"));
+    await waitFor(() =>
+      expect(updateContentPreferences).toHaveBeenCalledWith({ preferred_languages: [] }),
+    );
   });
 });
