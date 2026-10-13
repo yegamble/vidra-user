@@ -6,6 +6,7 @@ import { useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import { PlayIcon, PlaylistIcon } from "@/components/icons";
+import { PlaylistChannelSelect } from "@/components/PlaylistChannelSelect";
 import { PlaylistThumbnailManager } from "@/components/PlaylistThumbnailManager";
 import { Button, Input, Select, Textarea } from "@/components/ui";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -335,6 +336,7 @@ function EditPlaylistForm({
   const [title, setTitle] = useState(playlist.title);
   const [description, setDescription] = useState(playlist.description);
   const [visibility, setVisibility] = useState<PlaylistVisibility>(playlist.visibility);
+  const [channelId, setChannelId] = useState(playlist.channel_id ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -348,6 +350,9 @@ function EditPlaylistForm({
         title: trimmed,
         description: description.trim(),
         visibility,
+        // Sent only when changed: null detaches the playlist from its channel,
+        // a value attaches it, absent leaves it alone.
+        ...(channelId !== (playlist.channel_id ?? "") ? { channel_id: channelId || null } : {}),
       });
       onSaved();
     } catch (err) {
@@ -390,6 +395,7 @@ function EditPlaylistForm({
         <option value="unlisted">Unlisted</option>
         <option value="public">Public</option>
       </Select>
+      <PlaylistChannelSelect value={channelId} onChange={setChannelId} />
       {error ? <p className="text-sm text-danger">{error}</p> : null}
       <div className="flex justify-end gap-2">
         <Button variant="secondary" size="sm" onClick={onCancel}>

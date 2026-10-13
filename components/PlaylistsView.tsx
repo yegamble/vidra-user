@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useSession } from "@/components/auth/AuthProvider";
 import { PlaylistIcon } from "@/components/icons";
 import { PlaylistCard } from "@/components/PlaylistCard";
+import { PlaylistChannelSelect } from "@/components/PlaylistChannelSelect";
 import { Button, Input, Select } from "@/components/ui";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -45,6 +46,7 @@ function Playlists() {
 
   const [title, setTitle] = useState("");
   const [visibility, setVisibility] = useState<PlaylistVisibility>("private");
+  const [channelId, setChannelId] = useState("");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -55,10 +57,11 @@ function Playlists() {
     setCreating(true);
     setCreateError(null);
     try {
-      const pl = await api.createPlaylist({ title: t, visibility });
+      const pl = await api.createPlaylist({ title: t, visibility, ...(channelId ? { channel_id: channelId } : {}) });
       list.prepend(pl);
       setTitle("");
       setVisibility("private");
+      setChannelId("");
     } catch {
       setCreateError("Could not create the playlist.");
     } finally {
@@ -103,6 +106,7 @@ function Playlists() {
           <option value="unlisted">Unlisted</option>
           <option value="public">Public</option>
         </Select>
+        <PlaylistChannelSelect value={channelId} onChange={setChannelId} />
         <Button type="submit" disabled={creating || title.trim() === ""}>
           Create
         </Button>
