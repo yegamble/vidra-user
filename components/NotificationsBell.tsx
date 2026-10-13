@@ -180,7 +180,7 @@ export function NotificationsBell() {
             ) : (
               <ul className="flex flex-col">
                 {items.map((n) => {
-                  const { lead, rest, href } = describeNotification(n);
+                  const { lead, rest, href } = describeNotification(n, t);
                   return (
                     <li key={n.id}>
                       <Link

@@ -342,6 +342,9 @@ export type RejectRegistrationRequest = Schemas["RejectRegistrationRequest"];
 export type FederationFollowerRequest = Schemas["FederationFollowerRequest"];
 export type FederationFollowerRequestListResponse =
   Schemas["FederationFollowerRequestListResponse"];
+export type InstanceFollow = Schemas["InstanceFollow"];
+export type InstanceFollowState = InstanceFollow["state"];
+export type InstanceFollowListResponse = Schemas["InstanceFollowListResponse"];
 export type User = Schemas["User"];
 export type PublicUserProfile = Schemas["PublicUserProfile"];
 export type ProfileImage = Schemas["ProfileImage"];
