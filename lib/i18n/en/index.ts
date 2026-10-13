@@ -3,6 +3,7 @@ import type { Message } from "../index";
 import { a11y } from "./a11y";
 import { account } from "./account";
 import { auth } from "./auth";
+import { channel } from "./channel";
 import { common } from "./common";
 import { create } from "./create";
 import { header } from "./header";
@@ -13,6 +14,7 @@ import { report } from "./report";
 import { search } from "./search";
 import { state } from "./state";
 import { theme } from "./theme";
+import { watch } from "./watch";
 
 /**
  * Default-locale (en) catalog — the source of truth for every message key.
@@ -26,12 +28,13 @@ import { theme } from "./theme";
  * Values are plain text. `{name}` placeholders become `t()`'s typed vars; a
  * plural is an object of CLDR forms (`one`, `other`, …) picked by `count`.
  */
-export const EN_NAMESPACES = { a11y, account, auth, common, create, header, home, nav, notifications, report, search, state, theme };
+export const EN_NAMESPACES = { a11y, account, auth, channel, common, create, header, home, nav, notifications, report, search, state, theme, watch };
 
 export const en = {
   ...a11y,
   ...account,
   ...auth,
+  ...channel,
   ...common,
   ...create,
   ...header,
@@ -42,6 +45,7 @@ export const en = {
   ...search,
   ...state,
   ...theme,
+  ...watch,
 } as const satisfies Record<string, Message>;
 
 /** A valid message key — every key present in the default catalog. */

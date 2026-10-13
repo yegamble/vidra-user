@@ -16,6 +16,13 @@ describe("resolveFeedSort", () => {
     expect(resolveFeedSort("recent", "popular")).toBe("recent");
   });
 
+  it("accepts the PeerTube-parity sorts and rejects unlisted ones (hot)", () => {
+    expect(resolveFeedSort("likes", "popular")).toBe("popular");
+    expect(resolveFeedSort("originally_published_at", "recent")).toBe("originally_published_at");
+    expect(resolveFeedSort("name", "recent")).toBe("name");
+    expect(resolveFeedSort("hot", "popular")).toBe("popular");
+  });
+
   it("falls back to the caller's default for absent/unknown values", () => {
     expect(resolveFeedSort(undefined, "popular")).toBe("popular");
     expect(resolveFeedSort("bogus", "trending")).toBe("trending");
