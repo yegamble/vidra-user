@@ -34,6 +34,7 @@ import type {
   JobRunsResponse,
   JobRunState,
   IPFSReconcileResult,
+  IPFSRepinStatus,
   IPFSStatus,
   IPFSConfigDocument,
   IPFSConfigUpdate,
@@ -2832,6 +2833,17 @@ export const api = {
       method: "POST",
       query: { network },
     }),
+
+  /**
+   * POST /api/v1/admin/ipfs/repin-playback-only — start the bulk re-pin of pinned
+   * HLS trees to the playback-only set (409 if one is already running).
+   */
+  startIPFSRepin: () =>
+    apiRequest<IPFSRepinStatus>("/api/v1/admin/ipfs/repin-playback-only", { method: "POST" }),
+
+  /** GET /api/v1/admin/ipfs/repin-playback-only — progress of the current or last run. */
+  getIPFSRepin: (signal?: AbortSignal) =>
+    apiRequest<IPFSRepinStatus>("/api/v1/admin/ipfs/repin-playback-only", { signal }),
 
   /**
    * GET /api/v1/admin/stats — instance-wide overview counts for the admin

@@ -2111,6 +2111,17 @@ describe("api endpoints", () => {
     expect(init.method).toBe("POST");
   });
 
+  it("starts and polls the playback-only re-pin", async () => {
+    fetchMock.mockImplementation(async () => okJson());
+    await api.startIPFSRepin();
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/admin/ipfs/repin-playback-only");
+    expect(init.method).toBe("POST");
+    fetchMock.mockClear();
+    await api.getIPFSRepin();
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/ipfs/repin-playback-only");
+  });
+
   it("reads and atomically saves IPFS configuration with its expected revision", async () => {
     fetchMock.mockImplementation(async () => okJson());
     const controller = new AbortController();

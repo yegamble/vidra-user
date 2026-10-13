@@ -5735,6 +5735,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/ipfs/repin-playback-only": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Progress of the bulk re-pin to the playback-only set (admin)
+         * @description The current or last run: phase (idle, running, paused, completed), counts of rows done, skipped (already playback-only), blocked (the admission policy would not re-admit them), failed and in flight, the pinned HLS rows not yet examined (an upper bound on the work left) and an estimate of the pinned bytes saved. Bytes are returned to the disk only after the node's GC.
+         */
+        get: operations["getIPFSRepin"];
+        put?: never;
+        /**
+         * Start the bulk re-pin to the playback-only set (admin)
+         * @description Re-pins every already-pinned HLS tree whose pinned root still includes files the HLS routes do not serve (download MP4s, vp9.webm), so it matches what a new pin adds (Tier A F6). Runs in the leader's mirror worker through the ordinary pin path - admission, reservation and the capacity ceilings all apply - in small batches, and pauses while the node is at its budget. The superseded root is unpinned only when no other row shares it; its blocks are freed by the node's garbage collection. Resumable and safe to repeat. Returns 202 with the run status. Restricted to admins; audited.
+         */
+        post: operations["startIPFSRepin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/ipfs/reconcile": {
         parameters: {
             query?: never;
@@ -10936,6 +10960,52 @@ export interface components {
             failed: number;
             /** Format: int64 */
             unpinned: number;
+        };
+        /** @description Progress of the bulk re-pin of pinned HLS trees to the playback-only set. */
+        IPFSRepinStatus: {
+            /** @enum {string} */
+            phase: "idle" | "running" | "paused" | "completed";
+            /** Format: date-time */
+            started_at: string | null;
+            /** Format: date-time */
+            finished_at: string | null;
+            /** @description Why the run is paused (e.g. budget_exhausted); empty otherwise. */
+            pause_reason: string;
+            /** Format: int64 */
+            scanned: number;
+            /**
+             * Format: int64
+             * @description Rows moved back to pending for a playback-only re-add.
+             */
+            queued: number;
+            /**
+             * Format: int64
+             * @description Queued rows now pinned to a new root.
+             */
+            done: number;
+            /**
+             * Format: int64
+             * @description Rows already playback-only, or that changed under the run.
+             */
+            skipped: number;
+            /**
+             * Format: int64
+             * @description Rows the admission policy would not re-admit (e.g. backfill off).
+             */
+            blocked: number;
+            /** Format: int64 */
+            failed: number;
+            in_flight: number;
+            /**
+             * Format: int64
+             * @description Pinned HLS rows not examined yet; an upper bound on the work left.
+             */
+            remaining: number;
+            /**
+             * Format: int64
+             * @description Pinned bytes no longer held by the ledger; freed on disk only after GC.
+             */
+            bytes_saved_estimate: number;
         };
         /** @description Result of an IPFS reconciliation scan: how many pin intents were enqueued, overall and per media class. Idempotent — a second run enqueues zero. */
         IPFSReconcileResult: {
@@ -28466,6 +28536,127 @@ export interface operations {
                 };
             };
             /** @description Host manager integration is not configured. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getIPFSRepin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The run status. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IPFSRepinStatus"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description This build or storage backend cannot recompute the playback-only set. */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description IPFS mirroring is not enabled on this instance (ipfs_disabled). */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    startIPFSRepin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The run was recorded; the worker advances it. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IPFSRepinStatus"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description A re-pin is already running. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description This build or storage backend cannot recompute the playback-only set. */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description IPFS mirroring is not enabled on this instance (ipfs_disabled). */
             503: {
                 headers: {
                     [name: string]: unknown;
