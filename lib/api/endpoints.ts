@@ -150,7 +150,9 @@ import type {
   CreatePlaylistRequest,
   NotificationListResponse,
   NotificationPrefsResponse,
+  ContentPreferences,
   PlayerSettings,
+  UpdateContentPreferencesRequest,
   UpdatePlayerSettingsRequest,
   Playlist,
   QuarantinedVideoListResponse,
@@ -752,6 +754,24 @@ export const api = {
    */
   updatePlayerSettings: (patch: UpdatePlayerSettingsRequest) =>
     apiRequest<PlayerSettings>("/api/v1/me/player-settings", {
+      method: "PUT",
+      body: patch,
+    }),
+
+  /**
+   * GET /api/v1/me/content-preferences — the caller's per-flag sensitive-content
+   * policy overrides (auth). A flag with no entry inherits the base policy.
+   */
+  getContentPreferences: (signal?: AbortSignal) =>
+    apiRequest<ContentPreferences>("/api/v1/me/content-preferences", { signal }),
+
+  /**
+   * PUT /api/v1/me/content-preferences — MERGE update (auth): the supplied
+   * sensitive_flag_policies REPLACES the overrides (an empty-string value
+   * inherits); an omitted field is kept. 400 on an unknown flag or policy.
+   */
+  updateContentPreferences: (patch: UpdateContentPreferencesRequest) =>
+    apiRequest<ContentPreferences>("/api/v1/me/content-preferences", {
       method: "PUT",
       body: patch,
     }),

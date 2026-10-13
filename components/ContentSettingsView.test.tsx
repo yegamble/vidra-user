@@ -20,10 +20,13 @@ vi.mock("@/lib/use-sensitive-policy", () => ({
   useInstanceSensitivePolicy: () => instancePolicy,
 }));
 
+const updateContentPreferences = vi.fn();
 vi.mock("@/lib/api", () => ({
   errorMessage: (_err: unknown, fallback: string) => fallback,
+  api: { updateContentPreferences: (...a: unknown[]) => updateContentPreferences(...a) },
 }));
 
+import { hydrateContentPreferences, resetContentPreferences } from "@/lib/content-preferences";
 import { ContentSettingsView } from "./ContentSettingsView";
 
 const SELECT_LABEL = "Show sensitive videos";
@@ -36,6 +39,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  resetContentPreferences();
   vi.clearAllMocks();
 });
 
@@ -91,5 +95,51 @@ describe("ContentSettingsView", () => {
     sessionUser = null;
     render(<ContentSettingsView />);
     expect(screen.getByText("Sign in to manage your content settings")).toBeTruthy();
+  });
+});
+
+describe("ContentSettingsView per-kind policies", () => {
+  it("shows each kind's saved override, defaulting to 'Same as above'", () => {
+    hydrateContentPreferences({ sensitive_flag_policies: { violent: "blur" }, preferred_languages: [] });
+    render(<ContentSettingsView />);
+    expect((screen.getByLabelText("Violent or graphic") as HTMLSelectElement).value).toBe("blur");
+    expect((screen.getByLabelText("Sexual content") as HTMLSelectElement).value).toBe("");
+  });
+
+  it("PUTs the full map with the changed kind and adopts the server's answer", async () => {
+    hydrateContentPreferences({ sensitive_flag_policies: { violent: "blur" }, preferred_languages: [] });
+    updateContentPreferences.mockResolvedValue({
+      sensitive_flag_policies: { violent: "blur", sex: "hide" },
+      preferred_languages: [],
+    });
+    render(<ContentSettingsView />);
+    fireEvent.change(screen.getByLabelText("Sexual content"), { target: { value: "hide" } });
+    await waitFor(() =>
+      expect(updateContentPreferences).toHaveBeenCalledWith({
+        sensitive_flag_policies: { violent: "blur", sex: "hide" },
+      }),
+    );
+    await waitFor(() =>
+      expect((screen.getByLabelText("Sexual content") as HTMLSelectElement).value).toBe("hide"),
+    );
+  });
+
+  it("choosing 'Same as above' sends an empty string to inherit", async () => {
+    hydrateContentPreferences({ sensitive_flag_policies: { sex: "hide" }, preferred_languages: [] });
+    updateContentPreferences.mockResolvedValue({ sensitive_flag_policies: {}, preferred_languages: [] });
+    render(<ContentSettingsView />);
+    fireEvent.change(screen.getByLabelText("Sexual content"), { target: { value: "" } });
+    await waitFor(() =>
+      expect(updateContentPreferences).toHaveBeenCalledWith({ sensitive_flag_policies: { sex: "" } }),
+    );
+  });
+
+  it("keeps the old value and says so when the save fails", async () => {
+    hydrateContentPreferences({ sensitive_flag_policies: { sex: "blur" }, preferred_languages: [] });
+    updateContentPreferences.mockRejectedValue(new Error("boom"));
+    render(<ContentSettingsView />);
+    fireEvent.change(screen.getByLabelText("Sexual content"), { target: { value: "hide" } });
+    expect(await screen.findByText("Could not save that change.")).toBeTruthy();
+    expect((screen.getByLabelText("Sexual content") as HTMLSelectElement).value).toBe("blur");
   });
 });

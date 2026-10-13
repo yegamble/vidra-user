@@ -3284,6 +3284,30 @@ export interface paths {
         patch: operations["updateNotificationPrefs"];
         trace?: never;
     };
+    "/api/v1/me/content-preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the caller's content preferences
+         * @description The signed-in viewer's per-flag sensitive-content policy overrides, layered on their own sensitive_content_policy (else the instance policy) and their preferred feed languages. A flag with no entry inherits that base policy. Always 200.
+         */
+        get: operations["getContentPreferences"];
+        /**
+         * Update the caller's content preferences
+         * @description Merge-update: sensitive_flag_policies replaces the overrides wholesale (a flag set to an empty string, or omitted, inherits the base policy) and preferred_languages replaces the language list; an omitted field is kept. Unknown flag, policy or language, or more than 10 languages -> 400.
+         */
+        put: operations["updateContentPreferences"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/player-settings": {
         parameters: {
             query?: never;
@@ -6887,6 +6911,8 @@ export interface components {
             state?: "draft" | "processing" | "scheduled" | "quarantined" | "transcoding" | "published" | "failed";
             /** @description Whether the owner flagged the video as sensitive content. Always present; false on remote cards (no local flag exists for them). When the instance sensitive_content_policy is "hide", flagged videos are excluded from the public feed and search server-side; under warn/blur the frontend applies the matching presentation. */
             is_sensitive: boolean;
+            /** @description The kinds of sensitive content (PeerTube 7.2 nsfwFlags), always present ([] when none; a flag implies is_sensitive). The viewer's per-flag policy (GET /me/content-preferences) overrides their base policy for that flag; with several flags the most restrictive applies. "hide" is enforced server-side in browse and search; blur and warn are presentation. */
+            sensitive_flags?: components["schemas"]["SensitiveFlag"][];
             /** @description The creator's optional content-warning text, paired with is_sensitive by the frontend. Always present (empty string when unset, and on remote cards). At most 280 characters. */
             sensitive_reason: string;
             /**
@@ -7344,6 +7370,8 @@ export interface components {
             publish_at?: string;
             /** @description Mark the video as sensitive content (defaults to false). See the Video schema for how the instance policy treats flagged videos. */
             is_sensitive?: boolean;
+            /** @description The kinds of sensitive content. Any flag also marks the video sensitive. An unknown flag -> 422. */
+            sensitive_flags?: components["schemas"]["SensitiveFlag"][];
             /** @description Optional creator content-warning text, trimmed and capped at 280 characters (-> 422 over the cap). Storable regardless of is_sensitive; the frontend pairs them. */
             sensitive_reason?: string;
             /**
@@ -7384,6 +7412,8 @@ export interface components {
             originally_published_at?: string;
             /** @description Set or clear the sensitive-content flag (omit to leave unchanged). */
             is_sensitive?: boolean;
+            /** @description Replace the sensitive-content kinds (omit to leave unchanged; [] clears). A non-empty set also marks the video sensitive. An unknown flag -> 422. */
+            sensitive_flags?: components["schemas"]["SensitiveFlag"][];
             /** @description Set the creator content-warning text (omit to leave unchanged; an empty string clears it). Trimmed and capped at 280 characters -> 422 over the cap. */
             sensitive_reason?: string;
             /**
@@ -7563,6 +7593,8 @@ export interface components {
             has_thumbnail: boolean;
             /** @description The origin flagged this video sensitive (ActivityStreams `sensitive`). The viewer's sensitive-content policy applies as to a local video's is_sensitive: under "hide" it is excluded from search. */
             is_sensitive: boolean;
+            /** @description The origin's PeerTube SensitiveTag flags (explicitSex maps to sex); unknown names are dropped. */
+            sensitive_flags?: components["schemas"]["SensitiveFlag"][];
         };
         /** @description Credentials for linking a Bluesky account. app_password must be a Bluesky APP PASSWORD (Settings → App Passwords), never the account's main password — the backend never returns it. */
         ATProtoLinkRequest: {
@@ -8082,6 +8114,28 @@ export interface components {
             email?: {
                 [key: string]: boolean;
             };
+        };
+        /**
+         * @description A kind of sensitive content. On the wire to PeerTube these are SensitiveTag entries (sex is explicitSex); `sensitive` stays the boolean Mastodon reads.
+         * @enum {string}
+         */
+        SensitiveFlag: "violent" | "shocking" | "sex";
+        ContentPreferences: {
+            /** @description Per-flag viewer policy overrides. Keys are SensitiveFlag values; each value is hide, warn, blur or display. A flag with no entry inherits the viewer's base policy. */
+            sensitive_flag_policies: {
+                [key: string]: "hide" | "warn" | "blur" | "display";
+            };
+            /** @description Language ids (GET /videos/config) the viewer wants in browse feeds; [] = no filter. The client passes them as the feed's comma-separated ?language. */
+            preferred_languages: string[];
+        };
+        /** @description A merge: an omitted field keeps its stored value. */
+        UpdateContentPreferencesRequest: {
+            /** @description REPLACES the per-flag overrides. An empty string value (or an omitted flag) inherits the base policy. */
+            sensitive_flag_policies?: {
+                [key: string]: "hide" | "warn" | "blur" | "display" | "";
+            };
+            /** @description REPLACES the language list ([] clears). Unknown id -> 400. */
+            preferred_languages?: string[];
         };
         /** @description A signed-in user's effective player defaults (PLAY-07). Every field is always present. video_card_previews_enabled is resolved from the current instance default until the user explicitly chooses true or false. */
         PlayerSettings: {
@@ -15559,7 +15613,7 @@ export interface operations {
                 tag?: string;
                 /** @description Only videos with this subject-category id (see GET /videos/config). Unknown value -> 422. */
                 category?: string;
-                /** @description Only videos with this content-language code (see GET /videos/config). Unknown value -> 422. */
+                /** @description Only videos in this content language (see GET /videos/config), or in ANY of a comma-separated list of up to 10 (`en,fr`; a viewer's preferred_languages from GET /me/content-preferences). Unknown value -> 422. */
                 language?: string;
                 /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
                 limit?: components["parameters"]["PageLimit"];
@@ -20349,6 +20403,77 @@ export interface operations {
             };
             /** @description Empty update, unknown notification type, or an email switch for a type without email delivery. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getContentPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's content preferences. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContentPreferences"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateContentPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateContentPreferencesRequest"];
+            };
+        };
+        responses: {
+            /** @description The saved content preferences. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContentPreferences"];
+                };
+            };
+            /** @description Malformed body, unknown flag, or invalid policy. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
