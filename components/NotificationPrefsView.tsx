@@ -87,6 +87,10 @@ export const TYPE_LABELS: Record<string, { label: string; help: string }> = {
     label: "Captions ready",
     help: "Auto-captions finish for one of your videos.",
   },
+  video_ownership_request: {
+    label: "Video ownership offers",
+    help: "Someone on this instance offers to give you one of their videos.",
+  },
 };
 
 // A stable display order for the known types; unknown-but-returned types sort
@@ -108,6 +112,7 @@ const TYPE_ORDER = [
   "video_blocked",
   "video_unblocked",
   "caption_ready",
+  "video_ownership_request",
 ];
 
 function orderedTypes(prefs: Record<string, boolean>): string[] {

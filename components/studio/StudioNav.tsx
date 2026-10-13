@@ -27,6 +27,7 @@ const TABS: ReadonlyArray<{ href: string; label: string; live?: true }> = [
   { href: "/studio/comments", label: "Comment queue" },
   { href: "/studio/analytics", label: "Analytics" },
   { href: "/studio/channel", label: "Channel" },
+  { href: "/studio/ownership", label: "Ownership" },
 ];
 
 // StudioNav is the sticky row under the studio page title: the current-channel
