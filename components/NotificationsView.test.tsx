@@ -1,11 +1,16 @@
 // @vitest-environment jsdom
-import { render } from "@testing-library/react";
+import { render, renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import type { Notification } from "@/lib/api";
 
 import { TYPE_LABELS } from "./NotificationPrefsView";
-import { NotificationTypeIcon, describeNotification } from "./NotificationsView";
+import { useT } from "./I18nProvider";
+import { NotificationTypeIcon, describeNotification as describeFor } from "./NotificationsView";
+
+// describeNotification takes the translator (it is a plain function, so it
+// cannot call useT); the provider-less default context is the en catalog.
+const describeNotification = (n: Notification) => describeFor(n, renderHook(() => useT()).result.current);
 
 function notif(overrides: Partial<Notification>): Notification {
   return {
