@@ -9099,6 +9099,8 @@ export interface components {
             stream_key: string;
             /** @description RTMP ingest base URL (omitted when no ingest is configured). */
             rtmp_url?: string;
+            /** @description RTMPS (RTMP over TLS) ingest base URL, present only when the operator configured LIVE_RTMPS_URL. Prefer it over rtmp_url: plain RTMP sends the stream key in cleartext. */
+            rtmps_url?: string;
         };
         LiveStreamListResponse: components["schemas"]["PageMeta"] & {
             live_streams: components["schemas"]["LiveStream"][];
@@ -9133,6 +9135,8 @@ export interface components {
             /** @description The new stream key, shown ONCE. */
             stream_key: string;
             rtmp_url?: string;
+            /** @description RTMPS (RTMP over TLS) ingest base URL, present only when the operator configured LIVE_RTMPS_URL. Prefer it over rtmp_url: plain RTMP sends the stream key in cleartext. */
+            rtmps_url?: string;
         };
         LiveIngestRequest: {
             /** @description The publisher's raw stream key, as presented to the RTMP ingest. */
@@ -10095,6 +10099,8 @@ export interface components {
             live?: {
                 /** @description LIVE_RTMP_URL — already handed verbatim to every streamer on stream creation. */
                 rtmp_url: string;
+                /** @description LIVE_RTMPS_URL; absent when RTMPS is not offered. */
+                rtmps_url?: string;
                 /** @description LIVE_HLS_ROOT — a container path in the same sensitivity class as storage.local_root. */
                 hls_root: string;
             };
