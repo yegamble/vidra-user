@@ -17,12 +17,14 @@ vi.mock("@/components/player/VideoPlayer", () => ({
     video,
     videoRef,
     children,
+    startAt,
   }: {
     video: { id: string };
+    startAt: number | null;
     videoRef: React.RefObject<HTMLVideoElement>;
     children: React.ReactNode;
   }) => (
-    <div data-testid="player" data-video={video.id}>
+    <div data-testid="player" data-video={video.id} data-start={String(startAt)}>
       <video ref={videoRef} data-testid="media" />
       {children}
     </div>
@@ -181,5 +183,65 @@ describe("PlaylistEmbedPlayer", () => {
     serve(0);
     await open();
     expect(screen.getByText("This playlist has no videos.")).toBeTruthy();
+  });
+
+  it("does not wrap past an unplayable last item when loop is off", async () => {
+    serve(3);
+    mocks.getVideo.mockImplementation(async (id: string) => {
+      if (id === "v3") throw refusal(404, "not_found");
+      return { id, title: id };
+    });
+    await open("?playlistPosition=2");
+    fireEvent(screen.getByTestId("media"), new Event("ended"));
+    await settle();
+    await settle();
+    expect(screen.getByText("No video in this playlist can be played here.")).toBeTruthy();
+    expect(mocks.getVideo.mock.calls.filter((c) => c[0] === "v1")).toHaveLength(0);
+  });
+
+  it("never shows an item's title before its embed check passes", async () => {
+    serve(2);
+    let release: (v: unknown) => void = () => {};
+    mocks.getVideoEmbedPrivacy.mockImplementation(
+      (id: string) =>
+        id === "v2" ? new Promise((res) => (release = res)) : Promise.resolve({ status: "open", allowed_domains: [] }),
+    );
+    await open();
+    fireEvent.click(screen.getByRole("button", { name: "Next video" }));
+    await settle();
+    expect(screen.queryByText("Title 2")).toBeNull();
+    await act(async () => release({ status: "disabled", allowed_domains: [] }));
+    await settle();
+    expect(screen.queryByText("Title 2")).toBeNull();
+  });
+
+  it("offers a retry on a server error instead of skipping the playlist", async () => {
+    serve(3);
+    mocks.getVideo.mockImplementation(async (id: string) => {
+      if (id === "v1") throw refusal(503, "unavailable");
+      return { id, title: id };
+    });
+    await open();
+    expect(screen.getByText(/Could not load this video/)).toBeTruthy();
+    expect(mocks.getVideo.mock.calls.map((c) => c[0])).toEqual(["v1"]);
+    mocks.getVideo.mockImplementation(async (id: string) => ({ id, title: id }));
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await settle();
+    expect(playing()).toBe("v1");
+  });
+
+  it("a skip does not turn on playback or the start offset's loss for autoplay=0", async () => {
+    serve(3);
+    const played = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue();
+    mocks.getVideo.mockImplementation(async (id: string) => {
+      if (id === "v1") throw refusal(404, "not_found");
+      return { id, title: id };
+    });
+    await open("?t=30");
+    await settle();
+    expect(playing()).toBe("v2");
+    expect(screen.getByTestId("player").getAttribute("data-start")).toBe("null");
+    expect(played).not.toHaveBeenCalled();
+    played.mockRestore();
   });
 });

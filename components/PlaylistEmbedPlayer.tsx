@@ -38,7 +38,11 @@ export function PlaylistEmbedPlayer({ id }: { id: string }) {
   const [pos, setPos] = useState(() => startIndex(typeof window === "undefined" ? "" : window.location.search));
   // Once the viewer (or the end of a video) moves, later items play at once and
   // the ?t= start offset no longer applies.
+  // `engaged` (viewer moved / video ended) turns autoplay on; `moved` (any
+  // change of item, a skip included) only drops the ?t= start offset. A skip
+  // must not start playback the embed was told not to.
   const [engaged, setEngaged] = useState(false);
+  const [moved, setMoved] = useState(false);
   const [meta, setMeta] = useState<Meta | null>(null);
   const [refusal, setRefusal] = useState<"notfound" | "error" | null>(null);
   const direction = useRef<Direction>(1);
@@ -79,7 +83,8 @@ export function PlaylistEmbedPlayer({ id }: { id: string }) {
       if (to === null) return;
       direction.current = dir;
       if (viaViewer) skipped.current = 0;
-      setEngaged(true);
+      if (viaViewer) setEngaged(true);
+      setMoved(true);
       setPos(to);
     },
     [],
@@ -102,14 +107,14 @@ export function PlaylistEmbedPlayer({ id }: { id: string }) {
       const dir = direction.current;
       const to =
         dir === 1
-          ? pickNextPosition({ pos, total, loop: true, shuffle: false, played: [] }).next
+          ? pickNextPosition({ pos, total, loop: params.loop, shuffle: false, played: [] }).next
           : pos > 0
             ? pos - 1
             : total - 1;
       if (to === null || to === pos) setStalled(true);
       else go(to, dir, false);
     },
-    [current?.id, pos, total, go],
+    [current?.id, pos, total, go, params.loop],
   );
 
   // Reaching the end of a video: advance. The last item without loop stays on
@@ -126,10 +131,10 @@ export function PlaylistEmbedPlayer({ id }: { id: string }) {
       // loop is the PLAYLIST's loop; a single-item playlist loops the video.
       loop: params.loop && total <= 1,
       autoplay: params.autoplay || engaged,
-      startAt: engaged ? null : params.startAt,
-      stopAt: engaged ? null : params.stopAt,
+      startAt: moved ? null : params.startAt,
+      stopAt: moved ? null : params.stopAt,
     }),
-    [params, engaged, total],
+    [params, engaged, moved, total],
   );
 
   if (refusal === "notfound" || meta?.visibility === "private") {
@@ -147,7 +152,7 @@ export function PlaylistEmbedPlayer({ id }: { id: string }) {
   if (!current) return <EmbedNotice>This playlist position is not available.</EmbedNotice>;
   if (stalled) return <EmbedNotice>No video in this playlist can be played here.</EmbedNotice>;
 
-  const bar = (
+  const bar = (showTitle: boolean) => (
     <div className="absolute inset-x-0 top-0 z-30 flex items-center gap-2 bg-black/60 px-3 py-1.5 text-white backdrop-blur-sm">
       <button
         type="button"
@@ -167,10 +172,11 @@ export function PlaylistEmbedPlayer({ id }: { id: string }) {
       >
         <ChevronRightIcon className="h-5 w-5" />
       </button>
-      <span className="shrink-0 text-xs tabular-nums text-white/80" aria-label="Playlist position">
+      <span className="shrink-0 text-xs tabular-nums text-white/80">
+        <span className="sr-only">Playlist position </span>
         {pos + 1} / {list.total ?? total}
       </span>
-      {params.title ? <span className="min-w-0 truncate text-sm font-semibold">{current.title}</span> : null}
+      {showTitle && params.title ? <span className="min-w-0 truncate text-sm font-semibold">{current.title}</span> : null}
     </div>
   );
 
@@ -205,9 +211,11 @@ function PlaylistItem({
   onEnded: () => void;
   onSkip: (id: string) => void;
   onPlayable: () => void;
-  overlay: React.ReactNode;
+  overlay: (showTitle: boolean) => React.ReactNode;
 }) {
   const [detail, setDetail] = useState<Video | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const [failed, setFailed] = useState(false);
   const skipRef = useRef(onSkip);
   const playableRef = useRef(onPlayable);
   useEffect(() => {
@@ -226,22 +234,47 @@ function PlaylistItem({
       .then((allowed) => {
         if (signal.aborted) return;
         if (!allowed) return skip();
-        return api.getVideo(video.id, undefined, signal).then((v) => {
-          if (signal.aborted) return;
-          playableRef.current();
-          setDetail(v);
-        }, skip);
+        return api.getVideo(video.id, undefined, signal).then(
+          (v) => {
+            if (signal.aborted) return;
+            playableRef.current();
+            setDetail(v);
+          },
+          (err: unknown) => {
+            if (signal.aborted) return;
+            // Only the server's own "not for you" answers skip; an outage must
+            // not eat the whole playlist, so it offers a retry instead.
+            if (err instanceof ApiError && [401, 403, 404].includes(err.status)) skip();
+            else setFailed(true);
+          },
+        );
       });
     return () => controller.abort();
-  }, [video.id]);
+  }, [video.id, attempt]);
 
   if (detail === null) {
     return (
       <div className="relative flex h-dvh items-center justify-center bg-black text-sm text-white/65">
-        {overlay}
-        Loading…
+        {overlay(false)}
+        {failed ? (
+          <span>
+            Could not load this video.{" "}
+            <button
+              type="button"
+              className="underline focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+              onClick={() => {
+                setFailed(false);
+                setAttempt((n) => n + 1);
+              }}
+            >
+              Retry
+            </button>
+          </span>
+        ) : (
+          "Loading…"
+        )}
       </div>
     );
   }
-  return <EmbedVideo video={detail} params={params} playbackToken={null} onEnded={onEnded} overlay={overlay} />;
+  return <EmbedVideo video={detail} params={params} playbackToken={null} onEnded={onEnded} overlay={overlay(true)} />;
 }
