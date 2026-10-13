@@ -10,6 +10,7 @@ import { report } from "./report";
 import { search } from "./search";
 import { state } from "./state";
 import { theme } from "./theme";
+import { watch } from "./watch";
 
 /**
  * Default-locale (en) catalog — the source of truth for every message key.
@@ -23,7 +24,7 @@ import { theme } from "./theme";
  * Values are plain text. `{name}` placeholders become `t()`'s typed vars; a
  * plural is an object of CLDR forms (`one`, `other`, …) picked by `count`.
  */
-export const EN_NAMESPACES = { a11y, auth, common, header, home, nav, report, search, state, theme };
+export const EN_NAMESPACES = { a11y, auth, common, header, home, nav, report, search, state, theme, watch };
 
 export const en = {
   ...a11y,
@@ -36,6 +37,7 @@ export const en = {
   ...search,
   ...state,
   ...theme,
+  ...watch,
 } as const satisfies Record<string, Message>;
 
 /** A valid message key — every key present in the default catalog. */
