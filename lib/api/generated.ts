@@ -1914,6 +1914,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/videos/{id}/playback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Anonymous watch-time beacon
+         * @description One periodic playback sample (about every 10 s while playing). Folded into the video's daily aggregates; no IP address, User-Agent, session or viewer id is stored. Device class and OS family are bucketed from the User-Agent server-side and the raw value is discarded. Rate limited per client and video; the owner's own plays are ignored; a play may be marked started once per client per 10 minutes. 204 on success, 404 for a video that is not published or visible.
+         */
+        post: operations["recordVideoPlayback"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/videos/{id}/playback-stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Watch-time, retention and device analytics for a video (owner or channel editor)
+         * @description Last 30 days of playback aggregates: plays, watch seconds, average view duration, a 20-bucket audience retention curve (omitted when the video duration is unknown or nothing was watched), a device-class and OS split and a daily series. Country is not available (no GeoIP in core). A non-owner/non-editor or unknown id is reported as 404.
+         */
+        get: operations["getVideoPlaybackStats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/channels/{handle}/stats": {
         parameters: {
             query?: never;
@@ -7483,6 +7523,43 @@ export interface components {
             comments: number;
             /** @description Dense 30-day series, oldest first, zero-filled. */
             daily_views: components["schemas"]["DailyViews"][];
+        };
+        PlaybackBeaconRequest: {
+            /** @description Playhead position at sample time. */
+            position_seconds: number;
+            /** @description Seconds actually played since the previous sample (heartbeat is 10 s). */
+            watched_seconds: number;
+            /** @description True on the first sample of a play. */
+            started?: boolean;
+        };
+        PlaybackShare: {
+            key: string;
+            /** Format: int64 */
+            watch_seconds: number;
+            /** @description Fraction of total watch seconds, 0..1. */
+            share: number;
+        };
+        PlaybackDay: {
+            /** Format: date */
+            day: string;
+            /** Format: int64 */
+            plays: number;
+            /** Format: int64 */
+            watch_seconds: number;
+        };
+        PlaybackStatsResponse: {
+            /** Format: int64 */
+            plays: number;
+            /** Format: int64 */
+            watch_seconds: number;
+            avg_view_duration_seconds: number;
+            /** @description Probed video duration; 0 when unknown. */
+            duration_seconds: number;
+            /** @description 20 buckets of the video's length, each 0..1. */
+            retention?: number[] | null;
+            devices: components["schemas"]["PlaybackShare"][];
+            os: components["schemas"]["PlaybackShare"][];
+            daily: components["schemas"]["PlaybackDay"][];
         };
         ChannelStatsResponse: {
             /** Format: int64 */
@@ -16491,6 +16568,97 @@ export interface operations {
                 };
             };
             /** @description No such video, or not owned by the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    recordVideoPlayback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlaybackBeaconRequest"];
+            };
+        };
+        responses: {
+            /** @description Sample accepted (or ignored). */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Malformed body or out-of-range value. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such video, or not visible to the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Beacon budget exceeded. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getVideoPlaybackStats: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The video's playback statistics. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaybackStatsResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such video, or the caller may not manage it. */
             404: {
                 headers: {
                     [name: string]: unknown;
