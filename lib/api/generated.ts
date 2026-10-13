@@ -3744,6 +3744,110 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/watched-word-lists": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List instance watched-word lists
+         * @description Instance named watched-word lists, default list first, each with its word count (not its words). Paginated via limit (1-100, default 20) and offset.
+         */
+        get: operations["listAdminWatchedWordLists"];
+        put?: never;
+        /**
+         * Create a instance watched-word list
+         * @description Creates a named list with an optional word set (at most 500 words, each at most 100 characters). action is "flag" (default; record a match for review) or "hold" (also hold the comment for approval through the held-for-review queue). Names are unique per scope, case-insensitively.
+         */
+        post: operations["createAdminWatchedWordList"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/watched-word-lists/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a instance watched-word list
+         * @description One list with its words (the default list's words are paged via the flat watched-words endpoints and omitted here). A list in the other scope is 404.
+         */
+        get: operations["getAdminWatchedWordList"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a instance watched-word list
+         * @description Deletes the list and its terms; existing matches keep their snapshot. The default list cannot be deleted (409).
+         */
+        delete: operations["deleteAdminWatchedWordList"];
+        options?: never;
+        head?: never;
+        /**
+         * Update a instance watched-word list
+         * @description Renames the list and/or changes its action; when words is present it REPLACES the list's terms (an empty array clears them). Replacing the default list's words is refused (409).
+         */
+        patch: operations["updateAdminWatchedWordList"];
+        trace?: never;
+    };
+    "/api/v1/me/watched-word-lists": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List your own watched-word lists
+         * @description Your own named watched-word lists, default list first, each with its word count (not its words). Paginated via limit (1-100, default 20) and offset.
+         */
+        get: operations["listMyWatchedWordLists"];
+        put?: never;
+        /**
+         * Create a your own watched-word list
+         * @description Creates a named list with an optional word set (at most 500 words, each at most 100 characters). action is "flag" (default; record a match for review) or "hold" (also hold the comment for approval through the held-for-review queue). Names are unique per scope, case-insensitively.
+         */
+        post: operations["createMyWatchedWordList"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/watched-word-lists/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a your own watched-word list
+         * @description One list with its words (the default list's words are paged via the flat watched-words endpoints and omitted here). A list in the other scope is 404.
+         */
+        get: operations["getMyWatchedWordList"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a your own watched-word list
+         * @description Deletes the list and its terms; existing matches keep their snapshot. The default list cannot be deleted (409).
+         */
+        delete: operations["deleteMyWatchedWordList"];
+        options?: never;
+        head?: never;
+        /**
+         * Update a your own watched-word list
+         * @description Renames the list and/or changes its action; when words is present it REPLACES the list's terms (an empty array clears them). Replacing the default list's words is refused (409).
+         */
+        patch: operations["updateMyWatchedWordList"];
+        trace?: never;
+    };
     "/api/v1/admin/watched-word-matches/{id}/resolve": {
         parameters: {
             query?: never;
@@ -4531,6 +4635,26 @@ export interface paths {
          * @description Lists the currently-live PUBLIC streams across all channels for a home "Live now" rail, most-recently-started first. Only streams that are both state=live AND privacy=public appear — unlisted/private and offline/ended streams are never listed. Each card carries id, title, channel identity, started_at (the current session's start), an is_live flag (always true here — this is the card contract that can cheaply and truthfully carry it; the video feed card intentionally does not, since live streams are a table disjoint from videos), and, when a media server is configured, the live HLS playlist path. Stream keys are never returned. There is deliberately NO viewer/concurrent-viewer count: no server-side counter exists yet (a live-completion dependency, wave W4), and the field is omitted rather than faked. A thumbnail/preview is likewise omitted — live streams have no server-generated poster yet. This is a public read and, like GET /live/{id}, is not gated on the live feature toggle (that guards creation/ingest). Paginated with limit (1–100, default 30) and offset (>= 0).
          */
         get: operations["listLivePublicStreams"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/live/upcoming": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Public "Upcoming" listing of scheduled lives
+         * @description Lists PUBLIC streams that are not live yet and carry a planned start, soonest first. A start up to one hour in the past is still listed (a broadcaster a few minutes late reads "starting soon"); older ones drop out without the row being touched. Same visibility as "Live now": unlisted and private streams never appear, and a stream owner the signed-in viewer muted or blocked is omitted for that viewer. The optional `channel` handle narrows it to one channel (the channel page). A public read, not gated on the live feature toggle. Paginated.
+         */
+        get: operations["listUpcomingLiveStreams"];
         put?: never;
         post?: never;
         delete?: never;
@@ -6162,7 +6286,7 @@ export interface paths {
         head?: never;
         /**
          * Edit a user's role / active flag / storage quota (admin)
-         * @description Updates a user's role, active flag, and/or storage quota (partial). Restricted to admins. An admin cannot demote or deactivate their own account (422), and a hard-deleted account cannot be reactivated (422: the tombstone is anonymised in place, so re-enabling it would republish a profile without restoring anything). An unknown id is 404. Deactivating revokes the user's sessions. A role change takes effect on the target's EXISTING sessions immediately — the role is re-read from the account on every authenticated request, not taken from the access token — so a demoted staff member loses the staff routes at once while keeping their ordinary session. storage_quota_bytes is tri-state — omitted: unchanged; null: reset to the instance default; a non-negative integer: per-user override (0 = unlimited). Moderators share ONLY ban and unban (`is_active`, with a required `ban_reason` when banning) and only for accounts whose role is `user`: any other field, a staff or owner target, or themselves is 403. Banning stores the reason, time and actor, and emails the user the reason (best-effort); unbanning clears them and emails a reinstatement. The audit row records the reason's length, never its text.
+         * @description Updates a user's role, active flag, and/or storage quota (partial). Restricted to admins. An admin cannot demote or deactivate their own account (422), and a hard-deleted account cannot be reactivated (422: the tombstone is anonymised in place, so re-enabling it would republish a profile without restoring anything). An unknown id is 404. Deactivating revokes the user's sessions. A role change takes effect on the target's EXISTING sessions immediately — the role is re-read from the account on every authenticated request, not taken from the access token — so a demoted staff member loses the staff routes at once while keeping their ordinary session. storage_quota_bytes is tri-state — omitted: unchanged; null: reset to the instance default; a non-negative integer: per-user override (0 = unlimited); daily_quota_bytes is the same tri-state for the per-user rolling-24h upload quota. Moderators share ONLY ban and unban (`is_active`, with a required `ban_reason` when banning) and only for accounts whose role is `user`: any other field, a staff or owner target, or themselves is 403. Banning stores the reason, time and actor, and emails the user the reason (best-effort); unbanning clears them and emails a reinstatement. The audit row records the reason's length, never its text.
          */
         patch: operations["updateUser"];
         trace?: never;
@@ -8088,7 +8212,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             /**
-             * @description What happened. follow = someone followed your channel; comment = someone commented on your video (addressed to the video's OWNER); comment_held = a comment on a requires_approval video you manage (as its channel owner or an editor) awaits your approval (actor = the commenter, absent for a federated one; video_id/video_title/comment_id carry which; one per comment, re-surfaced unread when an edit sends an approved comment back for review); comment_reply = someone replied to a comment you wrote (addressed to the comment's AUTHOR, who is usually not the video's owner; actor = the replier, video_id/video_title = the video the thread lives on, comment_id = the reply). A reply to a comment written by the video's own owner delivers comment_reply only, never both; message = someone sent you a direct message; new_video = a channel you follow published a new public video (actor = the channel owner, channel_handle/channel_display_name = the channel, video_id/video_title = the video; sent only while your bell for that channel is "all"); new_report = a user filed an abuse report (delivered only to admins/moderators; actor = the reporter, report_id/report_status/report_target_type carry the report); new_registration_request = a registration request awaits approval (delivered only to admins/moderators; no actor, the applicant has no account yet); upload_quarantined = an upload entered the quarantine review queue (delivered only to admins/moderators; actor = the uploader, video_id/video_title/channel_handle carry which one); federation_follower_request = a remote actor asked to follow a channel while follower approval is on (delivered only to admins; channel_handle/channel_display_name = the followed channel) — or, with no channel, a remote INSTANCE asked to follow this instance (at most one unread; decided at /admin/federation/instance-followers); report_resolved = a moderator resolved an abuse report you filed; report_message = a new message on an abuse report's thread (the reporter is told when staff write, with no actor — the moderator is never named; staff who receive new_report are told when the reporter writes, actor = the reporter; report_id/report_status/report_target_type carry the report, and the message body is never included); video_rejected = a moderator rejected your quarantined upload (video_id/video_title carry which one, moderation_note carries the moderator's written reason when they gave one; the moderator's identity is never included); video_blocked = a moderator blocked one of your PUBLISHED videos, so it is no longer available to viewers (video_id/video_title carry which one; distinct from video_rejected, which is the quarantine outcome for an upload that never published — a block takes down live content and is reversible). The moderator's identity is never included, but moderation_note carries their block reason while the block stands (the A16 ruling made it creator-facing) and is absent once the block is lifted; video_unblocked = a moderator LIFTED the block on one of your videos, so it is available again (video_id/video_title carry which one; no moderator identity and no prose — there is nothing to explain about a restoration). It closes the loop video_blocked opens, and a repeated unblock of the same video delivers only one; caption_ready = an auto-generated caption track finished for your video (video_id/video_title carry which one). video_ownership_request = another local user offered you one of their videos (actor = the giver; the title is on the request, not on the notification); answer it from GET /me/video-ownership-changes.; caption_ready = an auto-generated caption track finished for your video (video_id/video_title carry which one).
+             * @description What happened. follow = someone followed your channel; comment = someone commented on your video (addressed to the video's OWNER); comment_held = a comment on a requires_approval video you manage (as its channel owner or an editor) awaits your approval (actor = the commenter, absent for a federated one; video_id/video_title/comment_id carry which; one per comment, re-surfaced unread when an edit sends an approved comment back for review); comment_reply = someone replied to a comment you wrote (addressed to the comment's AUTHOR, who is usually not the video's owner; actor = the replier, video_id/video_title = the video the thread lives on, comment_id = the reply). A reply to a comment written by the video's own owner delivers comment_reply only, never both; message = someone sent you a direct message; new_video = a channel you follow published a new public video (actor = the channel owner, channel_handle/channel_display_name = the channel, video_id/video_title = the video; sent only while your bell for that channel is "all"); new_report = a user filed an abuse report (delivered only to admins/moderators; actor = the reporter, report_id/report_status/report_target_type carry the report); new_registration_request = a registration request awaits approval (delivered only to admins/moderators; no actor, the applicant has no account yet); upload_quarantined = an upload entered the quarantine review queue (delivered only to admins/moderators; actor = the uploader, video_id/video_title/channel_handle carry which one); federation_follower_request = a remote actor asked to follow a channel while follower approval is on (delivered only to admins; channel_handle/channel_display_name = the followed channel) — or, with no channel, a remote INSTANCE asked to follow this instance (at most one unread; decided at /admin/federation/instance-followers); report_resolved = a moderator resolved an abuse report you filed; report_message = a new message on an abuse report's thread (the reporter is told when staff write, with no actor — the moderator is never named; staff who receive new_report are told when the reporter writes, actor = the reporter; report_id/report_status/report_target_type carry the report, and the message body is never included); video_rejected = a moderator rejected your quarantined upload (video_id/video_title carry which one, moderation_note carries the moderator's written reason when they gave one; the moderator's identity is never included); video_blocked = a moderator blocked one of your PUBLISHED videos, so it is no longer available to viewers (video_id/video_title carry which one; distinct from video_rejected, which is the quarantine outcome for an upload that never published — a block takes down live content and is reversible). The moderator's identity is never included, but moderation_note carries their block reason while the block stands (the A16 ruling made it creator-facing) and is absent once the block is lifted; video_unblocked = a moderator LIFTED the block on one of your videos, so it is available again (video_id/video_title carry which one; no moderator identity and no prose — there is nothing to explain about a restoration). It closes the loop video_blocked opens, and a repeated unblock of the same video delivers only one; caption_ready = an auto-generated caption track finished for your video (video_id/video_title carry which one). video_ownership_request = another local user offered you one of their videos (actor = the giver; the title is on the request, not on the notification); answer it from GET /me/video-ownership-changes.
              * @enum {string}
              */
             type: "follow" | "comment" | "comment_held" | "comment_reply" | "comment_mention" | "message" | "new_video" | "new_report" | "new_registration_request" | "upload_quarantined" | "federation_follower_request" | "report_resolved" | "report_message" | "video_rejected" | "video_blocked" | "video_unblocked" | "caption_ready" | "video_ownership_request";
@@ -8711,6 +8835,37 @@ export interface components {
             limit: number;
             offset: number;
         };
+        /** @description A named watched-word list. Instance lists (admin) apply to every comment; a creator's own lists apply only to comments on their videos. words is present on get/create/update only, and never for the default list. */
+        WatchedWordList: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @enum {string} */
+            action: "flag" | "hold";
+            is_default: boolean;
+            /** Format: int64 */
+            word_count: number;
+            words?: string[];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        WatchedWordListsPage: components["schemas"]["PageMeta"] & {
+            lists: components["schemas"]["WatchedWordList"][];
+        };
+        CreateWatchedWordListRequest: {
+            name: string;
+            /** @enum {string} */
+            action?: "flag" | "hold";
+            words?: string[];
+        };
+        UpdateWatchedWordListRequest: {
+            name?: string;
+            /** @enum {string} */
+            action?: "flag" | "hold";
+            words?: string[];
+        };
         WatchedWordListResponse: components["schemas"]["PageMeta"] & {
             words: components["schemas"]["WatchedWord"][];
         };
@@ -8720,6 +8875,8 @@ export interface components {
             id: string;
             /** @description The watched term that matched, as it read when the flag was raised. It survives the term being deleted from the list (see term_active). */
             word: string;
+            /** @description The watched-word list that matched (a snapshot; absent for matches that predate named lists). */
+            list_name?: string;
             /**
              * @description What was flagged.
              * @enum {string}
@@ -8849,6 +9006,16 @@ export interface components {
              * @description The account's current storage usage: total stored bytes of its video files (originals, renditions, thumbnails) across the videos owned via its channels.
              */
             storage_used_bytes: number;
+            /**
+             * Format: int64
+             * @description Per-user rolling-24h upload quota override in bytes. null = the instance default (default_user_daily_quota_bytes) applies; 0 = unlimited for this account.
+             */
+            daily_quota_bytes: number | null;
+            /**
+             * Format: int64
+             * @description Bytes the account stored in the trailing 24 hours (the upload-usage ledger the daily quota gate sums; deleting a video does not refund it).
+             */
+            daily_used_bytes: number;
             /** Format: date-time */
             created_at: string;
             /**
@@ -9173,6 +9340,11 @@ export interface components {
              * @description When the current live session began (stamped on the transition into "live", cleared when it ends). Present only while the stream is live.
              */
             started_at?: string;
+            /**
+             * Format: date-time
+             * @description Planned start, present only while the stream is not live. Public to whoever may already read the stream (a private stream is 404 to strangers, so its schedule is too). Announcement metadata only.
+             */
+            scheduled_start_at?: string;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -9235,6 +9407,11 @@ export interface components {
             permanent: boolean;
             /** @description Record sessions and republish them as VODs (see LiveStream.replay_enabled). When OMITTED, the instance default (live_default_save_replay, exposed as the /instance live block's default_save_replay) is seeded; an explicit value always wins. While the instance disallows replay (live.allow_replay=false) the seed is always false and any stored flag produces no replay. */
             replay_enabled?: boolean;
+            /**
+             * Format: date-time
+             * @description Planned start (RFC 3339). Must be in the future and within one year; otherwise 422 on scheduled_start_at. ANNOUNCEMENT ONLY: nothing ever starts a stream because this time passed — going live is still the encoder connecting. Going live clears it.
+             */
+            scheduled_start_at?: string | null;
         };
         UpdateLiveStreamRequest: {
             title: string;
@@ -9248,6 +9425,11 @@ export interface components {
             permanent: boolean;
             /** @default false */
             replay_enabled: boolean;
+            /**
+             * Format: date-time
+             * @description Planned start (RFC 3339). REPLACES the stored value like every field of this body, so omitting it or sending null CLEARS it. An unchanged stored value may be echoed back even after it has passed. Not settable while the stream is live. Must be in the future and within one year; otherwise 422 on scheduled_start_at. ANNOUNCEMENT ONLY: nothing ever starts a stream because this time passed — going live is still the encoder connecting. Going live clears it.
+             */
+            scheduled_start_at?: string | null;
         };
         CreateLiveStreamResponse: {
             live_stream: components["schemas"]["LiveStream"];
@@ -9286,6 +9468,20 @@ export interface components {
         };
         LivePublicListResponse: components["schemas"]["PageMeta"] & {
             live_streams: components["schemas"]["LiveStreamCard"][];
+        };
+        /** @description One entry of the public "Upcoming" listing: a PUBLIC, not-yet-live stream with a planned start. Never carries privacy/state or the key. */
+        LiveStreamUpcomingCard: {
+            /** Format: uuid */
+            id: string;
+            title: string;
+            description?: string;
+            channel_handle: string;
+            channel_display_name: string;
+            /** Format: date-time */
+            scheduled_start_at: string;
+        };
+        LiveUpcomingListResponse: components["schemas"]["PageMeta"] & {
+            live_streams: components["schemas"]["LiveStreamUpcomingCard"][];
         };
         LiveStreamKey: {
             /** @description The new stream key, shown ONCE. */
@@ -10823,6 +11019,11 @@ export interface components {
              * @description Per-user storage quota in bytes. Omit to leave unchanged; null resets the account to the instance default; 0 makes the account unlimited. Negative or non-integer values are 422.
              */
             storage_quota_bytes?: number | null;
+            /**
+             * Format: int64
+             * @description Per-user rolling-24h upload quota in bytes (PeerTube videoQuotaDaily), tri-state like storage_quota_bytes: omit to leave unchanged; null resets to the instance default (default_user_daily_quota_bytes); 0 makes the account unlimited. Negative or non-integer values are 422.
+             */
+            daily_quota_bytes?: number | null;
         };
         /** @description A stored file backing a video. The storage key is internal and not exposed. */
         VideoFile: {
@@ -21972,6 +22173,519 @@ export interface operations {
             };
         };
     };
+    listAdminWatchedWordLists: {
+        parameters: {
+            query?: {
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of lists. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchedWordListsPage"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not a moderator or admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createAdminWatchedWordList: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateWatchedWordListRequest"];
+            };
+        };
+        responses: {
+            /** @description The list was created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchedWordList"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not a moderator or admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The name is already used, or the per-account list limit (20) is reached. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation failed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getAdminWatchedWordList: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The list. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchedWordList"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not a moderator or admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such list in this scope. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteAdminWatchedWordList: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The list was deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not a moderator or admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such list in this scope. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The default list cannot be deleted. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateAdminWatchedWordList: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateWatchedWordListRequest"];
+            };
+        };
+        responses: {
+            /** @description The updated list. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchedWordList"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not a moderator or admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such list in this scope. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Name already used, or words on the default list. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation failed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listMyWatchedWordLists: {
+        parameters: {
+            query?: {
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of lists. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchedWordListsPage"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createMyWatchedWordList: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateWatchedWordListRequest"];
+            };
+        };
+        responses: {
+            /** @description The list was created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchedWordList"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The name is already used, or the per-account list limit (20) is reached. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation failed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getMyWatchedWordList: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The list. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchedWordList"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such list in this scope. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteMyWatchedWordList: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The list was deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such list in this scope. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The default list cannot be deleted. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateMyWatchedWordList: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateWatchedWordListRequest"];
+            };
+        };
+        responses: {
+            /** @description The updated list. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchedWordList"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such list in this scope. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Name already used, or words on the default list. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation failed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     resolveWatchedWordMatch: {
         parameters: {
             query?: never;
@@ -24377,6 +25091,32 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LivePublicListResponse"];
+                };
+            };
+        };
+    };
+    listUpcomingLiveStreams: {
+        parameters: {
+            query?: {
+                /** @description Only this channel's upcoming streams (by handle). */
+                channel?: string;
+                limit?: number;
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The upcoming public streams (possibly empty). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiveUpcomingListResponse"];
                 };
             };
         };
