@@ -8,10 +8,9 @@ import { feedHref, type FeedFilters, type FeedUrlDefaults } from "@/lib/feed-url
 
 // The orderings beyond the three Recent/Popular/Trending tabs (PeerTube parity).
 // They live in a select rather than three more chips so the tab group keeps its
-// three-button shape; the pick is URL-backed (?sort=likes) like every other
+// three-button shape; the pick is URL-backed (?sort=name) like every other
 // feed control. "hot" is not offered - see vidra-core's feedSorts.
 export const MORE_SORT_OPTIONS: { sort: FeedSort; label: string }[] = [
-  { sort: "likes", label: "Most liked" },
   { sort: "originally_published_at", label: "Original date" },
   { sort: "name", label: "Name (A–Z)" },
 ];

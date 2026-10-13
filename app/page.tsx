@@ -36,7 +36,6 @@ const HEADINGS: Record<FeedSort, string> = {
   recent: "Recent videos",
   popular: "Popular videos",
   trending: "Trending videos",
-  likes: "Most liked videos",
   originally_published_at: "Videos by original date",
   name: "Videos A–Z",
 };
@@ -45,7 +44,6 @@ const DESCRIPTIONS: Record<FeedSort, string> = {
   recent: "Fresh releases from creators across your community.",
   popular: "The videos people are returning to most.",
   trending: "What viewers are discovering right now.",
-  likes: "The videos viewers have liked most.",
   originally_published_at: "Newest first by the date each video was first published.",
   name: "Every video in alphabetical order by title.",
 };

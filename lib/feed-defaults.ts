@@ -35,7 +35,6 @@ function isFeedSort(value: unknown): value is FeedSort {
     value === "recent" ||
     value === "popular" ||
     value === "trending" ||
-    value === "likes" ||
     value === "originally_published_at" ||
     value === "name"
   );

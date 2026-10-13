@@ -7754,7 +7754,7 @@ export interface components {
              * @description The ordering actually applied (normalised from the request).
              * @enum {string}
              */
-            sort: "recent" | "popular" | "trending" | "likes" | "originally_published_at" | "name";
+            sort: "recent" | "popular" | "trending" | "originally_published_at" | "name";
             /**
              * @description The feed scope actually applied (normalised from the request); present on the public feed only. "all" mixes federated remote videos (remote:true cards) into the feed.
              * @enum {string}
@@ -15439,8 +15439,8 @@ export interface operations {
     listPublicVideos: {
         parameters: {
             query?: {
-                /** @description Ordering: recent (newest first), popular (most all-time views), trending (views decayed by age), likes (most liked), originally_published_at (newest by the creator-declared original date, falling back to the publish date), or name (title A-Z, case-insensitive). Every order ends in a newest-first, id tiebreak. Unknown values fall back to recent. */
-                sort?: "recent" | "popular" | "trending" | "likes" | "originally_published_at" | "name";
+                /** @description Ordering: recent (newest first), popular (most all-time views), trending (views decayed by age), originally_published_at (newest by the creator-declared original date, falling back to the publish date), or name (title A-Z, case-insensitive). Every order ends in a newest-first, id tiebreak. Unknown values fall back to recent. */
+                sort?: "recent" | "popular" | "trending" | "originally_published_at" | "name";
                 /** @description Feed scope: local (this instance's videos only) or all (adds federated remote videos for discovery). Unknown values fall back to local. */
                 scope?: "local" | "all";
                 /** @description Only videos carrying this free-form tag (case-insensitive exact match; at most 50 characters). */

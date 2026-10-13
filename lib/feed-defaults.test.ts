@@ -17,7 +17,7 @@ describe("resolveFeedSort", () => {
   });
 
   it("accepts the PeerTube-parity sorts and rejects unlisted ones (hot)", () => {
-    expect(resolveFeedSort("likes", "recent")).toBe("likes");
+    expect(resolveFeedSort("likes", "popular")).toBe("popular");
     expect(resolveFeedSort("originally_published_at", "recent")).toBe("originally_published_at");
     expect(resolveFeedSort("name", "recent")).toBe("name");
     expect(resolveFeedSort("hot", "popular")).toBe("popular");

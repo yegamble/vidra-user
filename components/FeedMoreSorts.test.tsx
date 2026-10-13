@@ -22,9 +22,9 @@ describe("FeedMoreSorts", () => {
   it("pushes the pick into the URL and keeps the active filters", () => {
     render(<FeedMoreSorts active="recent" filters={{ category: "music", tag: "live" }} />);
     fireEvent.change(screen.getByRole("combobox", { name: "More sort orders" }), {
-      target: { value: "likes" },
+      target: { value: "originally_published_at" },
     });
-    expect(navigation.pushed).toEqual(["/?sort=likes&category=music&tag=live"]);
+    expect(navigation.pushed).toEqual(["/?sort=originally_published_at&category=music&tag=live"]);
   });
 
   it("shows its own mode when active and does not re-push it", () => {
