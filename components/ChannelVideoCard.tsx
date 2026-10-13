@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { useFormat, useT } from "@/components/I18nProvider";
 import { RestrictedModePlaceholder } from "@/components/RestrictedModePlaceholder";
 import { VideoActionsMenu } from "@/components/VideoActionsMenu";
 import { VideoCardPreview } from "@/components/VideoCardPreview";
 import type { Video } from "@/lib/api";
-import { formatCount, formatDuration, relativeTime } from "@/lib/format";
+import { formatDuration } from "@/lib/format";
 import { useVideoCardPresentation } from "@/lib/use-video-card-presentation";
 
 // ChannelVideoCard is the design's dense channel-grid card (DR6): a compact
@@ -25,6 +26,8 @@ export function ChannelVideoCard({
   /** See VideoCard.onDeleted — grid parents remove the video from state so the grid reflows. */
   onDeleted?: () => void;
 }) {
+  const t = useT();
+  const { formatCount, relativeTime } = useFormat();
   const [removed, setRemoved] = useState(false);
   // localOnly: the channel-videos list only ever carries this channel's own
   // (local) videos, so there is no remote/federated branch to derive here.
@@ -47,7 +50,7 @@ export function ChannelVideoCard({
     );
   }
 
-  const views = typeof video.views === "number" ? `${formatCount(video.views)} views` : null;
+  const views = typeof video.views === "number" ? t("panels.card.views", { count: formatCount(video.views) }) : null;
   const age = relativeTime(video.created_at);
 
   return (
@@ -69,7 +72,7 @@ export function ChannelVideoCard({
         }`}
         fallback={
           <div className="media-placeholder absolute inset-0 flex items-center justify-center text-xs text-fg-muted">
-            No preview
+            {t("panels.card.noPreview")}
           </div>
         }
         overlay={
@@ -79,7 +82,7 @@ export function ChannelVideoCard({
                 title={video.sensitive_reason || undefined}
                 className="absolute bottom-1.5 left-1.5 rounded-[5px] bg-black/70 px-1.5 py-0.5 text-[10.5px] font-semibold leading-none text-white group-data-[preview-active=true]/preview:bottom-10"
               >
-                Sensitive
+                {t("panels.card.sensitive")}
               </span>
             ) : null}
             {duration !== null ? (

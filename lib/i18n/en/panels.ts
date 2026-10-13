@@ -1,0 +1,40 @@
+export const panels = {
+  // Watch playlist panel (PlaylistPanel). Counts and position are plain digits, as before.
+  "panels.playlist.label": "Playlist",
+  "panels.playlist.yours": "Your playlist",
+  "panels.playlist.position": "{current} / {total}",
+  "panels.playlist.videos": "{total} videos",
+  "panels.playlist.loop": "Loop playlist",
+  "panels.playlist.shuffle": "Shuffle playlist",
+  "panels.playlist.moreError": "Could not load more videos.",
+  // IPFS source bar (IpfsSourceBar).
+  "panels.ipfs.server": "Playing from server (HLS)",
+  "panels.ipfs.fetching": "IPFS · fetching…",
+  "panels.ipfs.ipfs": "Playing from IPFS",
+  "panels.ipfs.error": "IPFS · unavailable — playing from server",
+  "panels.ipfs.original": "Playing from server (original)",
+  "panels.ipfs.starting": "No active source",
+  "panels.ipfs.refetch": "Re-fetch from IPFS",
+  "panels.ipfs.useServer": "Use server",
+  "panels.ipfs.useIpfs": "Use IPFS",
+  // Password unlock prompt (PasswordUnlockPanel).
+  "panels.unlock.wrong": "That password is incorrect.",
+  "panels.unlock.rateLimited": "Too many attempts. Please wait a moment and try again.",
+  "panels.unlock.generic": "Could not unlock this video. Please try again.",
+  "panels.unlock.title": "This video is password protected",
+  "panels.unlock.prompt": "Enter the password to watch it.",
+  "panels.unlock.label": "Video password",
+  "panels.unlock.placeholder": "Password",
+  "panels.unlock.busy": "Unlocking…",
+  "panels.unlock.submit": "Unlock",
+  // Still-processing note (TranscodingNote).
+  "panels.transcoding": "This video is still being processed. It may not play smoothly or be available in all qualities yet.",
+  // Channel header links and the channel video card.
+  "panels.feed.label": "Podcast feed for {name}",
+  "panels.feed.title": "Podcast feed (RSS)",
+  "panels.live.now": "Live now",
+  "panels.live.streamTitle": ": {title}",
+  "panels.card.views": "{count} views",
+  "panels.card.noPreview": "No preview",
+  "panels.card.sensitive": "Sensitive",
+} as const;
