@@ -4643,6 +4643,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/live/upcoming": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Public "Upcoming" listing of scheduled lives
+         * @description Lists PUBLIC streams that are not live yet and carry a planned start, soonest first. A start up to one hour in the past is still listed (a broadcaster a few minutes late reads "starting soon"); older ones drop out without the row being touched. Same visibility as "Live now": unlisted and private streams never appear, and a stream owner the signed-in viewer muted or blocked is omitted for that viewer. The optional `channel` handle narrows it to one channel (the channel page). A public read, not gated on the live feature toggle. Paginated.
+         */
+        get: operations["listUpcomingLiveStreams"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/live/{id}": {
         parameters: {
             query?: never;
@@ -6266,7 +6286,7 @@ export interface paths {
         head?: never;
         /**
          * Edit a user's role / active flag / storage quota (admin)
-         * @description Updates a user's role, active flag, and/or storage quota (partial). Restricted to admins. An admin cannot demote or deactivate their own account (422), and a hard-deleted account cannot be reactivated (422: the tombstone is anonymised in place, so re-enabling it would republish a profile without restoring anything). An unknown id is 404. Deactivating revokes the user's sessions. A role change takes effect on the target's EXISTING sessions immediately — the role is re-read from the account on every authenticated request, not taken from the access token — so a demoted staff member loses the staff routes at once while keeping their ordinary session. storage_quota_bytes is tri-state — omitted: unchanged; null: reset to the instance default; a non-negative integer: per-user override (0 = unlimited). Moderators share ONLY ban and unban (`is_active`, with a required `ban_reason` when banning) and only for accounts whose role is `user`: any other field, a staff or owner target, or themselves is 403. Banning stores the reason, time and actor, and emails the user the reason (best-effort); unbanning clears them and emails a reinstatement. The audit row records the reason's length, never its text.
+         * @description Updates a user's role, active flag, and/or storage quota (partial). Restricted to admins. An admin cannot demote or deactivate their own account (422), and a hard-deleted account cannot be reactivated (422: the tombstone is anonymised in place, so re-enabling it would republish a profile without restoring anything). An unknown id is 404. Deactivating revokes the user's sessions. A role change takes effect on the target's EXISTING sessions immediately — the role is re-read from the account on every authenticated request, not taken from the access token — so a demoted staff member loses the staff routes at once while keeping their ordinary session. storage_quota_bytes is tri-state — omitted: unchanged; null: reset to the instance default; a non-negative integer: per-user override (0 = unlimited); daily_quota_bytes is the same tri-state for the per-user rolling-24h upload quota. Moderators share ONLY ban and unban (`is_active`, with a required `ban_reason` when banning) and only for accounts whose role is `user`: any other field, a staff or owner target, or themselves is 403. Banning stores the reason, time and actor, and emails the user the reason (best-effort); unbanning clears them and emails a reinstatement. The audit row records the reason's length, never its text.
          */
         patch: operations["updateUser"];
         trace?: never;
@@ -8192,7 +8212,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             /**
-             * @description What happened. follow = someone followed your channel; comment = someone commented on your video (addressed to the video's OWNER); comment_held = a comment on a requires_approval video you manage (as its channel owner or an editor) awaits your approval (actor = the commenter, absent for a federated one; video_id/video_title/comment_id carry which; one per comment, re-surfaced unread when an edit sends an approved comment back for review); comment_reply = someone replied to a comment you wrote (addressed to the comment's AUTHOR, who is usually not the video's owner; actor = the replier, video_id/video_title = the video the thread lives on, comment_id = the reply). A reply to a comment written by the video's own owner delivers comment_reply only, never both; message = someone sent you a direct message; new_video = a channel you follow published a new public video (actor = the channel owner, channel_handle/channel_display_name = the channel, video_id/video_title = the video; sent only while your bell for that channel is "all"); new_report = a user filed an abuse report (delivered only to admins/moderators; actor = the reporter, report_id/report_status/report_target_type carry the report); new_registration_request = a registration request awaits approval (delivered only to admins/moderators; no actor, the applicant has no account yet); upload_quarantined = an upload entered the quarantine review queue (delivered only to admins/moderators; actor = the uploader, video_id/video_title/channel_handle carry which one); federation_follower_request = a remote actor asked to follow a channel while follower approval is on (delivered only to admins; channel_handle/channel_display_name = the followed channel) — or, with no channel, a remote INSTANCE asked to follow this instance (at most one unread; decided at /admin/federation/instance-followers); report_resolved = a moderator resolved an abuse report you filed; report_message = a new message on an abuse report's thread (the reporter is told when staff write, with no actor — the moderator is never named; staff who receive new_report are told when the reporter writes, actor = the reporter; report_id/report_status/report_target_type carry the report, and the message body is never included); video_rejected = a moderator rejected your quarantined upload (video_id/video_title carry which one, moderation_note carries the moderator's written reason when they gave one; the moderator's identity is never included); video_blocked = a moderator blocked one of your PUBLISHED videos, so it is no longer available to viewers (video_id/video_title carry which one; distinct from video_rejected, which is the quarantine outcome for an upload that never published — a block takes down live content and is reversible). The moderator's identity is never included, but moderation_note carries their block reason while the block stands (the A16 ruling made it creator-facing) and is absent once the block is lifted; video_unblocked = a moderator LIFTED the block on one of your videos, so it is available again (video_id/video_title carry which one; no moderator identity and no prose — there is nothing to explain about a restoration). It closes the loop video_blocked opens, and a repeated unblock of the same video delivers only one; caption_ready = an auto-generated caption track finished for your video (video_id/video_title carry which one). video_ownership_request = another local user offered you one of their videos (actor = the giver; the title is on the request, not on the notification); answer it from GET /me/video-ownership-changes.; caption_ready = an auto-generated caption track finished for your video (video_id/video_title carry which one).
+             * @description What happened. follow = someone followed your channel; comment = someone commented on your video (addressed to the video's OWNER); comment_held = a comment on a requires_approval video you manage (as its channel owner or an editor) awaits your approval (actor = the commenter, absent for a federated one; video_id/video_title/comment_id carry which; one per comment, re-surfaced unread when an edit sends an approved comment back for review); comment_reply = someone replied to a comment you wrote (addressed to the comment's AUTHOR, who is usually not the video's owner; actor = the replier, video_id/video_title = the video the thread lives on, comment_id = the reply). A reply to a comment written by the video's own owner delivers comment_reply only, never both; message = someone sent you a direct message; new_video = a channel you follow published a new public video (actor = the channel owner, channel_handle/channel_display_name = the channel, video_id/video_title = the video; sent only while your bell for that channel is "all"); new_report = a user filed an abuse report (delivered only to admins/moderators; actor = the reporter, report_id/report_status/report_target_type carry the report); new_registration_request = a registration request awaits approval (delivered only to admins/moderators; no actor, the applicant has no account yet); upload_quarantined = an upload entered the quarantine review queue (delivered only to admins/moderators; actor = the uploader, video_id/video_title/channel_handle carry which one); federation_follower_request = a remote actor asked to follow a channel while follower approval is on (delivered only to admins; channel_handle/channel_display_name = the followed channel) — or, with no channel, a remote INSTANCE asked to follow this instance (at most one unread; decided at /admin/federation/instance-followers); report_resolved = a moderator resolved an abuse report you filed; report_message = a new message on an abuse report's thread (the reporter is told when staff write, with no actor — the moderator is never named; staff who receive new_report are told when the reporter writes, actor = the reporter; report_id/report_status/report_target_type carry the report, and the message body is never included); video_rejected = a moderator rejected your quarantined upload (video_id/video_title carry which one, moderation_note carries the moderator's written reason when they gave one; the moderator's identity is never included); video_blocked = a moderator blocked one of your PUBLISHED videos, so it is no longer available to viewers (video_id/video_title carry which one; distinct from video_rejected, which is the quarantine outcome for an upload that never published — a block takes down live content and is reversible). The moderator's identity is never included, but moderation_note carries their block reason while the block stands (the A16 ruling made it creator-facing) and is absent once the block is lifted; video_unblocked = a moderator LIFTED the block on one of your videos, so it is available again (video_id/video_title carry which one; no moderator identity and no prose — there is nothing to explain about a restoration). It closes the loop video_blocked opens, and a repeated unblock of the same video delivers only one; caption_ready = an auto-generated caption track finished for your video (video_id/video_title carry which one). video_ownership_request = another local user offered you one of their videos (actor = the giver; the title is on the request, not on the notification); answer it from GET /me/video-ownership-changes.
              * @enum {string}
              */
             type: "follow" | "comment" | "comment_held" | "comment_reply" | "comment_mention" | "message" | "new_video" | "new_report" | "new_registration_request" | "upload_quarantined" | "federation_follower_request" | "report_resolved" | "report_message" | "video_rejected" | "video_blocked" | "video_unblocked" | "caption_ready" | "video_ownership_request";
@@ -8446,8 +8466,16 @@ export interface components {
             /** @description The playlist's video ids in the desired order. Must be exactly the playlist's current items — each id once, none missing or extra. */
             video_ids: string[];
         };
+        /** @enum {string} */
+        ReportReason: "violentOrRepulsive" | "hatefulOrAbusive" | "spamOrMisleading" | "privacy" | "rights" | "serverRules" | "thumbnails" | "captions";
+        /** @description `reasons`, `start_seconds` and `end_seconds` apply to VIDEO reports only (422 on a comment or account report). `end_seconds` needs `start_seconds` and must exceed it; both must be within the video's duration when known. */
         CreateReportRequest: {
             reason: string;
+            reasons?: components["schemas"]["ReportReason"][];
+            /** Format: int32 */
+            start_seconds?: number;
+            /** Format: int32 */
+            end_seconds?: number;
         };
         BulkRemoveCommentsRequest: {
             /** @description A local username, or a remote actor URL (http:// or https://). */
@@ -8528,6 +8556,18 @@ export interface components {
             reason: string;
             /** @enum {string} */
             status: "open" | "accepted" | "rejected";
+            /** @description PeerTube-style predefined reasons (never null; empty when none). */
+            reasons: components["schemas"]["ReportReason"][];
+            /**
+             * Format: int32
+             * @description Start of the reported video range, in seconds (video reports only).
+             */
+            start_seconds?: number;
+            /**
+             * Format: int32
+             * @description End of the reported video range; omitted for a single moment.
+             */
+            end_seconds?: number;
             moderator_note: string;
             /** Format: date-time */
             created_at: string;
@@ -8607,6 +8647,18 @@ export interface components {
             status: "open" | "accepted" | "rejected";
             /** @description The caller's own words when filing. */
             reason: string;
+            /** @description PeerTube-style predefined reasons (never null; empty when none). */
+            reasons: components["schemas"]["ReportReason"][];
+            /**
+             * Format: int32
+             * @description Start of the reported video range, in seconds (video reports only).
+             */
+            start_seconds?: number;
+            /**
+             * Format: int32
+             * @description End of the reported video range; omitted for a single moment.
+             */
+            end_seconds?: number;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -8954,6 +9006,16 @@ export interface components {
              * @description The account's current storage usage: total stored bytes of its video files (originals, renditions, thumbnails) across the videos owned via its channels.
              */
             storage_used_bytes: number;
+            /**
+             * Format: int64
+             * @description Per-user rolling-24h upload quota override in bytes. null = the instance default (default_user_daily_quota_bytes) applies; 0 = unlimited for this account.
+             */
+            daily_quota_bytes: number | null;
+            /**
+             * Format: int64
+             * @description Bytes the account stored in the trailing 24 hours (the upload-usage ledger the daily quota gate sums; deleting a video does not refund it).
+             */
+            daily_used_bytes: number;
             /** Format: date-time */
             created_at: string;
             /**
@@ -9278,6 +9340,11 @@ export interface components {
              * @description When the current live session began (stamped on the transition into "live", cleared when it ends). Present only while the stream is live.
              */
             started_at?: string;
+            /**
+             * Format: date-time
+             * @description Planned start, present only while the stream is not live. Public to whoever may already read the stream (a private stream is 404 to strangers, so its schedule is too). Announcement metadata only.
+             */
+            scheduled_start_at?: string;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -9340,6 +9407,11 @@ export interface components {
             permanent: boolean;
             /** @description Record sessions and republish them as VODs (see LiveStream.replay_enabled). When OMITTED, the instance default (live_default_save_replay, exposed as the /instance live block's default_save_replay) is seeded; an explicit value always wins. While the instance disallows replay (live.allow_replay=false) the seed is always false and any stored flag produces no replay. */
             replay_enabled?: boolean;
+            /**
+             * Format: date-time
+             * @description Planned start (RFC 3339). Must be in the future and within one year; otherwise 422 on scheduled_start_at. ANNOUNCEMENT ONLY: nothing ever starts a stream because this time passed — going live is still the encoder connecting. Going live clears it.
+             */
+            scheduled_start_at?: string | null;
         };
         UpdateLiveStreamRequest: {
             title: string;
@@ -9353,6 +9425,11 @@ export interface components {
             permanent: boolean;
             /** @default false */
             replay_enabled: boolean;
+            /**
+             * Format: date-time
+             * @description Planned start (RFC 3339). REPLACES the stored value like every field of this body, so omitting it or sending null CLEARS it. An unchanged stored value may be echoed back even after it has passed. Not settable while the stream is live. Must be in the future and within one year; otherwise 422 on scheduled_start_at. ANNOUNCEMENT ONLY: nothing ever starts a stream because this time passed — going live is still the encoder connecting. Going live clears it.
+             */
+            scheduled_start_at?: string | null;
         };
         CreateLiveStreamResponse: {
             live_stream: components["schemas"]["LiveStream"];
@@ -9391,6 +9468,20 @@ export interface components {
         };
         LivePublicListResponse: components["schemas"]["PageMeta"] & {
             live_streams: components["schemas"]["LiveStreamCard"][];
+        };
+        /** @description One entry of the public "Upcoming" listing: a PUBLIC, not-yet-live stream with a planned start. Never carries privacy/state or the key. */
+        LiveStreamUpcomingCard: {
+            /** Format: uuid */
+            id: string;
+            title: string;
+            description?: string;
+            channel_handle: string;
+            channel_display_name: string;
+            /** Format: date-time */
+            scheduled_start_at: string;
+        };
+        LiveUpcomingListResponse: components["schemas"]["PageMeta"] & {
+            live_streams: components["schemas"]["LiveStreamUpcomingCard"][];
         };
         LiveStreamKey: {
             /** @description The new stream key, shown ONCE. */
@@ -10928,6 +11019,11 @@ export interface components {
              * @description Per-user storage quota in bytes. Omit to leave unchanged; null resets the account to the instance default; 0 makes the account unlimited. Negative or non-integer values are 422.
              */
             storage_quota_bytes?: number | null;
+            /**
+             * Format: int64
+             * @description Per-user rolling-24h upload quota in bytes (PeerTube videoQuotaDaily), tri-state like storage_quota_bytes: omit to leave unchanged; null resets to the instance default (default_user_daily_quota_bytes); 0 makes the account unlimited. Negative or non-integer values are 422.
+             */
+            daily_quota_bytes?: number | null;
         };
         /** @description A stored file backing a video. The storage key is internal and not exposed. */
         VideoFile: {
@@ -21429,6 +21525,8 @@ export interface operations {
             query?: {
                 /** @description Which half of the queue to return. `open` is unresolved; `resolved` is everything already accepted or rejected; `all` (the default, and what an absent parameter means) is both. An unrecognised value is a 400 — it previously meant "all", so `?status=resolved` silently returned the entire queue. */
                 status?: "open" | "resolved" | "all";
+                /** @description Only reports carrying this predefined reason; `total` counts the same filter. An unrecognised value is a 400. */
+                reason?: components["schemas"]["ReportReason"];
                 /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
                 limit?: components["parameters"]["PageLimit"];
                 /** @description Rows to skip. Negative values are clamped to 0. */
@@ -24993,6 +25091,32 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LivePublicListResponse"];
+                };
+            };
+        };
+    };
+    listUpcomingLiveStreams: {
+        parameters: {
+            query?: {
+                /** @description Only this channel's upcoming streams (by handle). */
+                channel?: string;
+                limit?: number;
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The upcoming public streams (possibly empty). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiveUpcomingListResponse"];
                 };
             };
         };

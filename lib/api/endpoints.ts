@@ -102,6 +102,7 @@ import type {
   LiveTerminationResult,
   TerminateLiveStreamRequest,
   LivePublicListResponse,
+  LiveUpcomingListResponse,
   UpdateLiveStreamRequest,
   MessageListResponse,
   Message,
@@ -166,6 +167,8 @@ import type {
   RejectRegistrationRequest,
   MyReport,
   MyReportListResponse,
+  ReportReason,
+  CreateReportRequest,
   ReportListResponse,
   ReportMessage,
   ReportMessageListResponse,
@@ -1156,6 +1159,20 @@ export const api = {
    * contract deliberately carries NO viewer/concurrent count and NO thumbnail
    * (neither exists server-side yet — W4 dependencies), so neither is surfaced.
    */
+  /**
+   * GET /api/v1/live/upcoming — PUBLIC, not-yet-live streams with a planned
+   * start, soonest first. `channel` (a handle) narrows it to one channel for the
+   * channel page. Auth optional (a muted/blocked owner drops out for the viewer).
+   */
+  listUpcomingLiveStreams: (
+    params: PageParams & { channel?: string } = {},
+    signal?: AbortSignal,
+  ) =>
+    apiRequest<LiveUpcomingListResponse>("/api/v1/live/upcoming", {
+      query: { ...pageQuery(params), channel: params.channel },
+      signal,
+    }),
+
   listLivePublicStreams: (
     params: PageParams = {},
     signal?: AbortSignal,
@@ -2081,10 +2098,14 @@ export const api = {
     }),
 
   /** POST /api/v1/videos/{id}/report — file an abuse report on a video (auth; idempotent 204). */
-  reportVideo: (id: string, reason: string) =>
+  reportVideo: (
+    id: string,
+    reason: string,
+    detail: Pick<CreateReportRequest, "reasons" | "start_seconds" | "end_seconds"> = {},
+  ) =>
     apiRequest<void>(`/api/v1/videos/${encodeURIComponent(id)}/report`, {
       method: "POST",
-      body: { reason },
+      body: { reason, ...detail },
     }),
 
   /** POST /api/v1/comments/{id}/report — file an abuse report on a comment (auth; idempotent 204). */
@@ -2329,12 +2350,13 @@ export const api = {
    * rejects an unrecognised value with a 400 instead of quietly widening it.
    */
   getReports: (
-    params: PageParams & { status?: ReportStatusFilter } = {},
+    params: PageParams & { status?: ReportStatusFilter; reason?: ReportReason } = {},
     signal?: AbortSignal,
   ) =>
     apiRequest<ReportListResponse>("/api/v1/admin/reports", {
       query: {
         status: params.status,
+        reason: params.reason,
         ...pageQuery(params),
       },
       signal,

@@ -424,6 +424,7 @@ export type CreateVideoRequest = Schemas["CreateVideoRequest"];
 
 // --- Reports / moderation ---------------------------------------------------
 export type CreateReportRequest = Schemas["CreateReportRequest"];
+export type ReportReason = Schemas["ReportReason"];
 export type ReportTargetType = NonNullable<Schemas["Report"]["target_type"]>;
 export type ReportStatus = NonNullable<Schemas["Report"]["status"]>;
 export type ReportReporter = Schemas["ReportReporter"];
@@ -526,6 +527,9 @@ export type LiveTerminationResult = Schemas["LiveTerminationResult"];
 // server-side yet). Distinct from LiveStream (the owner/watch metadata).
 export type LiveStreamCard = Schemas["LiveStreamCard"];
 export type LivePublicListResponse = Schemas["LivePublicListResponse"];
+// The public "Upcoming" listing: PUBLIC, not-yet-live streams with a planned start.
+export type LiveStreamUpcomingCard = Schemas["LiveStreamUpcomingCard"];
+export type LiveUpcomingListResponse = Schemas["LiveUpcomingListResponse"];
 
 // --- Comments ---------------------------------------------------------------
 export type Comment = Schemas["Comment"];

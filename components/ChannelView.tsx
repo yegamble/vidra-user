@@ -8,6 +8,7 @@ import { useFormat, useT } from "@/components/I18nProvider";
 import { ChannelFeedLink } from "@/components/ChannelFeedLink";
 import { ChannelLiveBadge } from "@/components/ChannelLiveBadge";
 import { ChannelPlaylistsTab } from "@/components/ChannelPlaylistsTab";
+import { ChannelUpcomingBadge } from "@/components/ChannelUpcomingBadge";
 import { ChannelVideoGrid } from "@/components/ChannelVideoGrid";
 import { FollowButton } from "@/components/FollowButton";
 import { RemoteInteractionButton } from "@/components/RemoteInteractionButton";
@@ -169,6 +170,7 @@ function ChannelForViewer({ handle }: { handle: string }) {
             </div>
             <div className="order-last flex w-full flex-wrap items-center gap-2 pb-1 sm:order-none sm:w-auto sm:shrink-0">
               <ChannelLiveBadge handle={channel.handle} ownerId={channel.owner_id} />
+              <ChannelUpcomingBadge handle={channel.handle} />
               {isOwner ? null : (
                 <>
                   <FollowButton

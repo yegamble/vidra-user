@@ -790,6 +790,22 @@ describe("api endpoints", () => {
     expect(JSON.parse(init.body as string)).toEqual({ reason: "spam" });
   });
 
+  it("reportVideo sends predefined reasons and the time range when given", async () => {
+    await api.reportVideo("v1", "spam", { reasons: ["captions"], start_seconds: 5, end_seconds: 9 });
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({
+      reason: "spam",
+      reasons: ["captions"],
+      start_seconds: 5,
+      end_seconds: 9,
+    });
+  });
+
+  it("getReports passes the reason filter", async () => {
+    await api.getReports({ status: "open", reason: "privacy" });
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/reports?status=open&reason=privacy");
+  });
+
   it("reportComment POSTs the reason to the comment report endpoint", async () => {
     await api.reportComment("c1", "abuse");
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
@@ -886,6 +902,12 @@ describe("api endpoints", () => {
   it("getLiveStream targets the single live-stream endpoint", async () => {
     await api.getLiveStream("s1");
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/live/s1");
+  });
+
+  it("listUpcomingLiveStreams targets /live/upcoming with the channel filter", async () => {
+    await api.listUpcomingLiveStreams({ channel: "ada", limit: 1 });
+    const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/live/upcoming?limit=1&channel=ada");
   });
 
   it("updateLiveStream PATCHes the metadata (incl. replay_enabled)", async () => {
