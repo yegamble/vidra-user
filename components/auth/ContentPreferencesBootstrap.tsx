@@ -4,7 +4,11 @@ import { useEffect } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import { api } from "@/lib/api";
-import { hydrateContentPreferences, resetContentPreferences } from "@/lib/content-preferences";
+import {
+  hydrateContentPreferences,
+  resetContentPreferences,
+  settleContentPreferences,
+} from "@/lib/content-preferences";
 
 /**
  * Hydrate the viewer's content preferences once per signed-in session, so every
@@ -18,13 +22,17 @@ export function ContentPreferencesBootstrap() {
   useEffect(() => {
     if (status === "restoring") return;
     resetContentPreferences();
-    if (status !== "authed") return;
+    if (status !== "authed") {
+      settleContentPreferences(); // anonymous: there is nothing to wait for
+      return;
+    }
     const controller = new AbortController();
     api
       .getContentPreferences(controller.signal)
       .then(hydrateContentPreferences)
       .catch(() => {
-        // Keep "no overrides"; the base policy applies.
+        // Keep "no overrides"; the base policy applies. Do not hold the feed.
+        if (!controller.signal.aborted) settleContentPreferences();
       });
     return () => controller.abort();
   }, [status, user?.id]);

@@ -1,14 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
-import { api, errorMessage } from "@/lib/api";
+import { api, errorMessage, getVideoConfigCached } from "@/lib/api";
+import type { VideoConfigOption } from "@/lib/api";
 import type { SensitiveContentPolicy, UpdateProfileRequest } from "@/lib/api";
 import { hydrateContentPreferences, useContentPreferences } from "@/lib/content-preferences";
 import { SENSITIVE_FLAGS } from "@/lib/sensitive-flags";
 import { useInstanceSensitivePolicy } from "@/lib/use-sensitive-policy";
 import { SignInGate } from "@/components/SignInGate";
+import { Checkbox } from "@/components/ui/Checkbox";
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 
@@ -53,6 +55,7 @@ export function ContentSettingsView() {
         initial={(user.sensitive_content_policy ?? "") as PolicyChoice}
       />
       <FlagPoliciesSection key={`${user.id}-flags`} />
+      <LanguagesSection key={`${user.id}-langs`} />
     </div>
   );
 }
@@ -195,6 +198,76 @@ function FlagPoliciesSection() {
           </select>
         </div>
       ))}
+    </section>
+  );
+}
+
+// Preferred languages (PeerTube's videoLanguages): the browse feed shows only
+// videos in these languages. Empty = no filter. The feed passes the list as its
+// ?language param, and an explicit language filter in the URL still wins.
+function LanguagesSection() {
+  const prefs = useContentPreferences();
+  const [options, setOptions] = useState<VideoConfigOption[]>([]);
+  const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getVideoConfigCached()
+      .then((cfg) => {
+        if (!cancelled) setOptions(cfg.languages);
+      })
+      .catch(() => {
+        // No taxonomy: the section simply offers nothing to pick.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const selected = prefs.preferred_languages;
+
+  async function toggle(id: string, on: boolean) {
+    const next = on ? [...selected, id] : selected.filter((l) => l !== id);
+    setSaveState("saving");
+    setError(null);
+    try {
+      hydrateContentPreferences(await api.updateContentPreferences({ preferred_languages: next }));
+      setSaveState("saved");
+    } catch (err) {
+      setSaveState("error");
+      setError(errorMessage(err, "Could not save that change."));
+    }
+  }
+
+  if (options.length === 0) return null;
+  return (
+    <section className="flex flex-col gap-4">
+      <div className="flex flex-col gap-1">
+        <h2 className="text-base font-semibold tracking-tight text-fg">Video languages</h2>
+        <p className="text-[13px] text-fg-muted">
+          Show only videos in the languages you pick (up to 10) in your home feed.
+          Leave all unticked to see every language. Choosing a language in the
+          feed&apos;s own filter overrides this.
+        </p>
+      </div>
+      <div role="status" aria-live="polite" className="min-h-5 text-[13px]">
+        {saveState === "saving" ? <span className="text-fg-muted">Saving…</span> : null}
+        {saveState === "saved" ? <span className="text-success">Saved.</span> : null}
+        {saveState === "error" && error ? <span className="text-danger">{error}</span> : null}
+      </div>
+      <fieldset className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
+        <legend className="sr-only">Preferred video languages</legend>
+        {options.map((o) => (
+          <Checkbox
+            key={o.id}
+            label={o.label}
+            checked={selected.includes(o.id)}
+            disabled={!selected.includes(o.id) && selected.length >= 10}
+            onChange={(e) => void toggle(o.id, e.target.checked)}
+          />
+        ))}
+      </fieldset>
     </section>
   );
 }
