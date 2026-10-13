@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   formatBytes,
+  formatCountdown,
   formatCount,
   formatDateTime,
   formatDuration,
@@ -150,6 +151,24 @@ describe("formatMonthYear", () => {
 
   it("returns empty for an unparseable timestamp", () => {
     expect(formatMonthYear("not-a-date")).toBe("");
+  });
+});
+
+describe("formatCountdown", () => {
+  const now = new Date("2026-10-12T12:00:00Z");
+  const at = (secs: number) => new Date(now.getTime() + secs * 1000).toISOString();
+  it("counts down in the largest whole unit", () => {
+    expect(formatCountdown(at(30), now)).toBe("in 30 seconds");
+    expect(formatCountdown(at(12 * 60 + 5), now)).toBe("in 12 minutes");
+    expect(formatCountdown(at(3 * 3600 + 59), now)).toBe("in 3 hours");
+    expect(formatCountdown(at(2 * 86400 + 3600), now)).toBe("in 2 days");
+  });
+  it("reads a due or overdue start as 'Starting soon', never a negative", () => {
+    expect(formatCountdown(at(0), now)).toBe("Starting soon");
+    expect(formatCountdown(at(-600), now)).toBe("Starting soon");
+  });
+  it("is empty for an unparseable value", () => {
+    expect(formatCountdown("nope", now)).toBe("");
   });
 });
 

@@ -36,6 +36,7 @@ function report(over: Partial<MyReport>): MyReport {
     created_at: "2026-10-01T12:00:00Z",
     last_activity_at: "2026-10-01T12:00:00Z",
     message_count: 0,
+    reasons: [],
     ...over,
   };
 }
