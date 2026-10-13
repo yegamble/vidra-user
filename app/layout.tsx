@@ -4,6 +4,7 @@ import Script from "next/script";
 import "./globals.css";
 
 import { AuthProvider } from "@/components/auth/AuthProvider";
+import { ContentPreferencesBootstrap } from "@/components/auth/ContentPreferencesBootstrap";
 import { PlayerSettingsBootstrap } from "@/components/auth/PlayerSettingsBootstrap";
 import { BottomTabBar } from "@/components/BottomTabBar";
 import { Header } from "@/components/Header";
@@ -111,6 +112,7 @@ export default async function RootLayout({
         <I18nProvider locale={locale} messages={messages}><SoftwareBrandProvider hidden={hideSoftwareName(instance)}>
           <AuthProvider>
             <PlayerSettingsBootstrap />
+            <ContentPreferencesBootstrap />
             <ToastProvider>
               <InstanceBanner instance={instance} nonce={nonce} />
               <Header instance={instance} />

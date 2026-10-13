@@ -1,5 +1,7 @@
 "use client";
 
+import { useMemo } from "react";
+
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { ListTail } from "@/components/ui/ListTail";
@@ -8,6 +10,7 @@ import { VideoGridSkeleton } from "@/components/VideoCardSkeleton";
 import { VideoGrid } from "@/components/VideoGrid";
 import { api } from "@/lib/api";
 import type { FeedSort, Video, VideoFeedResponse } from "@/lib/api";
+import { useContentPreferences, useContentPreferencesSettled } from "@/lib/content-preferences";
 import { resolveBrowseScrollMode } from "@/lib/feed-defaults";
 import type { FeedFilters } from "@/lib/feed-url";
 import { useInstanceDefaults } from "@/lib/instance-defaults";
@@ -49,10 +52,22 @@ export function VideoFeed({
   // `viewerKey` keeps it for a visitor who settles anonymous (no browser
   // request at all) and retires it for one who settles signed in, who gets
   // exactly one request carrying their token.
-  const viewer = useSettledSession();
+  const session = useSettledSession();
+  // The viewer's preferred languages narrow the feed through the same
+  // ?language param the filter panel uses (a comma-separated list; any match).
+  // An explicit language filter wins. A signed-in viewer's first request waits
+  // for their preferences, so it is never sent unfiltered and then redone.
+  const prefs = useContentPreferences();
+  const prefsSettled = useContentPreferencesSettled();
+  const viewer = useMemo(
+    () => ({ ...session, settled: session.settled && (!session.authed || prefsSettled) }),
+    [session, prefsSettled],
+  );
+  const effectiveLanguage =
+    language || (prefs.preferred_languages.length > 0 ? prefs.preferred_languages.join(",") : undefined);
 
   const list = useAppendingList<Video>({
-    queryKey: JSON.stringify([sort, scope, tag, category, language]),
+    queryKey: JSON.stringify([sort, scope, tag, category, effectiveLanguage]),
     viewer,
     initialPage: initialPage
       ? { items: initialPage.videos, total: initialPage.total }
@@ -60,7 +75,7 @@ export function VideoFeed({
     load: (window, signal) =>
       api
         .getFeed(
-          { sort, scope, tag, category, language, limit: window.limit, offset: window.offset },
+          { sort, scope, tag, category, language: effectiveLanguage, limit: window.limit, offset: window.offset },
           signal,
         )
         .then((res) => ({ items: res.videos, total: res.total })),
@@ -85,7 +100,7 @@ export function VideoFeed({
     );
   }
   if (list.items.length === 0) {
-    return tag || category || language ? (
+    return tag || category || effectiveLanguage ? (
       <EmptyState
         title="No matching videos"
         message="Nothing matches the active filters. Try removing one."

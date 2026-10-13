@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { useT } from "@/components/I18nProvider";
 import { InfoIcon } from "@/components/icons";
 import { api } from "@/lib/api";
 
@@ -27,6 +28,7 @@ export function TranscodingNote({
   /** The password-video playback token, threaded so the poll stays authorized. */
   playbackToken?: string | null;
 }) {
+  const t = useT();
   const [transcoding, setTranscoding] = useState(true);
 
   useEffect(() => {
@@ -55,10 +57,7 @@ export function TranscodingNote({
       className="mt-2 flex items-start gap-2 rounded-xl bg-surface-muted px-3 py-2 text-[13px] leading-relaxed text-fg-muted"
     >
       <InfoIcon size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
-      <span>
-        This video is still being processed. It may not play smoothly or be available in all
-        qualities yet.
-      </span>
+      <span>{t("panels.transcoding")}</span>
     </p>
   );
 }
