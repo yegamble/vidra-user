@@ -2841,6 +2841,10 @@ export const api = {
   startIPFSRepin: () =>
     apiRequest<IPFSRepinStatus>("/api/v1/admin/ipfs/repin-playback-only", { method: "POST" }),
 
+  /** DELETE /api/v1/admin/ipfs/repin-playback-only — stop arming rows; armed rows finish (409 if none runs). */
+  cancelIPFSRepin: () =>
+    apiRequest<IPFSRepinStatus>("/api/v1/admin/ipfs/repin-playback-only", { method: "DELETE" }),
+
   /** GET /api/v1/admin/ipfs/repin-playback-only — progress of the current or last run. */
   getIPFSRepin: (signal?: AbortSignal) =>
     apiRequest<IPFSRepinStatus>("/api/v1/admin/ipfs/repin-playback-only", { signal }),

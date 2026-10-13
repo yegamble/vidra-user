@@ -5744,7 +5744,7 @@ export interface paths {
         };
         /**
          * Progress of the bulk re-pin to the playback-only set (admin)
-         * @description The current or last run: phase (idle, running, paused, completed), counts of rows done, skipped (already playback-only), blocked (the admission policy would not re-admit them), failed and in flight, the pinned HLS rows not yet examined (an upper bound on the work left) and an estimate of the pinned bytes saved. Bytes are returned to the disk only after the node's GC.
+         * @description The current or last run: phase (idle, running, paused, completed, cancelled), counts of rows done, skipped (already playback-only), blocked (the admission policy would not re-admit them), failed and in flight, the pinned HLS rows not yet examined (an upper bound on the work left) and an estimate of the pinned bytes saved. Bytes are returned to the disk only after the node's GC.
          */
         get: operations["getIPFSRepin"];
         put?: never;
@@ -5753,7 +5753,11 @@ export interface paths {
          * @description Re-pins every already-pinned HLS tree whose pinned root still includes files the HLS routes do not serve (download MP4s, vp9.webm), so it matches what a new pin adds (Tier A F6). Runs in the leader's mirror worker through the ordinary pin path - admission, reservation and the capacity ceilings all apply - in small batches, and pauses while the node is at its budget. The superseded root is unpinned only when no other row shares it; its blocks are freed by the node's garbage collection. Resumable and safe to repeat. Returns 202 with the run status. Restricted to admins; audited.
          */
         post: operations["startIPFSRepin"];
-        delete?: never;
+        /**
+         * Cancel the bulk re-pin to the playback-only set (admin)
+         * @description Stops the run from arming further rows. Rows already re-armed finish through the ordinary pin path; nothing is rolled back. Works while running or paused. Returns the run status. Restricted to admins; audited.
+         */
+        delete: operations["cancelIPFSRepin"];
         options?: never;
         head?: never;
         patch?: never;
@@ -10964,7 +10968,7 @@ export interface components {
         /** @description Progress of the bulk re-pin of pinned HLS trees to the playback-only set. */
         IPFSRepinStatus: {
             /** @enum {string} */
-            phase: "idle" | "running" | "paused" | "completed";
+            phase: "idle" | "running" | "paused" | "completed" | "cancelled";
             /** Format: date-time */
             started_at: string | null;
             /** Format: date-time */
@@ -28639,6 +28643,71 @@ export interface operations {
                 };
             };
             /** @description A re-pin is already running. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description This build or storage backend cannot recompute the playback-only set. */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description IPFS mirroring is not enabled on this instance (ipfs_disabled). */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    cancelIPFSRepin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The run was cancelled. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IPFSRepinStatus"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No re-pin is running. */
             409: {
                 headers: {
                     [name: string]: unknown;

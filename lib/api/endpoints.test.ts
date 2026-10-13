@@ -2120,6 +2120,9 @@ describe("api endpoints", () => {
     fetchMock.mockClear();
     await api.getIPFSRepin();
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/ipfs/repin-playback-only");
+    fetchMock.mockClear();
+    await api.cancelIPFSRepin();
+    expect((fetchMock.mock.calls[0] as [string, RequestInit])[1].method).toBe("DELETE");
   });
 
   it("reads and atomically saves IPFS configuration with its expected revision", async () => {

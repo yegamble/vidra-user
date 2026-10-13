@@ -3,11 +3,11 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ getIPFSRepin: vi.fn(), startIPFSRepin: vi.fn() }));
+const mocks = vi.hoisted(() => ({ getIPFSRepin: vi.fn(), startIPFSRepin: vi.fn(), cancelIPFSRepin: vi.fn() }));
 
 vi.mock("@/lib/api", async (importActual) => {
   const actual = await importActual<typeof import("@/lib/api")>();
-  return { ...actual, api: { ...actual.api, getIPFSRepin: mocks.getIPFSRepin, startIPFSRepin: mocks.startIPFSRepin } };
+  return { ...actual, api: { ...actual.api, getIPFSRepin: mocks.getIPFSRepin, startIPFSRepin: mocks.startIPFSRepin, cancelIPFSRepin: mocks.cancelIPFSRepin } };
 });
 
 import { ApiError } from "@/lib/api";
@@ -50,6 +50,16 @@ describe("IPFSRepinCard", () => {
     mocks.getIPFSRepin.mockResolvedValue({ ...run, phase: "paused", pause_reason: "budget_exhausted", scanned: 3, remaining: 9 });
     render(<IPFSRepinCard />);
     expect((await screen.findByRole("status")).textContent).toContain("budget exhausted");
+  });
+
+  it("cancels a paused run", async () => {
+    mocks.getIPFSRepin.mockResolvedValue({ ...run, phase: "paused", pause_reason: "budget_exhausted", scanned: 3, remaining: 9 });
+    mocks.cancelIPFSRepin.mockResolvedValue({ ...run, phase: "cancelled", scanned: 3 });
+    render(<IPFSRepinCard />);
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel re-pin" }));
+    await waitFor(() => expect(mocks.cancelIPFSRepin).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText("Cancelled")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Cancel re-pin" })).toBeNull();
   });
 
   it("reports a 409 from a second start", async () => {

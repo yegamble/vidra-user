@@ -16,6 +16,7 @@ const PHASE: Record<IPFSRepinStatus["phase"], { label: string; variant: BadgeVar
   running: { label: "Running", variant: "accent" },
   paused: { label: "Paused", variant: "warning" },
   completed: { label: "Completed", variant: "success" },
+  cancelled: { label: "Cancelled", variant: "neutral" },
 };
 
 /**
@@ -58,6 +59,18 @@ export function IPFSRepinCard() {
     return () => clearInterval(timer);
   }, [active]);
 
+  const cancel = useCallback(async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      setStatus(await api.cancelIPFSRepin());
+    } catch (err) {
+      setError(errorMessage(err, "Could not cancel the re-pin."));
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
   const start = useCallback(async () => {
     setBusy(true);
     setError(null);
@@ -95,8 +108,8 @@ export function IPFSRepinCard() {
       {confirming ? (
         <div role="group" aria-label="Confirm re-pin" className="flex flex-col gap-2 rounded-xl bg-surface-muted p-3">
           <p className="text-sm text-fg">
-            Re-pin every pinned video in small batches? Each video is briefly unpinned from
-            playback while its tree is re-added, and the run pauses when the node is at its budget.
+            Re-pin every pinned video in small batches? Each video is briefly served from
+            primary storage instead of IPFS while its tree is re-added, and the run pauses when the node is at its budget.
           </p>
           <div className="flex flex-wrap gap-2">
             <Button size="sm" onClick={() => void start()} disabled={busy}>
@@ -108,10 +121,15 @@ export function IPFSRepinCard() {
           </div>
         </div>
       ) : (
-        <div>
+        <div className="flex flex-wrap gap-2">
           <Button variant="secondary" onClick={() => setConfirming(true)} disabled={active || busy}>
             Re-pin existing videos to the playback-only set
           </Button>
+          {active ? (
+            <Button variant="secondary" onClick={() => void cancel()} disabled={busy}>
+              Cancel re-pin
+            </Button>
+          ) : null}
         </div>
       )}
 
