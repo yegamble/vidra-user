@@ -521,6 +521,9 @@ export type LiveTerminationResult = Schemas["LiveTerminationResult"];
 // server-side yet). Distinct from LiveStream (the owner/watch metadata).
 export type LiveStreamCard = Schemas["LiveStreamCard"];
 export type LivePublicListResponse = Schemas["LivePublicListResponse"];
+// The public "Upcoming" listing: PUBLIC, not-yet-live streams with a planned start.
+export type LiveStreamUpcomingCard = Schemas["LiveStreamUpcomingCard"];
+export type LiveUpcomingListResponse = Schemas["LiveUpcomingListResponse"];
 
 // --- Comments ---------------------------------------------------------------
 export type Comment = Schemas["Comment"];

@@ -102,6 +102,7 @@ import type {
   LiveTerminationResult,
   TerminateLiveStreamRequest,
   LivePublicListResponse,
+  LiveUpcomingListResponse,
   UpdateLiveStreamRequest,
   MessageListResponse,
   Message,
@@ -1126,6 +1127,20 @@ export const api = {
    * contract deliberately carries NO viewer/concurrent count and NO thumbnail
    * (neither exists server-side yet — W4 dependencies), so neither is surfaced.
    */
+  /**
+   * GET /api/v1/live/upcoming — PUBLIC, not-yet-live streams with a planned
+   * start, soonest first. `channel` (a handle) narrows it to one channel for the
+   * channel page. Auth optional (a muted/blocked owner drops out for the viewer).
+   */
+  listUpcomingLiveStreams: (
+    params: PageParams & { channel?: string } = {},
+    signal?: AbortSignal,
+  ) =>
+    apiRequest<LiveUpcomingListResponse>("/api/v1/live/upcoming", {
+      query: { ...pageQuery(params), channel: params.channel },
+      signal,
+    }),
+
   listLivePublicStreams: (
     params: PageParams = {},
     signal?: AbortSignal,

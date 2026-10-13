@@ -902,6 +902,12 @@ describe("api endpoints", () => {
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/live/s1");
   });
 
+  it("listUpcomingLiveStreams targets /live/upcoming with the channel filter", async () => {
+    await api.listUpcomingLiveStreams({ channel: "ada", limit: 1 });
+    const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/live/upcoming?limit=1&channel=ada");
+  });
+
   it("updateLiveStream PATCHes the metadata (incl. replay_enabled)", async () => {
     await api.updateLiveStream("s1", {
       title: "Show",
