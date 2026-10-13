@@ -107,6 +107,7 @@ import type {
   UploadAttachmentResponse,
   MutedAccountListResponse,
   MutedInstanceListResponse,
+  VideoOwnershipChangeListResponse,
   BlockInstanceRequest,
   BlockedInstanceListResponse,
   CreateRemoteFollowRequest,
@@ -1473,6 +1474,48 @@ export const api = {
   unmuteAccount: (userId: string) =>
     apiRequest<void>(`/api/v1/me/mutes/accounts/${encodeURIComponent(userId)}`, {
       method: "DELETE",
+    }),
+
+  /**
+   * GET /api/v1/me/video-ownership-changes — the videos other local users
+   * offered the caller, newest first, any status (auth).
+   */
+  getVideoOwnershipChanges: (params: PageParams = {}, signal?: AbortSignal) =>
+    apiRequest<VideoOwnershipChangeListResponse>("/api/v1/me/video-ownership-changes", {
+      query: pageQuery(params),
+      signal,
+    }),
+
+  /**
+   * POST /api/v1/videos/{id}/give-ownership — offer the caller's video to
+   * another local user, who must accept it (204; owner only).
+   */
+  giveVideoOwnership: (videoId: string, username: string) =>
+    apiRequest<void>(`/api/v1/videos/${encodeURIComponent(videoId)}/give-ownership`, {
+      method: "POST",
+      body: { username },
+    }),
+
+  /**
+   * DELETE /api/v1/videos/{id}/give-ownership — withdraw the caller's pending
+   * offer of the video (204; 404 when there is none).
+   */
+  cancelVideoOwnership: (videoId: string) =>
+    apiRequest<void>(`/api/v1/videos/${encodeURIComponent(videoId)}/give-ownership`, {
+      method: "DELETE",
+    }),
+
+  /** POST …/{id}/accept — take the offered video into one of the caller's channels (204). */
+  acceptVideoOwnershipChange: (id: string, channelId: string) =>
+    apiRequest<void>(`/api/v1/me/video-ownership-changes/${encodeURIComponent(id)}/accept`, {
+      method: "POST",
+      body: { channel_id: channelId },
+    }),
+
+  /** POST …/{id}/refuse — decline an offered video; it stays with its owner (204). */
+  refuseVideoOwnershipChange: (id: string) =>
+    apiRequest<void>(`/api/v1/me/video-ownership-changes/${encodeURIComponent(id)}/refuse`, {
+      method: "POST",
     }),
 
   /** GET /api/v1/me/mutes/accounts — the accounts the caller has muted, newest first (auth). */
