@@ -11,6 +11,7 @@ vi.mock("@/components/PlaylistCard", () => ({
   PlaylistCard: ({ playlist }: { playlist: { title: string } }) => <span>{playlist.title}</span>,
 }));
 
+import { I18nProvider } from "./I18nProvider";
 import { ChannelPlaylistsTab } from "./ChannelPlaylistsTab";
 
 const rows = (from: number, n: number) =>
@@ -55,5 +56,16 @@ describe("ChannelPlaylistsTab", () => {
     expect(await screen.findByText("Could not load this channel's playlists.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /try again|retry/i }));
     expect(await screen.findByText("List 0")).toBeTruthy();
+  });
+
+  it("renders the provided catalog, en for a missing key", async () => {
+    mocks.listChannelPlaylists.mockResolvedValue({ playlists: [], total: 0, limit: 20, offset: 0 });
+    render(
+      <I18nProvider locale="fr" messages={{ "channel.playlists.empty.title": "Aucune liste" }}>
+        <ChannelPlaylistsTab handle="ada" name="Ada" />
+      </I18nProvider>,
+    );
+    expect(await screen.findByText("Aucune liste")).toBeTruthy();
+    expect(screen.getByText("This channel has not shared any playlists.")).toBeTruthy();
   });
 });

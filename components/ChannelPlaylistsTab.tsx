@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/components/I18nProvider";
 import { PlaylistIcon } from "@/components/icons";
 import { PlaylistCard } from "@/components/PlaylistCard";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -16,6 +17,7 @@ import { useBrowseAutoLoad } from "@/lib/use-browse-auto-load";
 // and private ones for the owner), so this renders whatever comes back. Paging
 // goes through the shared append seam, like the channel's videos.
 export function ChannelPlaylistsTab({ handle, name }: { handle: string; name: string }) {
+  const t = useT();
   const autoLoad = useBrowseAutoLoad();
   const list = useAppendingList<Playlist>({
     queryKey: `channel-playlists:${handle}`,
@@ -27,26 +29,26 @@ export function ChannelPlaylistsTab({ handle, name }: { handle: string; name: st
   if (list.status === "loading") {
     return (
       <div className="flex justify-center py-12">
-        <Spinner label="Loading playlists" />
+        <Spinner label={t("channel.playlists.loading")} />
       </div>
     );
   }
   if (list.status === "error") {
-    return <ErrorState message="Could not load this channel's playlists." onRetry={list.reload} />;
+    return <ErrorState message={t("channel.playlists.error")} onRetry={list.reload} />;
   }
   if (list.items.length === 0) {
     return (
       <EmptyState
         icon={<PlaylistIcon size={24} />}
-        title="No playlists yet"
-        message="This channel has not shared any playlists."
+        title={t("channel.playlists.empty.title")}
+        message={t("channel.playlists.empty.message")}
       />
     );
   }
   return (
     <div className="flex flex-col gap-5">
       <ul
-        aria-label={`Playlists by ${name}`}
+        aria-label={t("channel.playlists.label", { name })}
         className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
       >
         {list.items.map((pl) => (
@@ -59,7 +61,7 @@ export function ChannelPlaylistsTab({ handle, name }: { handle: string; name: st
         hasMore={list.hasMore}
         autoLoad={autoLoad}
         busy={list.moreStatus === "loading"}
-        error={list.moreStatus === "error" ? "Could not load more playlists." : null}
+        error={list.moreStatus === "error" ? t("channel.playlists.moreError") : null}
         onLoadMore={list.loadMore}
       />
     </div>
