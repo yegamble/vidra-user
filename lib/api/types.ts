@@ -462,6 +462,12 @@ export type BulkRemoveCommentsResponse = Schemas["BulkRemoveCommentsResponse"];
 export type WatchedWord = Schemas["WatchedWord"];
 export type WatchedWordListResponse = Schemas["WatchedWordListResponse"];
 export type CreateWatchedWordRequest = Schemas["CreateWatchedWordRequest"];
+export type WatchedWordList = Schemas["WatchedWordList"];
+export type WatchedWordListsPage = Schemas["WatchedWordListsPage"];
+export type CreateWatchedWordListRequest = Schemas["CreateWatchedWordListRequest"];
+export type UpdateWatchedWordListRequest = Schemas["UpdateWatchedWordListRequest"];
+/** What a list does to a matching comment: record a match, or also hold it for approval. */
+export type WatchedWordListAction = WatchedWordList["action"];
 export type WatchedWordMatch = Schemas["WatchedWordMatch"];
 export type WatchedWordMatchListResponse = Schemas["WatchedWordMatchListResponse"];
 /**

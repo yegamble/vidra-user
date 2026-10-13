@@ -204,6 +204,10 @@ import type {
   SuggestionBanResponse,
   WatchedWord,
   WatchedWordListResponse,
+  WatchedWordList,
+  WatchedWordListsPage,
+  CreateWatchedWordListRequest,
+  UpdateWatchedWordListRequest,
   WatchedWordMatchListResponse,
   WatchedWordMatchStatusFilter,
   ResolveWatchedWordMatchRequest,
@@ -284,6 +288,34 @@ export interface JobRunListParams {
   limit?: number;
   offset?: number;
 }
+
+/**
+ * Named watched-word lists (core 0172) exist at two scopes with the same shape:
+ * `/admin/watched-word-lists` (instance lists; moderator/admin) and
+ * `/me/watched-word-lists` (a creator's own lists, applied to comments on their
+ * videos). One factory so the two can never drift apart.
+ */
+function watchedWordListEndpoints(base: string) {
+  const one = (id: string) => `${base}/${encodeURIComponent(id)}`;
+  return {
+    /** GET — one page of lists, default list first; word_count only (no words). */
+    list: (params: PageParams = {}, signal?: AbortSignal) =>
+      apiRequest<WatchedWordListsPage>(base, { query: pageQuery(params), signal }),
+    /** GET — one list WITH its words (the default list's words are paged elsewhere). */
+    get: (id: string, signal?: AbortSignal) => apiRequest<WatchedWordList>(one(id), { signal }),
+    /** POST — create a list (409 on a name already used in this scope). */
+    create: (body: CreateWatchedWordListRequest) =>
+      apiRequest<WatchedWordList>(base, { method: "POST", body }),
+    /** PATCH — rename / change action; `words` REPLACES the terms when present. */
+    update: (id: string, body: UpdateWatchedWordListRequest) =>
+      apiRequest<WatchedWordList>(one(id), { method: "PATCH", body }),
+    /** DELETE — remove a list and its terms (409 for the default list). */
+    remove: (id: string) => apiRequest<void>(one(id), { method: "DELETE" }),
+  };
+}
+
+export const adminWatchedWordLists = watchedWordListEndpoints("/api/v1/admin/watched-word-lists");
+export const myWatchedWordLists = watchedWordListEndpoints("/api/v1/me/watched-word-lists");
 
 /** Typed wrappers for the public vidra-core read endpoints. */
 export const api = {
