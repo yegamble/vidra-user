@@ -4230,7 +4230,7 @@ export interface paths {
         put?: never;
         /**
          * Sync a blocklist subscription now (admin)
-         * @description Fetches the list and applies it: adds blocks for new entries, removes only blocks this subscription created that the list no longer names. A fetch/parse failure is a 200 with status "error" (the last good state is kept); a list with no usable entries removes nothing. Rate limited per admin (6 per minute). Audited with added/removed counts.
+         * @description Fetches the list and applies it: adds blocks for new entries, removes only blocks this subscription created that the list no longer names. A fetch/parse failure is a 200 with status "error" (the last good state is kept); a list with no usable entries removes nothing. A sync that would remove more than 25 blocks and more than half of the ones the subscription owns is held: status "needs_confirmation", nothing changed; repeat with {"confirm": true} to apply it. Entries naming this instance or a parent domain of it are skipped. Rate limited per admin (6 per minute). Audited with added/removed counts.
          */
         post: operations["syncBlocklistSubscription"];
         delete?: never;
@@ -7655,7 +7655,7 @@ export interface components {
              * @description Outcome of the last attempt. A failed attempt keeps the last good counts.
              * @enum {string}
              */
-            last_status: "never" | "ok" | "not_modified" | "error";
+            last_status: "never" | "ok" | "not_modified" | "error" | "needs_confirmation";
             /** @description A short class message (e.g. "HTTP 500", "address not allowed"), never a raw error. */
             last_error?: string;
             /** Format: date-time */
@@ -7691,8 +7691,12 @@ export interface components {
         };
         BlocklistSyncResult: {
             /** @enum {string} */
-            status: "ok" | "not_modified" | "error";
+            status: "ok" | "not_modified" | "error" | "needs_confirmation";
             error?: string;
+            /** @description Entries skipped because they name this instance or a parent domain. */
+            protected: number;
+            /** @description With needs_confirmation */
+            pending_removals?: number;
             added: number;
             removed: number;
             entries: number;
@@ -23432,7 +23436,13 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": {
+                    confirm?: boolean;
+                };
+            };
+        };
         responses: {
             /** @description The outcome of this sync. */
             200: {

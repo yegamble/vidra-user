@@ -1792,10 +1792,10 @@ export const api = {
     }),
 
   /** POST /api/v1/admin/instances/blocklist-subscriptions/{id}/sync — sync now (admin; 429 when over 6/min). */
-  syncBlocklistSubscription: (id: string) =>
+  syncBlocklistSubscription: (id: string, confirm = false) =>
     apiRequest<BlocklistSyncResult>(
       `/api/v1/admin/instances/blocklist-subscriptions/${encodeURIComponent(id)}/sync`,
-      { method: "POST" },
+      { method: "POST", ...(confirm ? { body: { confirm: true } } : {}) },
     ),
 
   /** GET /api/v1/admin/instances/blocklist-allowlist — domains exempt from every subscription (admin). */

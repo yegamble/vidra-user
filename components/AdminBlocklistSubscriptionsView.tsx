@@ -23,6 +23,8 @@ const FORMATS = [
 
 /** One sentence for the outcome of a sync, for the row's live region. */
 export function syncSummary(r: BlocklistSyncResult): string {
+  if (r.status === "needs_confirmation")
+    return `Held: this list would remove ${r.pending_removals ?? "many"} blocks, so nothing was changed.`;
   if (r.status === "error") return `Sync failed: ${r.error ?? "unknown error"}.`;
   if (r.status === "not_modified") return "Already up to date.";
   const ignored = r.ignored_severity > 0 ? `, ${r.ignored_severity} ignored (silence/limit)` : "";
@@ -172,6 +174,8 @@ function statusBadge(sub: BlocklistSubscription) {
       return <Badge variant="success">Up to date</Badge>;
     case "error":
       return <Badge variant="danger">Last sync failed</Badge>;
+    case "needs_confirmation":
+      return <Badge variant="warning">Held for review</Badge>;
     default:
       return <Badge variant="neutral">Not synced yet</Badge>;
   }
@@ -190,18 +194,21 @@ function SubscriptionRow({
   const [confirming, setConfirming] = useState(false);
   const name = sub.label || sub.url;
 
+  const [held, setHeld] = useState(false);
   const sync = useAsyncAction(
-    async () => {
-      const res = await api.syncBlocklistSubscription(sub.id);
+    async (confirm?: boolean) => {
+      const res = await api.syncBlocklistSubscription(sub.id, confirm === true);
+      setHeld(res.status === "needs_confirmation");
       setMessage(syncSummary(res));
       // Fold the outcome into the row in place; a reload would blank the list
       // and take the outcome message with it.
       const ok = res.status === "ok";
+      const failed = res.status === "error" || res.status === "needs_confirmation";
       onChanged({
         ...sub,
         last_status: res.status,
-        last_error: res.status === "error" ? res.error : undefined,
-        last_synced_at: res.status === "error" ? sub.last_synced_at : new Date().toISOString(),
+        last_error: failed ? res.error : undefined,
+        last_synced_at: failed ? sub.last_synced_at : new Date().toISOString(),
         last_added: ok ? res.added : sub.last_added,
         last_removed: ok ? res.removed : sub.last_removed,
         entry_count: ok ? res.entries : sub.entry_count,
@@ -241,7 +248,7 @@ function SubscriptionRow({
             </span>
             {sub.last_synced_at ? <span>synced {relativeTime(sub.last_synced_at)}</span> : null}
           </div>
-          {sub.last_status === "error" && sub.last_error ? (
+          {(sub.last_status === "error" || sub.last_status === "needs_confirmation") && sub.last_error ? (
             <p className="mt-1 text-[13px] text-danger">{sub.last_error}</p>
           ) : null}
         </div>
@@ -251,7 +258,7 @@ function SubscriptionRow({
             size="sm"
             disabled={busy}
             aria-label={`Sync ${name} now`}
-            onClick={() => void sync.run()}
+            onClick={() => void sync.run(false)}
           >
             {sync.busy ? "Syncing…" : "Sync now"}
           </Button>
@@ -292,6 +299,14 @@ function SubscriptionRow({
       <p role="status" className="text-[13px] text-fg-muted empty:hidden">
         {message}
       </p>
+      {held || sub.last_status === "needs_confirmation" ? (
+        <div className="flex flex-wrap items-center gap-2 text-[13px] text-fg">
+          <span>A list that suddenly drops most of its entries is usually a bad download.</span>
+          <Button size="sm" disabled={busy} onClick={() => void sync.run(true)}>
+            Apply anyway
+          </Button>
+        </div>
+      ) : null}
       {error ? (
         <p role="alert" className="text-xs text-danger">
           {error}

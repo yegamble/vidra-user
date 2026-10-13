@@ -72,7 +72,7 @@ beforeEach(() => {
     mocks[k].mockReset().mockResolvedValue(undefined);
   }
   mocks.syncBlocklistSubscription.mockReset().mockResolvedValue({
-    status: "ok", added: 2, removed: 1, entries: 9, ignored_severity: 4, invalid: 0,
+    status: "ok", added: 2, removed: 1, entries: 9, ignored_severity: 4, invalid: 0, protected: 0,
   });
   mocks.useSession.mockReturnValue({ status: "authed", user: { id: "a1", role: "admin" } });
 });
@@ -136,7 +136,7 @@ describe("AdminBlocklistSubscriptionsView", () => {
     mocks.getBlocklistSubscriptions.mockResolvedValue(subsPage([sub()]));
     render(<AdminBlocklistSubscriptionsView />);
     fireEvent.click(await screen.findByRole("button", { name: "Sync Shared list now" }));
-    await waitFor(() => expect(mocks.syncBlocklistSubscription).toHaveBeenCalledWith(sub().id));
+    await waitFor(() => expect(mocks.syncBlocklistSubscription).toHaveBeenCalledWith(sub().id, false));
     expect(await screen.findByText("Synced: 2 added, 1 removed, 4 ignored (silence/limit).")).toBeTruthy();
     expect(screen.getByText(/13 blocks from this list/)).toBeTruthy();
   });
@@ -181,9 +181,24 @@ describe("AdminBlocklistSubscriptionsView", () => {
   });
 });
 
+describe("held syncs", () => {
+  it("offers Apply anyway and re-syncs with confirm", async () => {
+    mocks.getBlocklistSubscriptions.mockResolvedValue(subsPage([sub()]));
+    mocks.syncBlocklistSubscription
+      .mockResolvedValueOnce({ status: "needs_confirmation", error: "this list would remove 40 of 50 blocks; nothing was changed", pending_removals: 40, added: 0, removed: 0, entries: 5, ignored_severity: 0, invalid: 0, protected: 0 })
+      .mockResolvedValueOnce({ status: "ok", added: 0, removed: 40, entries: 5, ignored_severity: 0, invalid: 0, protected: 0 });
+    render(<AdminBlocklistSubscriptionsView />);
+    fireEvent.click(await screen.findByRole("button", { name: "Sync Shared list now" }));
+    expect(await screen.findByText(/would remove 40 blocks, so nothing was changed/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Apply anyway" }));
+    await waitFor(() => expect(mocks.syncBlocklistSubscription).toHaveBeenLastCalledWith(sub().id, true));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Apply anyway" })).toBeNull());
+  });
+});
+
 describe("syncSummary", () => {
   it("covers every status", () => {
-    expect(syncSummary({ status: "not_modified", added: 0, removed: 0, entries: 0, ignored_severity: 0, invalid: 0 })).toBe("Already up to date.");
-    expect(syncSummary({ status: "error", error: "address not allowed", added: 0, removed: 0, entries: 0, ignored_severity: 0, invalid: 0 })).toBe("Sync failed: address not allowed.");
+    expect(syncSummary({ status: "not_modified", added: 0, removed: 0, entries: 0, ignored_severity: 0, invalid: 0, protected: 0 })).toBe("Already up to date.");
+    expect(syncSummary({ status: "error", error: "address not allowed", added: 0, removed: 0, entries: 0, ignored_severity: 0, invalid: 0, protected: 0 })).toBe("Sync failed: address not allowed.");
   });
 });
