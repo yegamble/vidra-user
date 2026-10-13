@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   blockVideo: vi.fn(),
   getReportMessages: vi.fn(),
   postReportMessage: vi.fn(),
+  replace: vi.fn(),
 }));
 
 vi.mock("@/lib/api", () => ({
@@ -22,7 +23,7 @@ vi.mock("@/lib/api", () => ({
 }));
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ replace: () => {}, push: () => {} }),
+  useRouter: () => ({ replace: mocks.replace, push: () => {} }),
   usePathname: () => "/moderation",
   useSearchParams: () => new URLSearchParams(),
 }));
@@ -41,6 +42,7 @@ const REPORT: Report = {
   reporter: { username: "bob", display_name: "" },
   created_at: "2026-09-06T12:00:00Z",
   moderator_note: "",
+  reasons: [],
 } as Report;
 
 beforeEach(() => {
@@ -154,5 +156,35 @@ describe("ModerationQueue — the report's message thread", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(mocks.postReportMessage).toHaveBeenCalledWith("r-1", "Thanks, looking now"));
     expect(await screen.findByText("Thanks, looking now")).toBeTruthy();
+  });
+});
+
+describe("ModerationQueue — report categories and timestamp", () => {
+  it("shows category chips and a ?t= link to the reported moment", async () => {
+    mocks.getReports.mockResolvedValue({
+      reports: [
+        { ...REPORT, reasons: ["spamOrMisleading", "captions"], start_seconds: 75, end_seconds: 90 },
+      ],
+      total: 1,
+      limit: 20,
+      offset: 0,
+    });
+    const { ModerationQueue } = await import("./ModerationQueue");
+    render(<ModerationQueue />);
+    await screen.findByRole("region", { name: "Report detail" });
+
+    expect(screen.getAllByText("Spam or misleading").length).toBeGreaterThan(0);
+    const at = screen.getByRole("link", { name: "1:15–1:30" });
+    expect(at.getAttribute("href")).toBe("/videos/v-1?t=75");
+  });
+
+  it("filters by category on the server", async () => {
+    const { ModerationQueue } = await import("./ModerationQueue");
+    render(<ModerationQueue />);
+    await screen.findByRole("region", { name: "Report detail" });
+
+    fireEvent.change(screen.getByLabelText("Filter by category"), { target: { value: "privacy" } });
+    // The filter lives in the URL (usePagedList); the server does the narrowing.
+    await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith(expect.stringContaining("reason=privacy"), expect.anything()));
   });
 });

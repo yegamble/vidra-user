@@ -6,10 +6,14 @@ import { useState } from "react";
 import { useSession } from "@/components/auth/AuthProvider";
 import { FlagIcon } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { Textarea } from "@/components/ui/Textarea";
 import { useT } from "@/components/I18nProvider";
 import { api, errorMessage } from "@/lib/api";
+import type { ReportReason } from "@/lib/api";
+import { parseTimestamp, REPORT_REASONS } from "@/lib/report-reasons";
 
 const MAX_REASON_LEN = 2000;
 
@@ -92,17 +96,43 @@ export function ReportDialog({
 }) {
   const t = useT();
   const [reason, setReason] = useState("");
+  // Local video reports only: PeerTube-style reasons + an optional time range.
+  const [reasons, setReasons] = useState<ReportReason[]>([]);
+  const [startAt, setStartAt] = useState("");
+  const [endAt, setEndAt] = useState("");
+  const [rangeError, setRangeError] = useState<string | null>(null);
   const [state, setState] = useState<DialogState>("idle");
   const [error, setError] = useState<string | null>(null);
 
   async function submit() {
     const trimmed = reason.trim();
     if (trimmed === "" || state === "submitting") return;
+    let detail: { reasons?: ReportReason[]; start_seconds?: number; end_seconds?: number } = {};
+    if (kind === "video") {
+      const start = startAt.trim() === "" ? undefined : parseTimestamp(startAt);
+      const end = endAt.trim() === "" ? undefined : parseTimestamp(endAt);
+      if (start === null || end === null) {
+        setRangeError(t("report.timeInvalid"));
+        return;
+      }
+      if (end !== undefined && (start === undefined || end <= start)) {
+        setRangeError(t("report.timeOrder"));
+        return;
+      }
+      detail = {
+        ...(reasons.length > 0 ? { reasons } : {}),
+        ...(start !== undefined ? { start_seconds: start } : {}),
+        ...(end !== undefined ? { end_seconds: end } : {}),
+      };
+    }
+    setRangeError(null);
     setState("submitting");
     setError(null);
     try {
       if (kind === "video") {
-        await api.reportVideo(targetId, trimmed);
+        await (Object.keys(detail).length > 0
+          ? api.reportVideo(targetId, trimmed, detail)
+          : api.reportVideo(targetId, trimmed));
       } else if (kind === "remote_video") {
         await api.reportRemoteVideo(targetId, trimmed);
       } else if (kind === "comment") {
@@ -143,6 +173,51 @@ export function ReportDialog({
             void submit();
           }}
         >
+          {kind === "video" ? (
+            <>
+              <fieldset className="flex flex-col gap-1.5">
+                <legend className="mb-1 text-sm font-medium text-fg">
+                  {t("report.categoriesLegend")}
+                </legend>
+                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                  {REPORT_REASONS.map((r) => (
+                    <Checkbox
+                      key={r.value}
+                      label={r.label}
+                      checked={reasons.includes(r.value)}
+                      onChange={(e) =>
+                        setReasons((cur) =>
+                          e.target.checked ? [...cur, r.value] : cur.filter((x) => x !== r.value),
+                        )
+                      }
+                    />
+                  ))}
+                </div>
+              </fieldset>
+              <fieldset className="flex flex-col gap-1.5">
+                <legend className="mb-1 text-sm font-medium text-fg">
+                  {t("report.timeLegend")}
+                </legend>
+                <div className="grid grid-cols-2 gap-2">
+                  <Input
+                    label={t("report.timeStart")}
+                    placeholder="0:30"
+                    inputMode="numeric"
+                    value={startAt}
+                    onChange={(e) => setStartAt(e.target.value)}
+                  />
+                  <Input
+                    label={t("report.timeEnd")}
+                    placeholder="1:15"
+                    inputMode="numeric"
+                    value={endAt}
+                    onChange={(e) => setEndAt(e.target.value)}
+                    error={rangeError ?? undefined}
+                  />
+                </div>
+              </fieldset>
+            </>
+          ) : null}
           <Textarea
             label={t("report.reasonLabel")}
             placeholder={t("report.reasonPlaceholder")}

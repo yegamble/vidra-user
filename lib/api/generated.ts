@@ -8106,8 +8106,16 @@ export interface components {
             /** @description The playlist's video ids in the desired order. Must be exactly the playlist's current items — each id once, none missing or extra. */
             video_ids: string[];
         };
+        /** @enum {string} */
+        ReportReason: "violentOrRepulsive" | "hatefulOrAbusive" | "spamOrMisleading" | "privacy" | "rights" | "serverRules" | "thumbnails" | "captions";
+        /** @description `reasons`, `start_seconds` and `end_seconds` apply to VIDEO reports only (422 on a comment or account report). `end_seconds` needs `start_seconds` and must exceed it; both must be within the video's duration when known. */
         CreateReportRequest: {
             reason: string;
+            reasons?: components["schemas"]["ReportReason"][];
+            /** Format: int32 */
+            start_seconds?: number;
+            /** Format: int32 */
+            end_seconds?: number;
         };
         BulkRemoveCommentsRequest: {
             /** @description A local username, or a remote actor URL (http:// or https://). */
@@ -8188,6 +8196,18 @@ export interface components {
             reason: string;
             /** @enum {string} */
             status: "open" | "accepted" | "rejected";
+            /** @description PeerTube-style predefined reasons (never null; empty when none). */
+            reasons: components["schemas"]["ReportReason"][];
+            /**
+             * Format: int32
+             * @description Start of the reported video range, in seconds (video reports only).
+             */
+            start_seconds?: number;
+            /**
+             * Format: int32
+             * @description End of the reported video range; omitted for a single moment.
+             */
+            end_seconds?: number;
             moderator_note: string;
             /** Format: date-time */
             created_at: string;
@@ -8267,6 +8287,18 @@ export interface components {
             status: "open" | "accepted" | "rejected";
             /** @description The caller's own words when filing. */
             reason: string;
+            /** @description PeerTube-style predefined reasons (never null; empty when none). */
+            reasons: components["schemas"]["ReportReason"][];
+            /**
+             * Format: int32
+             * @description Start of the reported video range, in seconds (video reports only).
+             */
+            start_seconds?: number;
+            /**
+             * Format: int32
+             * @description End of the reported video range; omitted for a single moment.
+             */
+            end_seconds?: number;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -20746,6 +20778,8 @@ export interface operations {
             query?: {
                 /** @description Which half of the queue to return. `open` is unresolved; `resolved` is everything already accepted or rejected; `all` (the default, and what an absent parameter means) is both. An unrecognised value is a 400 — it previously meant "all", so `?status=resolved` silently returned the entire queue. */
                 status?: "open" | "resolved" | "all";
+                /** @description Only reports carrying this predefined reason; `total` counts the same filter. An unrecognised value is a 400. */
+                reason?: components["schemas"]["ReportReason"];
                 /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
                 limit?: components["parameters"]["PageLimit"];
                 /** @description Rows to skip. Negative values are clamped to 0. */
