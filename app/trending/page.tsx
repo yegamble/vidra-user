@@ -1,4 +1,5 @@
 import { FeedFilters } from "@/components/FeedFilters";
+import { FeedMoreSorts } from "@/components/FeedMoreSorts";
 import { FeedScopeToggle } from "@/components/FeedScopeToggle";
 import { FeedSortTabs } from "@/components/FeedSortTabs";
 import { LiveNowRail } from "@/components/LiveNowRail";
@@ -66,6 +67,7 @@ export default async function TrendingPage({
       </section>
       <div className="scrollbar-none mb-8 flex flex-nowrap items-center gap-2.5 overflow-x-auto sm:flex-wrap sm:overflow-x-visible">
         <FeedScopeToggle active={scope} sort="trending" filters={filters} urlDefaults={urlDefaults} />
+        <FeedMoreSorts active="trending" filters={filters} urlDefaults={urlDefaults} />
         <FeedFilters sort="trending" filters={filters} urlDefaults={urlDefaults} />
       </div>
       <VideoFeed key={feedKey} sort="trending" filters={filters} />

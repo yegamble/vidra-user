@@ -356,6 +356,10 @@ export function MyVideosManager({
               channels={channels}
               replaceEnabled={replaceEnabled}
               replaceAccept={videoAcceptAttr(additionalExts)}
+              // Every row here is in one of the caller's OWN channels (GET
+              // /me/videos, or a channel list scoped to an own channel), so the
+              // owner-only transfer (core 0165) is always theirs to offer.
+              canTransfer
               leading={
                 <input
                   type="checkbox"

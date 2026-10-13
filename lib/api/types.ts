@@ -535,6 +535,10 @@ export type CaptionJob = Schemas["CaptionJob"];
 export type CaptionJobResponse = Schemas["CaptionJobResponse"];
 export type AutoCaptionRequest = Schemas["AutoCaptionRequest"];
 
+// --- Video ownership changes (core 0165) -----------------------------------
+export type VideoOwnershipChange = Schemas["VideoOwnershipChange"];
+export type VideoOwnershipChangeListResponse = Schemas["VideoOwnershipChangeListResponse"];
+
 // --- Mutes / blocks ---------------------------------------------------------
 export type MutedAccount = Schemas["MutedAccount"];
 export type MutedAccountListResponse = Schemas["MutedAccountListResponse"];

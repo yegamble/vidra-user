@@ -22,8 +22,16 @@ vi.mock("@/lib/api", async () => ({
   api: mocks,
 }));
 vi.mock("./VideoRow", () => ({
-  VideoRow: ({ video, leading }: { video: { title: string }; leading?: React.ReactNode }) => (
-    <li>
+  VideoRow: ({
+    video,
+    leading,
+    canTransfer,
+  }: {
+    video: { title: string };
+    leading?: React.ReactNode;
+    canTransfer?: boolean;
+  }) => (
+    <li data-transfer={canTransfer ? "yes" : "no"}>
       {leading}
       {video.title}
     </li>
@@ -239,5 +247,16 @@ describe("MyVideosManager bulk actions", () => {
     await screen.findByText("Added 2 of 3 to Faves.");
     expect(mocks.addToPlaylist).toHaveBeenCalledTimes(3);
     expect(within(screen.getByRole("list", { name: "Videos that could not be added" })).getByText(/Clip 1/)).toBeTruthy();
+  });
+});
+
+// The manager lists only the caller's OWN channels, so every row may offer the
+// owner-only ownership transfer (core 0165); the per-channel section used for a
+// channel the caller merely edits never does.
+describe("MyVideosManager transfer", () => {
+  it("offers the transfer on every row", async () => {
+    render(<MyVideosManager config={null} channels={channels} defaultChannel={null} />);
+    const row = (await screen.findByText("Clip 0")).closest("li");
+    expect(row?.getAttribute("data-transfer")).toBe("yes");
   });
 });
