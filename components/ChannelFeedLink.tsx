@@ -1,3 +1,4 @@
+import { useT } from "@/components/I18nProvider";
 import { RssIcon } from "@/components/icons";
 import { buttonClasses } from "@/components/ui/Button";
 import { apiBaseUrl } from "@/lib/config";
@@ -8,13 +9,14 @@ export function podcastFeedUrl(handle: string): string {
 }
 
 export function ChannelFeedLink({ handle, name }: { handle: string; name: string }) {
+  const t = useT();
   return (
     <a
       href={podcastFeedUrl(handle)}
       target="_blank"
       rel="noopener noreferrer"
-      aria-label={`Podcast feed for ${name}`}
-      title="Podcast feed (RSS)"
+      aria-label={t("panels.feed.label", { name })}
+      title={t("panels.feed.title")}
       className={buttonClasses("ghost", "sm")}
     >
       <RssIcon size={18} />

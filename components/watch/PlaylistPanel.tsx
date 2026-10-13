@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
+import { useT } from "@/components/I18nProvider";
 import { ChevronDownIcon, PlaylistIcon, RepeatIcon, ShuffleIcon } from "@/components/icons";
 import { ListTail } from "@/components/ui/ListTail";
 import { videoThumbnailUrl } from "@/lib/api";
@@ -21,6 +22,7 @@ type Queue = ReturnType<typeof usePlaylistNext>;
 // a collapsible sheet (collapsed by default), from `md` up it is always open.
 export function PlaylistPanel({ queue, videoId }: { queue: Queue; videoId: string }) {
   const { list, meta, pos, total, loop, shuffle } = queue;
+  const t = useT();
   const { viewerId } = useSettledSession();
   const autoLoad = useBrowseAutoLoad();
   const [open, setOpen] = useState(false);
@@ -36,7 +38,7 @@ export function PlaylistPanel({ queue, videoId }: { queue: Queue; videoId: strin
   }, [videoId, list.items.length, open]);
 
   return (
-    <section aria-label="Playlist" data-testid="playlist-panel" className="overflow-hidden rounded-2xl border border-border-subtle bg-surface">
+    <section aria-label={t("panels.playlist.label")} data-testid="playlist-panel" className="overflow-hidden rounded-2xl border border-border-subtle bg-surface">
       <div className="flex items-center gap-2 px-4 py-3">
         <button
           type="button"
@@ -46,17 +48,17 @@ export function PlaylistPanel({ queue, videoId }: { queue: Queue; videoId: strin
         >
           <PlaylistIcon size={18} className="shrink-0 text-fg-muted" />
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-[14px] font-bold">{meta?.title ?? "Playlist"}</span>
+            <span className="block truncate text-[14px] font-bold">{meta?.title ?? t("panels.playlist.label")}</span>
             <span className="block truncate text-xs tabular-nums text-fg-muted">
-              {[viewerId && meta?.owner_id === viewerId ? "Your playlist" : null, meta?.visibility, pos >= 0 && total ? `${pos + 1} / ${total}` : total ? `${total} videos` : null]
+              {[viewerId && meta?.owner_id === viewerId ? t("panels.playlist.yours") : null, meta?.visibility, pos >= 0 && total ? t("panels.playlist.position", { current: pos + 1, total }) : total ? t("panels.playlist.videos", { total }) : null]
                 .filter(Boolean)
                 .join(" · ")}
             </span>
           </span>
           <ChevronDownIcon size={18} className={cn("shrink-0 transition-transform md:hidden", open ? "rotate-180" : null)} />
         </button>
-        <Toggle label="Loop playlist" on={loop} onClick={() => queue.setLoop(!loop)} icon={<RepeatIcon size={18} />} />
-        <Toggle label="Shuffle playlist" on={shuffle} onClick={() => queue.setShuffle(!shuffle)} icon={<ShuffleIcon size={18} />} />
+        <Toggle label={t("panels.playlist.loop")} on={loop} onClick={() => queue.setLoop(!loop)} icon={<RepeatIcon size={18} />} />
+        <Toggle label={t("panels.playlist.shuffle")} on={shuffle} onClick={() => queue.setShuffle(!shuffle)} icon={<ShuffleIcon size={18} />} />
       </div>
       <div className={cn("border-t border-border-subtle", open ? "block" : "hidden md:block")}>
         <div ref={scroller} className="relative max-h-[360px] overflow-y-auto">
@@ -91,7 +93,7 @@ export function PlaylistPanel({ queue, videoId }: { queue: Queue; videoId: strin
             hasMore={list.hasMore}
             autoLoad={autoLoad}
             busy={list.moreStatus === "loading"}
-            error={list.moreStatus === "error" ? "Could not load more videos." : null}
+            error={list.moreStatus === "error" ? t("panels.playlist.moreError") : null}
             onLoadMore={list.loadMore}
           />
         </div>

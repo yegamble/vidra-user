@@ -65,6 +65,9 @@ import type {
   ChannelSyncResponse,
   CreateChannelSyncRequest,
   FederationFollowerRequestListResponse,
+  InstanceFollow,
+  InstanceFollowListResponse,
+  InstanceFollowState,
   FollowedChannelsResponse,
   FollowNotificationsResponse,
   NotificationSetting,
@@ -107,6 +110,7 @@ import type {
   UploadAttachmentResponse,
   MutedAccountListResponse,
   MutedInstanceListResponse,
+  VideoOwnershipChangeListResponse,
   BlockInstanceRequest,
   BlockedInstanceListResponse,
   CreateRemoteFollowRequest,
@@ -1477,6 +1481,48 @@ export const api = {
       method: "DELETE",
     }),
 
+  /**
+   * GET /api/v1/me/video-ownership-changes — the videos other local users
+   * offered the caller, newest first, any status (auth).
+   */
+  getVideoOwnershipChanges: (params: PageParams = {}, signal?: AbortSignal) =>
+    apiRequest<VideoOwnershipChangeListResponse>("/api/v1/me/video-ownership-changes", {
+      query: pageQuery(params),
+      signal,
+    }),
+
+  /**
+   * POST /api/v1/videos/{id}/give-ownership — offer the caller's video to
+   * another local user, who must accept it (204; owner only).
+   */
+  giveVideoOwnership: (videoId: string, username: string) =>
+    apiRequest<void>(`/api/v1/videos/${encodeURIComponent(videoId)}/give-ownership`, {
+      method: "POST",
+      body: { username },
+    }),
+
+  /**
+   * DELETE /api/v1/videos/{id}/give-ownership — withdraw the caller's pending
+   * offer of the video (204; 404 when there is none).
+   */
+  cancelVideoOwnership: (videoId: string) =>
+    apiRequest<void>(`/api/v1/videos/${encodeURIComponent(videoId)}/give-ownership`, {
+      method: "DELETE",
+    }),
+
+  /** POST …/{id}/accept — take the offered video into one of the caller's channels (204). */
+  acceptVideoOwnershipChange: (id: string, channelId: string) =>
+    apiRequest<void>(`/api/v1/me/video-ownership-changes/${encodeURIComponent(id)}/accept`, {
+      method: "POST",
+      body: { channel_id: channelId },
+    }),
+
+  /** POST …/{id}/refuse — decline an offered video; it stays with its owner (204). */
+  refuseVideoOwnershipChange: (id: string) =>
+    apiRequest<void>(`/api/v1/me/video-ownership-changes/${encodeURIComponent(id)}/refuse`, {
+      method: "POST",
+    }),
+
   /** GET /api/v1/me/mutes/accounts — the accounts the caller has muted, newest first (auth). */
   getMutedAccounts: (params: PageParams = {}, signal?: AbortSignal) =>
     apiRequest<MutedAccountListResponse>("/api/v1/me/mutes/accounts", {
@@ -2484,6 +2530,65 @@ export const api = {
       `/api/v1/admin/federation/follower-requests/${encodeURIComponent(id)}/reject`,
       { method: "POST" },
     ),
+
+  /**
+   * GET /api/v1/admin/federation/instance-followers — remote instances that
+   * follow this instance's actor, newest first, optionally one state (admin).
+   */
+  getInstanceFollowers: (
+    params: PageParams & { state?: InstanceFollowState } = {},
+    signal?: AbortSignal,
+  ) =>
+    apiRequest<InstanceFollowListResponse>("/api/v1/admin/federation/instance-followers", {
+      query: { state: params.state, ...pageQuery(params) },
+      signal,
+    }),
+
+  /** POST …/instance-followers/{id}/accept — accept a pending instance follower (admin, 204). */
+  acceptInstanceFollower: (id: string) =>
+    apiRequest<void>(
+      `/api/v1/admin/federation/instance-followers/${encodeURIComponent(id)}/accept`,
+      { method: "POST" },
+    ),
+
+  /** POST …/instance-followers/{id}/reject — reject an instance follower; it stays rejected (admin, 204). */
+  rejectInstanceFollower: (id: string) =>
+    apiRequest<void>(
+      `/api/v1/admin/federation/instance-followers/${encodeURIComponent(id)}/reject`,
+      { method: "POST" },
+    ),
+
+  /** DELETE …/instance-followers/{id} — remove an instance follower in any state (admin, 204). */
+  removeInstanceFollower: (id: string) =>
+    apiRequest<void>(`/api/v1/admin/federation/instance-followers/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
+
+  /** GET /api/v1/admin/federation/instance-following — instances this one follows (admin). */
+  getInstanceFollowing: (
+    params: PageParams & { state?: InstanceFollowState } = {},
+    signal?: AbortSignal,
+  ) =>
+    apiRequest<InstanceFollowListResponse>("/api/v1/admin/federation/instance-following", {
+      query: { state: params.state, ...pageQuery(params) },
+      signal,
+    }),
+
+  /**
+   * POST /api/v1/admin/federation/instance-following — follow a remote instance
+   * by host as this instance's actor (admin; 201, pending until it Accepts).
+   */
+  followInstance: (host: string) =>
+    apiRequest<InstanceFollow>("/api/v1/admin/federation/instance-following", {
+      method: "POST",
+      body: { host },
+    }),
+
+  /** DELETE …/instance-following/{id} — stop following a remote instance (admin, 204). */
+  unfollowInstance: (id: string) =>
+    apiRequest<void>(`/api/v1/admin/federation/instance-following/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
 
   /** GET /api/v1/admin/audit-log — the security audit trail, newest first (admin). */
   getAuditLog: (
