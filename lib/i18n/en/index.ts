@@ -13,6 +13,7 @@ import { notifications } from "./notifications";
 import { report } from "./report";
 import { search } from "./search";
 import { state } from "./state";
+import { studio } from "./studio";
 import { theme } from "./theme";
 import { watch } from "./watch";
 
@@ -28,7 +29,7 @@ import { watch } from "./watch";
  * Values are plain text. `{name}` placeholders become `t()`'s typed vars; a
  * plural is an object of CLDR forms (`one`, `other`, …) picked by `count`.
  */
-export const EN_NAMESPACES = { a11y, account, auth, channel, common, create, header, home, nav, notifications, report, search, state, theme, watch };
+export const EN_NAMESPACES = { a11y, account, auth, channel, common, create, header, home, nav, notifications, report, search, state, studio, theme, watch };
 
 export const en = {
   ...a11y,
@@ -43,7 +44,9 @@ export const en = {
   ...notifications,
   ...report,
   ...search,
-  ...state,
+    ...state,
+  ...studio,
+
   ...theme,
   ...watch,
 } as const satisfies Record<string, Message>;
