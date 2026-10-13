@@ -1,0 +1,38 @@
+export const channel = {
+  // Channel page (ChannelView, its sections and states).
+  "channel.loading": "Loading channel",
+  "channel.notFound.title": "Channel not found",
+  "channel.notFound.message": "No channel @{handle} exists.",
+  "channel.error.load": "Could not load this channel.",
+  // `{count}` is passed pre-formatted (compact, e.g. "1.2K"); the plural form is chosen by `plural`.
+  "channel.stats": "@{handle} · {followers} · {videos}",
+  "channel.followers": { one: "{count} follower", other: "{count} followers" },
+  "channel.videoCount": { one: "{count} video", other: "{count} videos" },
+  "channel.sections.label": "Channel sections",
+  "channel.section.videos": "Videos",
+  "channel.section.playlists": "Playlists",
+  "channel.section.about": "About",
+  "channel.sort.label": "Sort videos",
+  "channel.sort.latest": "Latest",
+  "channel.sort.oldest": "Oldest",
+  "channel.hidden.title": "Videos hidden",
+  "channel.hidden.blocked":
+    "You blocked this account, so its videos are hidden from you. Unblock it from the menu above to see them again.",
+  "channel.hidden.muted":
+    "You muted this account, so its videos are hidden from you. Unmute it from the menu above to see them again.",
+  "channel.videos.error": "Could not load this channel's videos.",
+  "channel.videos.empty.title": "No videos yet",
+  "channel.videos.empty.message": "This channel has not published anything.",
+  "channel.videos.loading": "Loading videos",
+  "channel.videos.label": "Videos by {name}",
+  "channel.videos.moreError": "Could not load more videos.",
+  "channel.about.joined": "Joined",
+  "channel.about.followers": "Followers",
+  "channel.about.videos": "Videos",
+  "channel.playlists.loading": "Loading playlists",
+  "channel.playlists.error": "Could not load this channel's playlists.",
+  "channel.playlists.empty.title": "No playlists yet",
+  "channel.playlists.empty.message": "This channel has not shared any playlists.",
+  "channel.playlists.label": "Playlists by {name}",
+  "channel.playlists.moreError": "Could not load more playlists.",
+} as const;

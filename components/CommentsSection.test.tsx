@@ -68,6 +68,7 @@ vi.mock("@/lib/api", () => ({
 
 import { setInstanceFeaturesForTests } from "@/lib/instance-features";
 
+import { I18nProvider } from "./I18nProvider";
 import { CommentsSection } from "./CommentsSection";
 
 function features(overrides: Record<string, unknown> = {}) {
@@ -110,6 +111,23 @@ beforeEach(() => {
   e2ee.available = false;
   muteAccount.mockResolvedValue(undefined);
   blockUser.mockResolvedValue(undefined);
+});
+
+describe("CommentsSection catalog", () => {
+  it("renders the provided catalog, en for a missing key, with the reply plural", async () => {
+    resolveComments([
+      mk("c1", { body: "top" }),
+      mk("c2", { parent_id: "c1", body: "r1" }),
+      mk("c3", { parent_id: "c1", body: "r2" }),
+    ]);
+    render(
+      <I18nProvider locale="fr" messages={{ "comments.reply": "Répondre" }}>
+        <CommentsSection videoId="v1" />
+      </I18nProvider>,
+    );
+    expect(await screen.findByRole("button", { name: "Répondre" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "View 2 replies" })).toBeTruthy();
+  });
 });
 
 describe("CommentsSection reply attribution", () => {

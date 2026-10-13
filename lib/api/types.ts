@@ -342,6 +342,9 @@ export type RejectRegistrationRequest = Schemas["RejectRegistrationRequest"];
 export type FederationFollowerRequest = Schemas["FederationFollowerRequest"];
 export type FederationFollowerRequestListResponse =
   Schemas["FederationFollowerRequestListResponse"];
+export type InstanceFollow = Schemas["InstanceFollow"];
+export type InstanceFollowState = InstanceFollow["state"];
+export type InstanceFollowListResponse = Schemas["InstanceFollowListResponse"];
 export type User = Schemas["User"];
 export type PublicUserProfile = Schemas["PublicUserProfile"];
 export type ProfileImage = Schemas["ProfileImage"];
@@ -421,6 +424,7 @@ export type CreateVideoRequest = Schemas["CreateVideoRequest"];
 
 // --- Reports / moderation ---------------------------------------------------
 export type CreateReportRequest = Schemas["CreateReportRequest"];
+export type ReportReason = Schemas["ReportReason"];
 export type ReportTargetType = NonNullable<Schemas["Report"]["target_type"]>;
 export type ReportStatus = NonNullable<Schemas["Report"]["status"]>;
 export type ReportReporter = Schemas["ReportReporter"];
@@ -458,6 +462,12 @@ export type BulkRemoveCommentsResponse = Schemas["BulkRemoveCommentsResponse"];
 export type WatchedWord = Schemas["WatchedWord"];
 export type WatchedWordListResponse = Schemas["WatchedWordListResponse"];
 export type CreateWatchedWordRequest = Schemas["CreateWatchedWordRequest"];
+export type WatchedWordList = Schemas["WatchedWordList"];
+export type WatchedWordListsPage = Schemas["WatchedWordListsPage"];
+export type CreateWatchedWordListRequest = Schemas["CreateWatchedWordListRequest"];
+export type UpdateWatchedWordListRequest = Schemas["UpdateWatchedWordListRequest"];
+/** What a list does to a matching comment: record a match, or also hold it for approval. */
+export type WatchedWordListAction = WatchedWordList["action"];
 export type WatchedWordMatch = Schemas["WatchedWordMatch"];
 export type WatchedWordMatchListResponse = Schemas["WatchedWordMatchListResponse"];
 /**
@@ -517,6 +527,9 @@ export type LiveTerminationResult = Schemas["LiveTerminationResult"];
 // server-side yet). Distinct from LiveStream (the owner/watch metadata).
 export type LiveStreamCard = Schemas["LiveStreamCard"];
 export type LivePublicListResponse = Schemas["LivePublicListResponse"];
+// The public "Upcoming" listing: PUBLIC, not-yet-live streams with a planned start.
+export type LiveStreamUpcomingCard = Schemas["LiveStreamUpcomingCard"];
+export type LiveUpcomingListResponse = Schemas["LiveUpcomingListResponse"];
 
 // --- Comments ---------------------------------------------------------------
 export type Comment = Schemas["Comment"];
@@ -534,6 +547,10 @@ export type CaptionJobState = NonNullable<Schemas["CaptionJob"]["state"]>;
 export type CaptionJob = Schemas["CaptionJob"];
 export type CaptionJobResponse = Schemas["CaptionJobResponse"];
 export type AutoCaptionRequest = Schemas["AutoCaptionRequest"];
+
+// --- Video ownership changes (core 0165) -----------------------------------
+export type VideoOwnershipChange = Schemas["VideoOwnershipChange"];
+export type VideoOwnershipChangeListResponse = Schemas["VideoOwnershipChangeListResponse"];
 
 // --- Mutes / blocks ---------------------------------------------------------
 export type MutedAccount = Schemas["MutedAccount"];

@@ -13,6 +13,7 @@ import {
 
 import { api } from "@/lib/api";
 import type { Channel } from "@/lib/api";
+import { collectPages } from "@/lib/collect-pages";
 
 // The persisted "which channel is the studio scoped to" selection. The studio is
 // scoped to ONE current channel (YouTube model); this survives reloads and tab
@@ -75,10 +76,18 @@ export function StudioProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const controller = new AbortController();
-    api
-      .getMyChannels(controller.signal)
-      .then((res) => {
-        const list = res.channels;
+    // EVERY page: a caller with more channels than the server's first page
+    // could otherwise never pick (or receive a transfer into) the rest. The
+    // first page is asked for exactly as before — no window — and only the
+    // remainder by limit/offset.
+    collectPages(
+      (w) =>
+        api
+          .getMyChannels(controller.signal, w.offset === 0 ? undefined : w)
+          .then((res) => ({ items: res.channels, total: res.total })),
+      { signal: controller.signal },
+    )
+      .then((list) => {
         setChannels(list);
         setStatus("ready");
         // Resolve the current handle: keep the existing selection if it still
