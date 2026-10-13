@@ -1925,7 +1925,7 @@ export interface paths {
         put?: never;
         /**
          * Anonymous watch-time beacon
-         * @description One periodic playback sample (about every 10 s while playing). Folded into the video's daily aggregates; no IP address, User-Agent, session or viewer id is stored. Device class and OS family are bucketed from the User-Agent server-side and the raw value is discarded. Rate limited per client; the owner's own plays are ignored. Always 204 on success.
+         * @description One periodic playback sample (about every 10 s while playing). Folded into the video's daily aggregates; no IP address, User-Agent, session or viewer id is stored. Device class and OS family are bucketed from the User-Agent server-side and the raw value is discarded. Rate limited per client and video; the owner's own plays are ignored; a play may be marked started once per client per 10 minutes. 204 on success, 404 for a video that is not published or visible.
          */
         post: operations["recordVideoPlayback"];
         delete?: never;
@@ -7253,7 +7253,7 @@ export interface components {
         PlaybackBeaconRequest: {
             /** @description Playhead position at sample time. */
             position_seconds: number;
-            /** @description Seconds actually played since the previous sample. */
+            /** @description Seconds actually played since the previous sample (heartbeat is 10 s). */
             watched_seconds: number;
             /** @description True on the first sample of a play. */
             started?: boolean;

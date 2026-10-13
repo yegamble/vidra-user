@@ -2150,10 +2150,11 @@ export const api = {
    * POST /api/v1/videos/{id}/playback — anonymous watch-time sample (about every
    * 10 s of playback). Carries no identifier; best-effort, callers swallow errors.
    */
-  recordPlaybackBeacon: (id: string, body: PlaybackBeaconRequest) =>
+  recordPlaybackBeacon: (id: string, body: PlaybackBeaconRequest, opts?: { keepalive?: boolean }) =>
     apiRequest<void>(`/api/v1/videos/${encodeURIComponent(id)}/playback`, {
       method: "POST",
       body,
+      keepalive: opts?.keepalive,
     }),
 
   /** DELETE /api/v1/me/history/{id} — remove one video from history (auth, idempotent). */
