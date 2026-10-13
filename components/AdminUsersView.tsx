@@ -51,6 +51,7 @@ type UserPatch = {
   email_verified?: boolean;
   bypass_quarantine?: boolean;
   storage_quota_bytes?: number | null;
+  daily_quota_bytes?: number | null;
 };
 
 /**
@@ -1052,6 +1053,15 @@ function UserDetail({
                 onSave={save}
                 boxed
               />
+              <QuotaCard
+                kind="daily"
+                user={user}
+                used={user.daily_used_bytes ?? 0}
+                quota={user.daily_quota_bytes ?? null}
+                saving={saving}
+                onSave={save}
+                boxed
+              />
 
               <FlagToggles user={user} saving={saving} onSave={save} />
             </>
@@ -1289,6 +1299,14 @@ function UserRow({
             saving={saving}
             onSave={save}
           />
+          <QuotaCard
+            kind="daily"
+            user={user}
+            used={user.daily_used_bytes ?? 0}
+            quota={user.daily_quota_bytes ?? null}
+            saving={saving}
+            onSave={save}
+          />
 
           <FlagToggles user={user} saving={saving} onSave={save} />
         </>
@@ -1394,6 +1412,10 @@ function UserRow({
 // unlimited, null = reset to the instance default). `boxed` gives it the
 // standalone card fill used on the desktop detail (vs the inset border on the
 // mobile card, where it already sits inside a surface-muted card).
+//
+// `kind="daily"` reuses the same card for the per-user rolling-24h upload quota
+// (PeerTube videoQuotaDaily): same tri-state PATCH on daily_quota_bytes, with
+// "used" being the trailing-24h upload ledger rather than stored bytes.
 function QuotaCard({
   user,
   used,
@@ -1401,14 +1423,20 @@ function QuotaCard({
   saving,
   onSave,
   boxed = false,
+  kind = "storage",
 }: {
   user: AdminUser;
   used: number;
   quota: number | null;
   saving: boolean;
-  onSave: (patch: { storage_quota_bytes: number | null }) => Promise<void>;
+  onSave: (patch: UserPatch) => Promise<void>;
   boxed?: boolean;
+  kind?: "storage" | "daily";
 }) {
+  const daily = kind === "daily";
+  const field = daily ? "daily_quota_bytes" : "storage_quota_bytes";
+  const noun = daily ? "daily upload quota" : "storage quota";
+  const title = daily ? "Daily upload quota" : "Storage quota";
   const [editing, setEditing] = useState(false);
   const [gb, setGb] = useState("");
 
@@ -1426,7 +1454,7 @@ function QuotaCard({
   const submit = useCallback(async () => {
     const value = Number(gb);
     if (!Number.isFinite(value) || value < 0) return;
-    await onSave({ storage_quota_bytes: Math.round(value * GIB) });
+    await onSave({ [field]: Math.round(value * GIB) });
     setEditing(false);
     setGb("");
   }, [gb, onSave]);
@@ -1440,7 +1468,7 @@ function QuotaCard({
       )}
     >
       <div className="flex items-center justify-between gap-3 text-[13px]">
-        <span className="font-semibold text-fg">Storage quota</span>
+        <span className="font-semibold text-fg">{title}</span>
         <span className="tabular-nums text-fg-muted">
           {rightLabel}
           {overridden ? (
@@ -1464,7 +1492,7 @@ function QuotaCard({
               min={0}
               step="0.1"
               inputMode="decimal"
-              aria-label={`Storage quota in GB for ${user.username}`}
+              aria-label={`${daily ? "Daily upload quota" : "Storage quota"} in GB for ${user.username}`}
               value={gb}
               onChange={(e) => setGb(e.target.value)}
               className="focus-ring w-24 rounded-lg border border-border bg-surface px-2.5 py-1 text-sm tabular-nums text-fg"
@@ -1474,7 +1502,7 @@ function QuotaCard({
           <Button
             variant="primary"
             size="sm"
-            aria-label={`Save storage quota for ${user.username}`}
+            aria-label={`Save ${noun} for ${user.username}`}
             disabled={saving || gb.trim() === ""}
             onClick={() => void submit()}
           >
@@ -1497,22 +1525,22 @@ function QuotaCard({
           <Button
             variant="tonal"
             size="sm"
-            aria-label={`Change storage quota for ${user.username}`}
+            aria-label={`Change ${noun} for ${user.username}`}
             disabled={saving}
             onClick={() => {
               setEditing(true);
               setGb(finite ? String(Math.round((quota / GIB) * 10) / 10) : "");
             }}
           >
-            Change quota
+            {daily ? "Change daily quota" : "Change quota"}
           </Button>
           {overridden ? (
             <Button
               variant="secondary"
               size="sm"
-              aria-label={`Reset ${user.username} to the instance default quota`}
+              aria-label={`Reset ${user.username} to the instance default${daily ? " daily upload" : ""} quota`}
               disabled={saving}
-              onClick={() => void onSave({ storage_quota_bytes: null })}
+              onClick={() => void onSave({ [field]: null })}
             >
               Reset to default
             </Button>

@@ -3293,12 +3293,12 @@ export interface paths {
         };
         /**
          * Get the caller's content preferences
-         * @description The signed-in viewer's per-flag sensitive-content policy overrides, layered on their own sensitive_content_policy (else the instance policy) and their preferred feed languages. A flag with no entry inherits that base policy. Always 200.
+         * @description The signed-in viewer's per-flag sensitive-content policy overrides, layered on their own sensitive_content_policy (else the instance policy). A flag with no entry inherits that base policy. Always 200.
          */
         get: operations["getContentPreferences"];
         /**
-         * Update the caller's content preferences
-         * @description Merge-update: sensitive_flag_policies replaces the overrides wholesale (a flag set to an empty string, or omitted, inherits the base policy) and preferred_languages replaces the language list; an omitted field is kept. Unknown flag, policy or language, or more than 10 languages -> 400.
+         * Replace the caller's per-flag sensitive policies
+         * @description Replaces sensitive_flag_policies wholesale. A flag set to an empty string (or omitted) inherits the base policy. Unknown flag or policy -> 400.
          */
         put: operations["updateContentPreferences"];
         post?: never;
@@ -8369,21 +8369,10 @@ export interface components {
          */
         SensitiveFlag: "violent" | "shocking" | "sex";
         ContentPreferences: {
-            /** @description Per-flag viewer policy overrides. Keys are SensitiveFlag values; each value is hide, warn, blur or display. A flag with no entry inherits the viewer's base policy. */
+            /** @description Per-flag viewer policy overrides. Keys are SensitiveFlag values; each value is hide, warn, blur or display (empty string = inherit). */
             sensitive_flag_policies: {
-                [key: string]: "hide" | "warn" | "blur" | "display";
-            };
-            /** @description Language ids (GET /videos/config) the viewer wants in browse feeds; [] = no filter. The client passes them as the feed's comma-separated ?language. */
-            preferred_languages: string[];
-        };
-        /** @description A merge: an omitted field keeps its stored value. */
-        UpdateContentPreferencesRequest: {
-            /** @description REPLACES the per-flag overrides. An empty string value (or an omitted flag) inherits the base policy. */
-            sensitive_flag_policies?: {
                 [key: string]: "hide" | "warn" | "blur" | "display" | "";
             };
-            /** @description REPLACES the language list ([] clears). Unknown id -> 400. */
-            preferred_languages?: string[];
         };
         /** @description A signed-in user's effective player defaults (PLAY-07). Every field is always present. video_card_previews_enabled is resolved from the current instance default until the user explicitly chooses true or false. */
         PlayerSettings: {
@@ -15998,7 +15987,7 @@ export interface operations {
                 tag?: string;
                 /** @description Only videos with this subject-category id (see GET /videos/config). Unknown value -> 422. */
                 category?: string;
-                /** @description Only videos in this content language (see GET /videos/config), or in ANY of a comma-separated list of up to 10 (`en,fr`; a viewer's preferred_languages from GET /me/content-preferences). Unknown value -> 422. */
+                /** @description Only videos with this content-language code (see GET /videos/config). Unknown value -> 422. */
                 language?: string;
                 /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
                 limit?: components["parameters"]["PageLimit"];
@@ -20835,7 +20824,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["UpdateContentPreferencesRequest"];
+                "application/json": components["schemas"]["ContentPreferences"];
             };
         };
         responses: {
