@@ -167,6 +167,8 @@ import type {
   RejectRegistrationRequest,
   MyReport,
   MyReportListResponse,
+  ReportReason,
+  CreateReportRequest,
   ReportListResponse,
   ReportMessage,
   ReportMessageListResponse,
@@ -2064,10 +2066,14 @@ export const api = {
     }),
 
   /** POST /api/v1/videos/{id}/report — file an abuse report on a video (auth; idempotent 204). */
-  reportVideo: (id: string, reason: string) =>
+  reportVideo: (
+    id: string,
+    reason: string,
+    detail: Pick<CreateReportRequest, "reasons" | "start_seconds" | "end_seconds"> = {},
+  ) =>
     apiRequest<void>(`/api/v1/videos/${encodeURIComponent(id)}/report`, {
       method: "POST",
-      body: { reason },
+      body: { reason, ...detail },
     }),
 
   /** POST /api/v1/comments/{id}/report — file an abuse report on a comment (auth; idempotent 204). */
@@ -2312,12 +2318,13 @@ export const api = {
    * rejects an unrecognised value with a 400 instead of quietly widening it.
    */
   getReports: (
-    params: PageParams & { status?: ReportStatusFilter } = {},
+    params: PageParams & { status?: ReportStatusFilter; reason?: ReportReason } = {},
     signal?: AbortSignal,
   ) =>
     apiRequest<ReportListResponse>("/api/v1/admin/reports", {
       query: {
         status: params.status,
+        reason: params.reason,
         ...pageQuery(params),
       },
       signal,

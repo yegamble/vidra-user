@@ -3744,6 +3744,110 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/watched-word-lists": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List instance watched-word lists
+         * @description Instance named watched-word lists, default list first, each with its word count (not its words). Paginated via limit (1-100, default 20) and offset.
+         */
+        get: operations["listAdminWatchedWordLists"];
+        put?: never;
+        /**
+         * Create a instance watched-word list
+         * @description Creates a named list with an optional word set (at most 500 words, each at most 100 characters). action is "flag" (default; record a match for review) or "hold" (also hold the comment for approval through the held-for-review queue). Names are unique per scope, case-insensitively.
+         */
+        post: operations["createAdminWatchedWordList"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/watched-word-lists/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a instance watched-word list
+         * @description One list with its words (the default list's words are paged via the flat watched-words endpoints and omitted here). A list in the other scope is 404.
+         */
+        get: operations["getAdminWatchedWordList"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a instance watched-word list
+         * @description Deletes the list and its terms; existing matches keep their snapshot. The default list cannot be deleted (409).
+         */
+        delete: operations["deleteAdminWatchedWordList"];
+        options?: never;
+        head?: never;
+        /**
+         * Update a instance watched-word list
+         * @description Renames the list and/or changes its action; when words is present it REPLACES the list's terms (an empty array clears them). Replacing the default list's words is refused (409).
+         */
+        patch: operations["updateAdminWatchedWordList"];
+        trace?: never;
+    };
+    "/api/v1/me/watched-word-lists": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List your own watched-word lists
+         * @description Your own named watched-word lists, default list first, each with its word count (not its words). Paginated via limit (1-100, default 20) and offset.
+         */
+        get: operations["listMyWatchedWordLists"];
+        put?: never;
+        /**
+         * Create a your own watched-word list
+         * @description Creates a named list with an optional word set (at most 500 words, each at most 100 characters). action is "flag" (default; record a match for review) or "hold" (also hold the comment for approval through the held-for-review queue). Names are unique per scope, case-insensitively.
+         */
+        post: operations["createMyWatchedWordList"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/watched-word-lists/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a your own watched-word list
+         * @description One list with its words (the default list's words are paged via the flat watched-words endpoints and omitted here). A list in the other scope is 404.
+         */
+        get: operations["getMyWatchedWordList"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a your own watched-word list
+         * @description Deletes the list and its terms; existing matches keep their snapshot. The default list cannot be deleted (409).
+         */
+        delete: operations["deleteMyWatchedWordList"];
+        options?: never;
+        head?: never;
+        /**
+         * Update a your own watched-word list
+         * @description Renames the list and/or changes its action; when words is present it REPLACES the list's terms (an empty array clears them). Replacing the default list's words is refused (409).
+         */
+        patch: operations["updateMyWatchedWordList"];
+        trace?: never;
+    };
     "/api/v1/admin/watched-word-matches/{id}/resolve": {
         parameters: {
             query?: never;
@@ -6182,7 +6286,7 @@ export interface paths {
         head?: never;
         /**
          * Edit a user's role / active flag / storage quota (admin)
-         * @description Updates a user's role, active flag, and/or storage quota (partial). Restricted to admins. An admin cannot demote or deactivate their own account (422), and a hard-deleted account cannot be reactivated (422: the tombstone is anonymised in place, so re-enabling it would republish a profile without restoring anything). An unknown id is 404. Deactivating revokes the user's sessions. A role change takes effect on the target's EXISTING sessions immediately — the role is re-read from the account on every authenticated request, not taken from the access token — so a demoted staff member loses the staff routes at once while keeping their ordinary session. storage_quota_bytes is tri-state — omitted: unchanged; null: reset to the instance default; a non-negative integer: per-user override (0 = unlimited). Moderators share ONLY ban and unban (`is_active`, with a required `ban_reason` when banning) and only for accounts whose role is `user`: any other field, a staff or owner target, or themselves is 403. Banning stores the reason, time and actor, and emails the user the reason (best-effort); unbanning clears them and emails a reinstatement. The audit row records the reason's length, never its text.
+         * @description Updates a user's role, active flag, and/or storage quota (partial). Restricted to admins. An admin cannot demote or deactivate their own account (422), and a hard-deleted account cannot be reactivated (422: the tombstone is anonymised in place, so re-enabling it would republish a profile without restoring anything). An unknown id is 404. Deactivating revokes the user's sessions. A role change takes effect on the target's EXISTING sessions immediately — the role is re-read from the account on every authenticated request, not taken from the access token — so a demoted staff member loses the staff routes at once while keeping their ordinary session. storage_quota_bytes is tri-state — omitted: unchanged; null: reset to the instance default; a non-negative integer: per-user override (0 = unlimited); daily_quota_bytes is the same tri-state for the per-user rolling-24h upload quota. Moderators share ONLY ban and unban (`is_active`, with a required `ban_reason` when banning) and only for accounts whose role is `user`: any other field, a staff or owner target, or themselves is 403. Banning stores the reason, time and actor, and emails the user the reason (best-effort); unbanning clears them and emails a reinstatement. The audit row records the reason's length, never its text.
          */
         patch: operations["updateUser"];
         trace?: never;
@@ -8362,8 +8466,16 @@ export interface components {
             /** @description The playlist's video ids in the desired order. Must be exactly the playlist's current items — each id once, none missing or extra. */
             video_ids: string[];
         };
+        /** @enum {string} */
+        ReportReason: "violentOrRepulsive" | "hatefulOrAbusive" | "spamOrMisleading" | "privacy" | "rights" | "serverRules" | "thumbnails" | "captions";
+        /** @description `reasons`, `start_seconds` and `end_seconds` apply to VIDEO reports only (422 on a comment or account report). `end_seconds` needs `start_seconds` and must exceed it; both must be within the video's duration when known. */
         CreateReportRequest: {
             reason: string;
+            reasons?: components["schemas"]["ReportReason"][];
+            /** Format: int32 */
+            start_seconds?: number;
+            /** Format: int32 */
+            end_seconds?: number;
         };
         BulkRemoveCommentsRequest: {
             /** @description A local username, or a remote actor URL (http:// or https://). */
@@ -8444,6 +8556,18 @@ export interface components {
             reason: string;
             /** @enum {string} */
             status: "open" | "accepted" | "rejected";
+            /** @description PeerTube-style predefined reasons (never null; empty when none). */
+            reasons: components["schemas"]["ReportReason"][];
+            /**
+             * Format: int32
+             * @description Start of the reported video range, in seconds (video reports only).
+             */
+            start_seconds?: number;
+            /**
+             * Format: int32
+             * @description End of the reported video range; omitted for a single moment.
+             */
+            end_seconds?: number;
             moderator_note: string;
             /** Format: date-time */
             created_at: string;
@@ -8523,6 +8647,18 @@ export interface components {
             status: "open" | "accepted" | "rejected";
             /** @description The caller's own words when filing. */
             reason: string;
+            /** @description PeerTube-style predefined reasons (never null; empty when none). */
+            reasons: components["schemas"]["ReportReason"][];
+            /**
+             * Format: int32
+             * @description Start of the reported video range, in seconds (video reports only).
+             */
+            start_seconds?: number;
+            /**
+             * Format: int32
+             * @description End of the reported video range; omitted for a single moment.
+             */
+            end_seconds?: number;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -8699,6 +8835,37 @@ export interface components {
             limit: number;
             offset: number;
         };
+        /** @description A named watched-word list. Instance lists (admin) apply to every comment; a creator's own lists apply only to comments on their videos. words is present on get/create/update only, and never for the default list. */
+        WatchedWordList: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @enum {string} */
+            action: "flag" | "hold";
+            is_default: boolean;
+            /** Format: int64 */
+            word_count: number;
+            words?: string[];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        WatchedWordListsPage: components["schemas"]["PageMeta"] & {
+            lists: components["schemas"]["WatchedWordList"][];
+        };
+        CreateWatchedWordListRequest: {
+            name: string;
+            /** @enum {string} */
+            action?: "flag" | "hold";
+            words?: string[];
+        };
+        UpdateWatchedWordListRequest: {
+            name?: string;
+            /** @enum {string} */
+            action?: "flag" | "hold";
+            words?: string[];
+        };
         WatchedWordListResponse: components["schemas"]["PageMeta"] & {
             words: components["schemas"]["WatchedWord"][];
         };
@@ -8708,6 +8875,8 @@ export interface components {
             id: string;
             /** @description The watched term that matched, as it read when the flag was raised. It survives the term being deleted from the list (see term_active). */
             word: string;
+            /** @description The watched-word list that matched (a snapshot; absent for matches that predate named lists). */
+            list_name?: string;
             /**
              * @description What was flagged.
              * @enum {string}
@@ -8837,6 +9006,16 @@ export interface components {
              * @description The account's current storage usage: total stored bytes of its video files (originals, renditions, thumbnails) across the videos owned via its channels.
              */
             storage_used_bytes: number;
+            /**
+             * Format: int64
+             * @description Per-user rolling-24h upload quota override in bytes. null = the instance default (default_user_daily_quota_bytes) applies; 0 = unlimited for this account.
+             */
+            daily_quota_bytes: number | null;
+            /**
+             * Format: int64
+             * @description Bytes the account stored in the trailing 24 hours (the upload-usage ledger the daily quota gate sums; deleting a video does not refund it).
+             */
+            daily_used_bytes: number;
             /** Format: date-time */
             created_at: string;
             /**
@@ -10840,6 +11019,11 @@ export interface components {
              * @description Per-user storage quota in bytes. Omit to leave unchanged; null resets the account to the instance default; 0 makes the account unlimited. Negative or non-integer values are 422.
              */
             storage_quota_bytes?: number | null;
+            /**
+             * Format: int64
+             * @description Per-user rolling-24h upload quota in bytes (PeerTube videoQuotaDaily), tri-state like storage_quota_bytes: omit to leave unchanged; null resets to the instance default (default_user_daily_quota_bytes); 0 makes the account unlimited. Negative or non-integer values are 422.
+             */
+            daily_quota_bytes?: number | null;
         };
         /** @description A stored file backing a video. The storage key is internal and not exposed. */
         VideoFile: {
@@ -21341,6 +21525,8 @@ export interface operations {
             query?: {
                 /** @description Which half of the queue to return. `open` is unresolved; `resolved` is everything already accepted or rejected; `all` (the default, and what an absent parameter means) is both. An unrecognised value is a 400 — it previously meant "all", so `?status=resolved` silently returned the entire queue. */
                 status?: "open" | "resolved" | "all";
+                /** @description Only reports carrying this predefined reason; `total` counts the same filter. An unrecognised value is a 400. */
+                reason?: components["schemas"]["ReportReason"];
                 /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
                 limit?: components["parameters"]["PageLimit"];
                 /** @description Rows to skip. Negative values are clamped to 0. */
@@ -21978,6 +22164,519 @@ export interface operations {
             };
             /** @description The caller is not a moderator or admin. */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listAdminWatchedWordLists: {
+        parameters: {
+            query?: {
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of lists. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchedWordListsPage"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not a moderator or admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createAdminWatchedWordList: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateWatchedWordListRequest"];
+            };
+        };
+        responses: {
+            /** @description The list was created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchedWordList"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not a moderator or admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The name is already used, or the per-account list limit (20) is reached. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation failed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getAdminWatchedWordList: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The list. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchedWordList"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not a moderator or admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such list in this scope. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteAdminWatchedWordList: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The list was deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not a moderator or admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such list in this scope. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The default list cannot be deleted. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateAdminWatchedWordList: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateWatchedWordListRequest"];
+            };
+        };
+        responses: {
+            /** @description The updated list. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchedWordList"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not a moderator or admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such list in this scope. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Name already used, or words on the default list. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation failed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listMyWatchedWordLists: {
+        parameters: {
+            query?: {
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of lists. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchedWordListsPage"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createMyWatchedWordList: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateWatchedWordListRequest"];
+            };
+        };
+        responses: {
+            /** @description The list was created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchedWordList"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The name is already used, or the per-account list limit (20) is reached. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation failed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getMyWatchedWordList: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The list. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchedWordList"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such list in this scope. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteMyWatchedWordList: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The list was deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such list in this scope. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The default list cannot be deleted. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateMyWatchedWordList: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateWatchedWordListRequest"];
+            };
+        };
+        responses: {
+            /** @description The updated list. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchedWordList"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such list in this scope. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Name already used, or words on the default list. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation failed. */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
