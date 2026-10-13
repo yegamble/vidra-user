@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { useT } from "@/components/I18nProvider";
 import { api } from "@/lib/api";
 import type { LiveStream } from "@/lib/api";
 
@@ -22,6 +23,7 @@ export function ChannelLiveBadge({
   handle: string;
   ownerId: string;
 }) {
+  const t = useT();
   const { user } = useSession();
   const isOwner = user?.id === ownerId;
   const [live, setLive] = useState<LiveStream | null>(null);
@@ -58,8 +60,8 @@ export function ChannelLiveBadge({
         aria-hidden="true"
         className="h-1.5 w-1.5 rounded-full bg-live animate-[live-pulse_1.6s_ease-in-out_infinite]"
       />
-      Live now
-      <span className="sr-only">: {live.title}</span>
+      {t("panels.live.now")}
+      <span className="sr-only">{t("panels.live.streamTitle", { title: live.title })}</span>
     </Link>
   );
 }
