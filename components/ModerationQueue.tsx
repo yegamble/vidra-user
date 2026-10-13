@@ -305,11 +305,13 @@ function ReportRow({
 // Spans only (no list): the row renders these inside a <button>, where block
 // and list content is invalid HTML. The labels read as one sentence to AT.
 function ReasonChips({ report }: { report: Report }) {
-  if (report.reasons.length === 0) return null;
+  // `?? []`: an older core (or a mocked fixture) omits the field entirely.
+  const reasons = report.reasons ?? [];
+  if (reasons.length === 0) return null;
   return (
     <span className="flex flex-wrap gap-1">
       <span className="sr-only">Categories: </span>
-      {report.reasons.map((r) => (
+      {reasons.map((r) => (
         <Badge key={r} variant="strong">
           {reasonLabel(r)}
         </Badge>

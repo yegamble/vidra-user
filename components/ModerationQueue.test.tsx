@@ -188,3 +188,25 @@ describe("ModerationQueue — report categories and timestamp", () => {
     await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith(expect.stringContaining("reason=privacy"), expect.anything()));
   });
 });
+
+describe("ModerationQueue — row accessible name", () => {
+  it("keeps the exact row button name, with or without categories", async () => {
+    // A fixture from before core 0170 has no `reasons` at all: must not crash.
+    const legacy = { ...REPORT } as Record<string, unknown>;
+    delete legacy.reasons;
+    mocks.getReports.mockResolvedValue({ reports: [legacy], total: 1, limit: 20, offset: 0 });
+    const { ModerationQueue } = await import("./ModerationQueue");
+    const { unmount } = render(<ModerationQueue />);
+    expect(await screen.findByRole("button", { name: "Video report by bob, open" })).toBeTruthy();
+    unmount();
+
+    mocks.getReports.mockResolvedValue({
+      reports: [{ ...REPORT, reasons: ["privacy"] }],
+      total: 1,
+      limit: 20,
+      offset: 0,
+    });
+    render(<ModerationQueue />);
+    expect(await screen.findByRole("button", { name: "Video report by bob, open" })).toBeTruthy();
+  });
+});
