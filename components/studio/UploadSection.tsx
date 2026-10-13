@@ -22,6 +22,7 @@ import {
 } from "@/lib/api";
 import type {
   Channel,
+  CommentsPolicy,
   ImportJob,
   StoredUploadSession,
   UpdateVideoRequest,
@@ -97,7 +98,10 @@ export function UploadSection({
   const [sensitiveReason, setSensitiveReason] = useState("");
   // Per-video publish policies (config-parity W9), prefilled from the
   // instance's defaults.publish block once GET /instance resolves.
-  const [commentsPolicy, setCommentsPolicy] = useState<"enabled" | "disabled">("enabled");
+  const [commentsPolicy, setCommentsPolicy] = useState<CommentsPolicy>("enabled");
+  // What "Allow comments: on" means: an instance default of requires_approval
+  // (core 0161) survives a toggle off and on instead of widening to enabled.
+  const commentsOnPolicy = useRef<CommentsPolicy>("enabled");
   const [downloadEnabled, setDownloadEnabled] = useState(true);
   // Publish-timing opt-in (publish_after_transcode): hold the video (state
   // "transcoding") off every public surface until its HLS transcode completes.
@@ -258,10 +262,8 @@ export function UploadSection({
         if (!publish) return;
         if (publish.privacy && !touched.has("privacy")) setPrivacy(publish.privacy as VideoPrivacy);
         if (publish.licence && !touched.has("license")) setLicense(String(publish.licence));
-        if (
-          (publish.comment_policy === "enabled" || publish.comment_policy === "disabled") &&
-          !touched.has("comments")
-        ) {
+        if (publish.comment_policy === "requires_approval") commentsOnPolicy.current = "requires_approval";
+        if (publish.comment_policy && !touched.has("comments")) {
           setCommentsPolicy(publish.comment_policy);
         }
         if (typeof publish.download_enabled === "boolean" && !touched.has("download")) {
@@ -1494,10 +1496,10 @@ export function UploadSection({
                       </span>
                     </div>
                     <Toggle
-                      checked={commentsPolicy === "enabled"}
+                      checked={commentsPolicy !== "disabled"}
                       onChange={(on) => {
                         publishTouchedRef.current.add("comments");
-                        setCommentsPolicy(on ? "enabled" : "disabled");
+                        setCommentsPolicy(on ? commentsOnPolicy.current : "disabled");
                       }}
                       label="Allow comments"
                       disabled={formLocked}
