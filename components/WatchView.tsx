@@ -12,6 +12,7 @@ import {
 } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { useFormat, useT } from "@/components/I18nProvider";
 import { WarningIcon } from "@/components/icons";
 import { CommentsSection } from "@/components/CommentsSection";
 import type { DonateSource } from "@/components/SupportButton";
@@ -25,6 +26,7 @@ import { WatchActions } from "@/components/watch/WatchActions";
 import { WatchSignInProvider } from "@/components/watch/WatchSignInPrompt";
 import type { PlaybackDelivery } from "@/lib/use-playback-engine";
 import { useAmbientMode } from "@/lib/player-ambient";
+import { usePlaybackBeacon } from "@/lib/use-playback-beacon";
 import { AmbientGlow } from "@/components/watch/AmbientGlow";
 import { IpfsSourceBar } from "@/components/watch/IpfsSourceBar";
 import { PasswordUnlockPanel } from "@/components/watch/PasswordUnlockPanel";
@@ -53,7 +55,7 @@ import type { Channel, Video, VideoConfigResponse } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { feedDefaultsForLanding, resolveLandingPage } from "@/lib/feed-defaults";
 import { feedHref } from "@/lib/feed-url";
-import { formatCount, formatDuration, relativeTime } from "@/lib/format";
+import { formatDuration } from "@/lib/format";
 import { useInstanceDefaults } from "@/lib/instance-defaults";
 import { setImmersive } from "@/lib/sidebar-state";
 import { WATCH_TWO_COLUMN_QUERY, useMediaQuery } from "@/lib/use-media-query";
@@ -63,7 +65,7 @@ import { trackSearchEvent } from "@/lib/search-events";
 import { useSettledSession } from "@/lib/use-settled-session";
 import { useShortWatchUrl } from "@/lib/use-short-watch-url";
 import { parseStartTime } from "@/lib/start-time";
-import { useSensitiveContentPolicy } from "@/lib/use-sensitive-policy";
+import { useVideoSensitivePolicy } from "@/lib/use-video-sensitive-policy";
 import { useRestrictedMode } from "@/lib/device-preferences";
 import { dequeueVideo, useVideoQueue } from "@/lib/video-queue";
 import { useVideoActionPermissions } from "@/lib/use-video-action-permissions";
@@ -99,6 +101,8 @@ export function WatchView({
   // supplied: it keys the playback-token store and the navigated-away reset, so
   // both stay consistent within a page without caring which name was used.
   const subject = id ?? code ?? "";
+  const t = useT();
+  const { formatCount, relativeTime } = useFormat();
   // The instance browse defaults (config-parity W5). The tag chips below link
   // to the recent feed filtered by tag; feedHref keeps ?sort= only when it
   // differs from the effective default, so the URL must be built against the
@@ -197,7 +201,7 @@ export function WatchView({
   // viewer explicitly proceeds. `hide` normally drops flagged videos from
   // listings server-side, but a direct link can still reach this watch page, so
   // it is gated here too. `display` (or an absent policy) plays normally.
-  const sensitivePolicy = useSensitiveContentPolicy();
+  const sensitivePolicy = useVideoSensitivePolicy(video ?? {});
   const restrictedMode = useRestrictedMode();
   const [sensitiveAccepted, setSensitiveAccepted] = useState(false);
   // The engine reports the source it selected, including automatic fallback.
@@ -384,7 +388,7 @@ export function WatchView({
     // navigation → hydration → data reads as one surface filling in.
     return (
       <div role="status" aria-live="polite">
-        <span className="sr-only">Loading video…</span>
+        <span className="sr-only">{t("watch.loading")}</span>
         <WatchSkeleton />
       </div>
     );
@@ -393,8 +397,8 @@ export function WatchView({
     return (
       <div className={WATCH_CONTENT}>
         <EmptyState
-          title="Video not found"
-          message="This video does not exist, or it is private."
+          title={t("watch.notFound.title")}
+          message={t("watch.notFound.message")}
         />
       </div>
     );
@@ -402,8 +406,8 @@ export function WatchView({
   if (status === "signin") {
     return (
       <div className={WATCH_CONTENT}>
-        <SignInGate title="Sign in to watch this video">
-          — it is only visible to people signed in to this instance.
+        <SignInGate title={t("watch.signIn.title")}>
+          {t("watch.signIn.body")}
         </SignInGate>
       </div>
     );
@@ -422,7 +426,7 @@ export function WatchView({
   if (status === "error" || video === null) {
     return (
       <div className={WATCH_CONTENT}>
-        <ErrorState message="Could not load this video." onRetry={retry} />
+        <ErrorState message={t("watch.error.load")} onRetry={retry} />
       </div>
     );
   }
@@ -430,15 +434,15 @@ export function WatchView({
     return (
       <div className={WATCH_CONTENT}>
         <EmptyState
-          title="Unavailable in Restricted Mode"
-          message="Turn off Restricted Mode from your account menu to view sensitive content."
+          title={t("watch.restricted.title")}
+          message={t("watch.restricted.message")}
         />
       </div>
     );
   }
 
   const meta: string[] = [];
-  if (typeof video.views === "number") meta.push(`${formatCount(video.views)} views`);
+  if (typeof video.views === "number") meta.push(t("watch.meta.views", { count: formatCount(video.views) }));
   const when = relativeTime(video.created_at);
   if (when) meta.push(when);
 
@@ -471,21 +475,21 @@ export function WatchView({
     if (video.category) {
       chips.push({
         key: "category",
-        sr: "Category: ",
+        sr: t("watch.chip.category"),
         label: resolveOptionLabel(config?.categories, video.category),
       });
     }
     if (video.language) {
       chips.push({
         key: "language",
-        sr: "Language: ",
+        sr: t("watch.chip.language"),
         label: resolveOptionLabel(config?.languages, video.language),
       });
     }
     if (video.license) {
       chips.push({
         key: "license",
-        sr: "License: ",
+        sr: t("watch.chip.license"),
         label: resolveOptionLabel(config?.licenses, video.license),
       });
     }
@@ -597,7 +601,7 @@ export function WatchView({
       <article className="flex flex-col gap-4">
         {playlist.active ? <PlaylistPanel queue={playlist} videoId={video.id} /> : null}
         {playlist.active && playlist.status === "error" ? (
-          <ErrorState message="Could not load this playlist. Playback continuation is unavailable." onRetry={playlist.retry} />
+          <ErrorState message={t("watch.playlist.error")} onRetry={playlist.retry} />
         ) : null}
 
         <div className="flex flex-col gap-3">
@@ -630,7 +634,7 @@ export function WatchView({
           <WatchActions video={video} playbackToken={playbackToken}
             getCurrentTime={() => playerRef.current?.currentTime ?? 0}
             onDeleted={() => window.location.assign("/")} />
-          {channelHandle ? <SupportButton sources={supportSources} name={channelName || "this creator"}
+          {channelHandle ? <SupportButton sources={supportSources} name={channelName || t("watch.thisCreator")}
             text={video.support} className="self-start min-h-11" /> : null}
           {/* Secondary technical/taxonomy chips (duration, dimensions,
               category/language/license) on their own quiet row. */}
@@ -648,12 +652,12 @@ export function WatchView({
             </div>
           ) : null}
           {video.tags && video.tags.length > 0 ? (
-            <ul aria-label="Tags" className="flex flex-wrap items-center gap-1.5">
+            <ul aria-label={t("watch.tags.label")} className="flex flex-wrap items-center gap-1.5">
               {video.tags.map((tag) => (
                 <li key={tag}>
                   <Link
                     href={feedHref("recent", { tag }, tagFeedDefaults)}
-                    aria-label={`Browse videos tagged ${tag}`}
+                    aria-label={t("watch.tags.browse", { tag })}
                     className="focus-ring inline-flex rounded-full bg-surface-muted px-2.5 py-1 text-xs font-semibold text-fg-muted transition-colors hover:bg-surface-strong hover:text-fg"
                   >
                     #{tag}
@@ -790,7 +794,10 @@ function Player({
   // Keyed by video id so navigating to another video re-arms it, while a
   // pause/replay/seek of the same video never re-fires.
   const viewCountedForRef = useRef<string | null>(null);
+  // Anonymous watch-time samples for the creator's analytics (no identifiers).
+  const beacon = usePlaybackBeacon(video.id, videoRef);
   const handlePlay = useCallback(() => {
+    beacon.onPlay();
     if (viewCountedForRef.current !== video.id) {
       viewCountedForRef.current = video.id;
       // Fire-and-forget: a failed view count is best-effort telemetry the viewer
@@ -800,7 +807,16 @@ function Player({
       });
     }
     recordThrottled();
-  }, [video.id, recordThrottled]);
+  }, [video.id, recordThrottled, beacon]);
+
+  const handleTimeUpdate = useCallback(() => {
+    beacon.onTimeUpdate();
+    recordThrottled();
+  }, [beacon, recordThrottled]);
+  const handlePause = useCallback(() => {
+    beacon.onPause();
+    record();
+  }, [beacon, record]);
 
   // Load the saved resume position once (signed in only, and not when the URL
   // carries an explicit ?t= start).
@@ -900,8 +916,8 @@ function Player({
           onDeliveryChange={onDeliveryChange}
           playbackToken={playbackToken}
           onPlay={handlePlay}
-          onTimeUpdate={recordThrottled}
-          onPause={record}
+          onTimeUpdate={handleTimeUpdate}
+          onPause={handlePause}
         />
       </div>
       {/* Quiet under-player row: Resume (when known) left, the shortcuts

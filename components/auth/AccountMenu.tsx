@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { useT } from "@/components/I18nProvider";
 import {
   GlobeIcon, GridIcon, KeyboardIcon, LogOutIcon, MonitorIcon, SettingsIcon,
   ShieldIcon, UserIcon, VideoIcon,
@@ -16,12 +17,18 @@ import { userAvatarUrl } from "@/lib/api";
 import {
   useDisplayLanguage, useRestrictedMode, writeDisplayLanguage, writeRestrictedMode,
 } from "@/lib/device-preferences";
+import type { PlainMessageKey } from "@/lib/i18n";
 import { SHORTCUT_IGNORE_SELECTOR } from "@/lib/player-shortcuts";
 import { useThemePreference, writeThemePreference, type ThemePreference } from "@/lib/theme";
 
-const themeLabels: Record<ThemePreference, string> = { system: "Device", light: "Light", dark: "Dark" };
+const themeLabels: Record<ThemePreference, PlainMessageKey> = {
+  system: "account.theme.device",
+  light: "theme.light",
+  dark: "theme.dark",
+};
 
 export function AccountMenu() {
+  const t = useT();
   const { status, user, logout } = useSession();
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -55,7 +62,9 @@ export function AccountMenu() {
         return;
       }
       if (event.key === "/") {
-        const search = document.querySelector<HTMLInputElement>('input[aria-label="Search videos"]');
+        const search = document.querySelector<HTMLInputElement>(
+          `input[aria-label="${t("search.inputLabel")}"]`,
+        );
         if (search) { event.preventDefault(); search.focus(); }
         return;
       }
@@ -72,15 +81,15 @@ export function AccountMenu() {
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [router, status, user]);
+  }, [router, status, t, user]);
 
   if (status === "restoring") {
-    return <span role="status" aria-label="Checking your session" className="inline-block h-9 w-9 animate-pulse rounded-full bg-surface-muted"><span className="sr-only">Checking your session…</span></span>;
+    return <span role="status" aria-label={t("account.checking")} className="inline-block h-9 w-9 animate-pulse rounded-full bg-surface-muted"><span className="sr-only">{t("account.checking.sr")}</span></span>;
   }
   if (status !== "authed" || !user) {
     return (
       <>
-        <Link href="/login" className="focus-ring inline-flex min-h-11 items-center rounded-[10px] border border-border px-4 py-1.5 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted sm:min-h-9">Sign in</Link>
+        <Link href="/login" className="focus-ring inline-flex min-h-11 items-center rounded-[10px] border border-border px-4 py-1.5 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted sm:min-h-9">{t("account.signIn")}</Link>
         {shortcutsOpen ? <KeyboardShortcutsModal onClose={() => setShortcutsOpen(false)} /> : null}
       </>
     );
@@ -93,7 +102,7 @@ export function AccountMenu() {
       <button
         ref={triggerRef}
         type="button"
-        aria-label="Open account menu"
+        aria-label={t("account.open")}
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
@@ -109,7 +118,7 @@ export function AccountMenu() {
         <div
           ref={panelRef}
           role="dialog"
-          aria-label="Account menu"
+          aria-label={t("account.menu")}
           onClick={(event) => {
             if ((event.target as Element).closest("a")) setOpen(false);
           }}
@@ -128,30 +137,30 @@ export function AccountMenu() {
             <div className="min-w-0"><p className="truncate text-sm font-bold text-fg">{name}</p><p className="truncate text-[13px] text-fg-muted">@{user.username}</p></div>
           </div>
           <MenuGroup>
-            <MenuLink href={profileHref} icon={<UserIcon />} label="Your profile" note={user.profile_public ? undefined : "Private preview"} />
-            <MenuLink href="/studio" icon={<VideoIcon />} label="Studio" />
-            <MenuLink href="/settings" icon={<SettingsIcon />} label="Settings" />
+            <MenuLink href={profileHref} icon={<UserIcon />} label={t("account.profile")} note={user.profile_public ? undefined : t("account.profile.private")} />
+            <MenuLink href="/studio" icon={<VideoIcon />} label={t("nav.studio")} />
+            <MenuLink href="/settings" icon={<SettingsIcon />} label={t("account.settings")} />
             {/* Below `sm` the Sidebar (the only chrome with ADMIN_LINK) is
                 hidden, so this self-hiding row is a phone admin's only route
                 into the console. Same glyph + destination as ADMIN_LINK. */}
-            {user.role === "admin" ? <MenuLink href="/admin" icon={<GridIcon />} label="Admin" /> : null}
+            {user.role === "admin" ? <MenuLink href="/admin" icon={<GridIcon />} label={t("nav.admin")} /> : null}
           </MenuGroup>
           <MenuGroup>
-            <PreferenceRow icon={<MonitorIcon />} label="Appearance">
-              <div className="flex gap-1" role="group" aria-label="Appearance">
-                {(["system", "light", "dark"] as const).map((value) => <button key={value} type="button" aria-pressed={theme === value} onClick={() => writeThemePreference(value)} className={theme === value ? "focus-ring rounded-full bg-accent px-2 py-1 text-[11px] font-semibold text-accent-fg" : "focus-ring rounded-full px-2 py-1 text-[11px] font-semibold text-fg-muted hover:bg-surface-muted"}>{themeLabels[value]}</button>)}
+            <PreferenceRow icon={<MonitorIcon />} label={t("theme.appearance")}>
+              <div className="flex gap-1" role="group" aria-label={t("theme.appearance")}>
+                {(["system", "light", "dark"] as const).map((value) => <button key={value} type="button" aria-pressed={theme === value} onClick={() => writeThemePreference(value)} className={theme === value ? "focus-ring rounded-full bg-accent px-2 py-1 text-[11px] font-semibold text-accent-fg" : "focus-ring rounded-full px-2 py-1 text-[11px] font-semibold text-fg-muted hover:bg-surface-muted"}>{t(themeLabels[value])}</button>)}
               </div>
             </PreferenceRow>
-            <PreferenceRow icon={<GlobeIcon />} label="Display language">
+            <PreferenceRow icon={<GlobeIcon />} label={t("account.language")}>
               <select value={language} onChange={(event) => writeDisplayLanguage(event.target.value as "en")} className="focus-ring max-w-28 rounded-lg border border-border bg-surface px-2 py-1 text-xs text-fg"><option value="en">English</option></select>
             </PreferenceRow>
-            <PreferenceRow icon={<ShieldIcon />} label="Restricted Mode" note="Hide NSFW content">
-              <Toggle checked={restricted} onChange={writeRestrictedMode} label="Restricted Mode" />
+            <PreferenceRow icon={<ShieldIcon />} label={t("account.restricted")} note={t("account.restricted.note")}>
+              <Toggle checked={restricted} onChange={writeRestrictedMode} label={t("account.restricted")} />
             </PreferenceRow>
-            <button data-account-action type="button" onClick={() => { setOpen(false); setShortcutsOpen(true); }} className="focus-ring flex min-h-11 w-full items-center gap-3 rounded-xl px-4 py-2.5 text-left text-sm font-medium text-fg transition-colors hover:bg-surface-muted"><KeyboardIcon className="shrink-0 text-fg-muted" /><span className="flex-1">Keyboard shortcuts</span><kbd className="text-xs text-fg-muted">?</kbd></button>
+            <button data-account-action type="button" onClick={() => { setOpen(false); setShortcutsOpen(true); }} className="focus-ring flex min-h-11 w-full items-center gap-3 rounded-xl px-4 py-2.5 text-left text-sm font-medium text-fg transition-colors hover:bg-surface-muted"><KeyboardIcon className="shrink-0 text-fg-muted" /><span className="flex-1">{t("account.shortcuts")}</span><kbd className="text-xs text-fg-muted">?</kbd></button>
           </MenuGroup>
           <MenuGroup last>
-            <button data-account-action type="button" onClick={() => { setOpen(false); void logout(); }} className="focus-ring flex min-h-11 w-full items-center gap-3 rounded-xl px-4 py-2.5 text-left text-sm font-medium text-fg transition-colors hover:bg-surface-muted"><LogOutIcon className="text-fg-muted" />Sign out</button>
+            <button data-account-action type="button" onClick={() => { setOpen(false); void logout(); }} className="focus-ring flex min-h-11 w-full items-center gap-3 rounded-xl px-4 py-2.5 text-left text-sm font-medium text-fg transition-colors hover:bg-surface-muted"><LogOutIcon className="text-fg-muted" />{t("account.signOut")}</button>
           </MenuGroup>
         </div>
       ) : null}
