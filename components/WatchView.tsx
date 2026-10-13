@@ -67,6 +67,7 @@ import { useSensitiveContentPolicy } from "@/lib/use-sensitive-policy";
 import { useRestrictedMode } from "@/lib/device-preferences";
 import { dequeueVideo, useVideoQueue } from "@/lib/video-queue";
 import { useVideoActionPermissions } from "@/lib/use-video-action-permissions";
+import { readLastPosition, writeLastPosition } from "@/lib/last-position";
 import { isSignInRequired } from "@/lib/video-privacy";
 
 type Status = "loading" | "error" | "notfound" | "locked" | "signin" | "ready";
@@ -756,6 +757,9 @@ function Player({
 }) {
   const { status: sessionStatus } = useSession();
   const authed = sessionStatus === "authed";
+  // Signed-out viewers keep their place in localStorage (lib/last-position);
+  // "restoring" is neither — the silent refresh may still turn out signed in.
+  const anon = sessionStatus === "anon";
   const lastSentRef = useRef(0);
   const [resumeAt, setResumeAt] = useState<number | null>(null);
   const [tracks, setTracks] = useState<CaptionTrack[]>([]);
@@ -763,10 +767,12 @@ function Player({
   // Report the current position (whole seconds). No-op unless signed in.
   const record = useCallback(() => {
     const el = videoRef.current;
-    if (!authed || !el) return;
+    if (!el) return;
     const pos = Math.floor(el.currentTime || 0);
+    if (anon) writeLastPosition(video.id, pos, el.duration);
+    if (!authed) return;
     void api.recordWatchProgress(video.id, pos).catch(() => {});
-  }, [authed, video.id, videoRef]);
+  }, [authed, anon, video.id, videoRef]);
 
   // Throttled variant for the high-frequency timeupdate/play events.
   const recordThrottled = useCallback(() => {
@@ -809,6 +815,18 @@ function Player({
       .catch(() => {});
     return () => controller.abort();
   }, [authed, video.id, startAt]);
+
+  // The same Resume offer for a signed-out viewer, from this browser's storage.
+  useEffect(() => {
+    if (!anon || startAt !== null) return;
+    // Read after hydration (storage is client-only), off the effect's sync path.
+    let cancelled = false;
+    void Promise.resolve().then(() => {
+      const at = readLastPosition(video.id, video.duration_seconds);
+      if (!cancelled && at !== null) setResumeAt(at);
+    });
+    return () => { cancelled = true; };
+  }, [anon, video.id, video.duration_seconds, startAt]);
 
   // Flush the final position when leaving the page / switching videos.
   useEffect(() => {

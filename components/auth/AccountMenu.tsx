@@ -49,7 +49,6 @@ export function AccountMenu() {
       const target = event.target as Element | null;
       if (target?.matches(SHORTCUT_IGNORE_SELECTOR) || target?.closest(SHORTCUT_IGNORE_SELECTOR)) return;
       if (event.key === "?") {
-        if (status !== "authed") return;
         event.preventDefault();
         setOpen(false);
         setShortcutsOpen(true);
@@ -79,7 +78,12 @@ export function AccountMenu() {
     return <span role="status" aria-label="Checking your session" className="inline-block h-9 w-9 animate-pulse rounded-full bg-surface-muted"><span className="sr-only">Checking your session…</span></span>;
   }
   if (status !== "authed" || !user) {
-    return <Link href="/login" className="focus-ring inline-flex min-h-11 items-center rounded-[10px] border border-border px-4 py-1.5 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted sm:min-h-9">Sign in</Link>;
+    return (
+      <>
+        <Link href="/login" className="focus-ring inline-flex min-h-11 items-center rounded-[10px] border border-border px-4 py-1.5 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted sm:min-h-9">Sign in</Link>
+        {shortcutsOpen ? <KeyboardShortcutsModal onClose={() => setShortcutsOpen(false)} /> : null}
+      </>
+    );
   }
 
   const profileHref = `/users/${encodeURIComponent(user.username)}${user.profile_public ? "" : "?preview=1"}`;
