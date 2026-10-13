@@ -185,6 +185,8 @@ import type {
   VideoFile,
   VideoRating,
   VideoStatsResponse,
+  PlaybackStatsResponse,
+  PlaybackBeaconRequest,
   VideoSearchResponse,
   RemoteInteractionResolution,
   AccountSearchResponse,
@@ -675,6 +677,16 @@ export const api = {
    */
   getVideoStats: (id: string, signal?: AbortSignal) =>
     apiRequest<VideoStatsResponse>(`/api/v1/videos/${encodeURIComponent(id)}/stats`, { signal }),
+
+  /**
+   * GET /api/v1/videos/{id}/playback-stats — watch time, retention curve and
+   * device split for a video (auth; owner or channel editor, else 404).
+   */
+  getVideoPlaybackStats: (id: string, signal?: AbortSignal) =>
+    apiRequest<PlaybackStatsResponse>(
+      `/api/v1/videos/${encodeURIComponent(id)}/playback-stats`,
+      { signal },
+    ),
 
   /**
    * GET /api/v1/channels/{handle}/stats — aggregated creator statistics for a
@@ -2132,6 +2144,16 @@ export const api = {
   recordVideoView: (id: string) =>
     apiRequest<void>(`/api/v1/videos/${encodeURIComponent(id)}/view`, {
       method: "POST",
+    }),
+
+  /**
+   * POST /api/v1/videos/{id}/playback — anonymous watch-time sample (about every
+   * 10 s of playback). Carries no identifier; best-effort, callers swallow errors.
+   */
+  recordPlaybackBeacon: (id: string, body: PlaybackBeaconRequest) =>
+    apiRequest<void>(`/api/v1/videos/${encodeURIComponent(id)}/playback`, {
+      method: "POST",
+      body,
     }),
 
   /** DELETE /api/v1/me/history/{id} — remove one video from history (auth, idempotent). */

@@ -642,6 +642,10 @@ export type UpdatePlaylistRequest = Schemas["UpdatePlaylistRequest"];
 export type DailyViews = Schemas["DailyViews"];
 export type VideoStatsResponse = Schemas["VideoStatsResponse"];
 export type ChannelStatsResponse = Schemas["ChannelStatsResponse"];
+// Per-video watch time / retention / device split (GET /videos/{id}/playback-stats).
+export type PlaybackStatsResponse = Schemas["PlaybackStatsResponse"];
+export type PlaybackBeaconRequest = Schemas["PlaybackBeaconRequest"];
+export type PlaybackShare = Schemas["PlaybackShare"];
 // Account-level rollup (GET /me/stats): totals summed across all OWNED channels,
 // the aggregated 30-day daily series, and a per-channel breakdown row per channel.
 export type AccountStatsResponse = Schemas["AccountStatsResponse"];

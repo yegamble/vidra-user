@@ -25,6 +25,7 @@ import { WatchActions } from "@/components/watch/WatchActions";
 import { WatchSignInProvider } from "@/components/watch/WatchSignInPrompt";
 import type { PlaybackDelivery } from "@/lib/use-playback-engine";
 import { useAmbientMode } from "@/lib/player-ambient";
+import { usePlaybackBeacon } from "@/lib/use-playback-beacon";
 import { AmbientGlow } from "@/components/watch/AmbientGlow";
 import { IpfsSourceBar } from "@/components/watch/IpfsSourceBar";
 import { PasswordUnlockPanel } from "@/components/watch/PasswordUnlockPanel";
@@ -784,7 +785,10 @@ function Player({
   // Keyed by video id so navigating to another video re-arms it, while a
   // pause/replay/seek of the same video never re-fires.
   const viewCountedForRef = useRef<string | null>(null);
+  // Anonymous watch-time samples for the creator's analytics (no identifiers).
+  const beacon = usePlaybackBeacon(video.id, videoRef);
   const handlePlay = useCallback(() => {
+    beacon.onPlay();
     if (viewCountedForRef.current !== video.id) {
       viewCountedForRef.current = video.id;
       // Fire-and-forget: a failed view count is best-effort telemetry the viewer
@@ -794,7 +798,16 @@ function Player({
       });
     }
     recordThrottled();
-  }, [video.id, recordThrottled]);
+  }, [video.id, recordThrottled, beacon]);
+
+  const handleTimeUpdate = useCallback(() => {
+    beacon.onTimeUpdate();
+    recordThrottled();
+  }, [beacon, recordThrottled]);
+  const handlePause = useCallback(() => {
+    beacon.onPause();
+    record();
+  }, [beacon, record]);
 
   // Load the saved resume position once (signed in only, and not when the URL
   // carries an explicit ?t= start).
@@ -882,8 +895,8 @@ function Player({
           onDeliveryChange={onDeliveryChange}
           playbackToken={playbackToken}
           onPlay={handlePlay}
-          onTimeUpdate={recordThrottled}
-          onPause={record}
+          onTimeUpdate={handleTimeUpdate}
+          onPause={handlePause}
         />
       </div>
       {/* Quiet under-player row: Resume (when known) left, the shortcuts
