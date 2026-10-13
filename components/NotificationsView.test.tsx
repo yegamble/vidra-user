@@ -1,11 +1,16 @@
 // @vitest-environment jsdom
-import { render } from "@testing-library/react";
+import { render, renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import type { Notification } from "@/lib/api";
 
 import { TYPE_LABELS } from "./NotificationPrefsView";
-import { NotificationTypeIcon, describeNotification } from "./NotificationsView";
+import { useT } from "./I18nProvider";
+import { NotificationTypeIcon, describeNotification as describeFor } from "./NotificationsView";
+
+// describeNotification takes the translator (it is a plain function, so it
+// cannot call useT); the provider-less default context is the en catalog.
+const describeNotification = (n: Notification) => describeFor(n, renderHook(() => useT()).result.current);
 
 function notif(overrides: Partial<Notification>): Notification {
   return {
@@ -217,6 +222,31 @@ describe("describeNotification", () => {
   });
 });
 
+describe("video_ownership_request", () => {
+  // Someone offered the reader a video. The copy names the giver and the video,
+  // and the link goes where it can be answered — not to the watch page, which a
+  // private video would 404 for the recipient.
+  it("names the giver and the video, linking to the ownership requests page", () => {
+    const { lead, rest, href } = describeNotification(
+      notif({
+        type: "video_ownership_request",
+        actor: { username: "ada", display_name: "Ada" },
+        video_id: "v-1",
+        video_title: "Clip",
+      }),
+    );
+    expect(lead).toBe("Ada");
+    expect(rest).toBe(" offered you “Clip” — accept or refuse it in Studio");
+    expect(href).toBe("/studio/ownership");
+  });
+
+  it("has its own glyph, not the follow fallback", () => {
+    const own = render(<NotificationTypeIcon type="video_ownership_request" />).container.innerHTML;
+    const follow = render(<NotificationTypeIcon type="follow" />).container.innerHTML;
+    expect(own).not.toBe(follow);
+  });
+});
+
 // The chip is decoration, but the WRONG decoration is a claim: the follow glyph
 // in a neutral circle is what an unrecognised type falls through to, which is
 // how a moderation event comes to look like a new follower. Caught in Chromium
@@ -251,6 +281,7 @@ describe("notification pref labels", () => {
       "video_rejected",
       "video_blocked",
       "video_unblocked",
+      "video_ownership_request",
     ]) {
       expect(TYPE_LABELS[type], `missing TYPE_LABELS entry for ${type}`).toBeDefined();
     }
@@ -262,6 +293,15 @@ describe("notification pref labels", () => {
 // rendered new_video as "started following". Typing the table as a Record over
 // the generated union makes a NEW backend type a compile error here until it is
 // given copy, and the loop proves no non-follow type reaches the follow branch.
+describe("an instance follower request", () => {
+  it("has no channel and points at the instances page", () => {
+    const { lead, rest, href } = describeNotification(notif({ type: "federation_follower_request" }));
+    expect(lead).toBe("A remote instance");
+    expect(rest).toMatch(/follow this instance/);
+    expect(href).toBe("/admin/federation/instances");
+  });
+});
+
 describe("describeNotification is exhaustive over the type union", () => {
   const expected: Record<Notification["type"], { href: string; rest: RegExp }> = {
     follow: { href: "/channels/films", rest: /started following/ },
@@ -287,6 +327,7 @@ describe("describeNotification is exhaustive over the type union", () => {
     video_blocked: { href: "/studio/content", rest: /blocked/ },
     video_unblocked: { href: "/videos/v-1", rest: /restored/ },
     caption_ready: { href: "/videos/v-1", rest: /are ready for/ },
+    video_ownership_request: { href: "/studio/ownership", rest: /offered you/ },
   };
 
   for (const [type, want] of Object.entries(expected)) {

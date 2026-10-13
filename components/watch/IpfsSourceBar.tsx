@@ -1,17 +1,19 @@
 "use client";
 
+import { useT } from "@/components/I18nProvider";
 import { RotateCwIcon } from "@/components/icons";
+import type { PlainMessageKey } from "@/lib/i18n";
 
 // The engine's selected source, including fallback. No invented peer counts.
 export type IpfsSource = "server" | "fetching" | "ipfs" | "error" | "original" | "starting";
 
-const LABEL: Record<IpfsSource, string> = {
-  server: "Playing from server (HLS)",
-  fetching: "IPFS · fetching…",
-  ipfs: "Playing from IPFS",
-  error: "IPFS · unavailable — playing from server",
-  original: "Playing from server (original)",
-  starting: "No active source",
+const LABEL: Record<IpfsSource, PlainMessageKey> = {
+  server: "panels.ipfs.server",
+  fetching: "panels.ipfs.fetching",
+  ipfs: "panels.ipfs.ipfs",
+  error: "panels.ipfs.error",
+  original: "panels.ipfs.original",
+  starting: "panels.ipfs.starting",
 };
 
 // Dot colour by state — decorative (the label carries the meaning as text, so
@@ -28,8 +30,8 @@ const DOT: Record<IpfsSource, string> = {
 
 // The toggle flips between the two sources. When already on (or fetching) IPFS,
 // it offers to drop back to the server; otherwise it offers IPFS.
-function toggleLabel(state: IpfsSource): string {
-  return state === "ipfs" || state === "fetching" ? "Use server" : "Use IPFS";
+function toggleLabel(state: IpfsSource): PlainMessageKey {
+  return state === "ipfs" || state === "fetching" ? "panels.ipfs.useServer" : "panels.ipfs.useIpfs";
 }
 
 /**
@@ -48,15 +50,16 @@ export function IpfsSourceBar({
   onToggle: () => void;
   onRefetch: () => void;
 }) {
+  const t = useT();
   const showRefetch = state === "ipfs" || state === "error";
   return (
     <div className="flex items-center gap-2 border-b border-border-subtle py-2.5">
       <span aria-hidden="true" className={`h-[7px] w-[7px] shrink-0 rounded-full ${DOT[state]}`} />
-      <span className="text-[12.5px] text-fg-muted">{LABEL[state]}</span>
+      <span className="text-[12.5px] text-fg-muted">{t(LABEL[state])}</span>
       {showRefetch ? (
         <button
           type="button"
-          aria-label="Re-fetch from IPFS"
+          aria-label={t("panels.ipfs.refetch")}
           onClick={onRefetch}
           className="focus-ring ml-auto flex shrink-0 rounded p-1 text-fg-muted transition-colors hover:text-fg"
         >
@@ -70,7 +73,7 @@ export function IpfsSourceBar({
           showRefetch ? "" : "ml-auto"
         }`}
       >
-        {toggleLabel(state)}
+        {t(toggleLabel(state))}
       </button>
     </div>
   );

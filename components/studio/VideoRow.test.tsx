@@ -267,3 +267,35 @@ describe("VideoRow — support text", () => {
     expect(updateVideo.mock.calls[0][1]).not.toHaveProperty("support");
   });
 });
+
+// Only the OWNER may give a video away (core 0165), and only once its upload
+// has settled — the server answers 409 for a draft or a processing video, so
+// the row never offers a control that cannot work.
+describe("VideoRow — transfer ownership", () => {
+  function renderTransferRow(video: Video, canTransfer: boolean) {
+    render(
+      <VideoRow
+        video={video}
+        config={null}
+        canTransfer={canTransfer}
+        onUpdated={() => {}}
+        onDeleted={() => {}}
+      />,
+    );
+  }
+
+  it("opens the transfer dialog for the owner of a settled video", () => {
+    renderTransferRow(row(), true);
+    fireEvent.click(screen.getByRole("button", { name: "Transfer" }));
+    expect(screen.getByRole("dialog", { name: "Transfer ownership" })).toBeTruthy();
+    expect(screen.getByLabelText("Recipient's username")).toBeTruthy();
+  });
+
+  it("offers no transfer to a collaborator or while the upload is unsettled", () => {
+    renderTransferRow(row(), false);
+    expect(screen.queryByRole("button", { name: "Transfer" })).toBeNull();
+    cleanup();
+    renderTransferRow(row({ state: "processing" }), true);
+    expect(screen.queryByRole("button", { name: "Transfer" })).toBeNull();
+  });
+});

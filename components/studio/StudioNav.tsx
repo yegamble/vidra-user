@@ -27,6 +27,7 @@ const TABS: ReadonlyArray<{ href: string; label: string; live?: true }> = [
   { href: "/studio/comments", label: "Comment queue" },
   { href: "/studio/analytics", label: "Analytics" },
   { href: "/studio/channel", label: "Channel" },
+  { href: "/studio/ownership", label: "Ownership" },
   // Creator-owned watched-word lists (core 0172), applied to comments on their videos.
   { href: "/studio/word-filters", label: "Word filters" },
 ];
