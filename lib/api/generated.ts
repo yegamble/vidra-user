@@ -335,7 +335,7 @@ export interface paths {
         put?: never;
         /**
          * Log in
-         * @description Verifies credentials and returns an access token. The account is identified by EXACTLY ONE of `identifier` (an email address or a username) or the legacy `email` field. When an `identifier` matches both one account's email and another account's username, the EMAIL always wins — the owner of an address is the only account that string can reach, so a lookalike username can never shadow someone else's sign-in. Unknown account and wrong password are reported identically (401) to prevent account enumeration. Browser cookie mode also sets `vidra_video_access`, an HttpOnly, SameSite=Lax access-token cookie scoped to `/api/v1/videos/`, Secure on HTTPS, with the access-token TTL. It authorizes only private or unpublished video GET/HEAD reads, never mutations; public playback ignores it. Refresh renews it; logout, logout-all and invalid-cookie refresh clear it. With `cookie_mode: true` (or an existing `vidra_refresh` cookie) the refresh token is delivered as an httpOnly `vidra_refresh` cookie (Path=/api/v1/auth, SameSite=Lax, Secure on https instances) instead of in the response body. When the account has two-factor authentication enabled, valid credentials return `{mfa_required: true, mfa_token}` with NO session tokens — complete the login at POST /api/v1/auth/mfa/challenge within 5 minutes.
+         * @description Verifies credentials and returns an access token. The account is identified by EXACTLY ONE of `identifier` (an email address or a username) or the legacy `email` field. When an `identifier` matches both one account's email and another account's username, the EMAIL always wins — the owner of an address is the only account that string can reach, so a lookalike username can never shadow someone else's sign-in. Unknown account and wrong password are reported identically (401) to prevent account enumeration. So is a temporarily LOCKED account: after repeated failures from one network prefix (IPv4 /24, IPv6 /48), or a larger number across all networks, sign-in is refused with the same 401 body, the same status and no Retry-After — even with the right password — until the backoff expires or an administrator clears it. Browser cookie mode also sets `vidra_video_access`, an HttpOnly, SameSite=Lax access-token cookie scoped to `/api/v1/videos/`, Secure on HTTPS, with the access-token TTL. It authorizes only private or unpublished video GET/HEAD reads, never mutations; public playback ignores it. Refresh renews it; logout, logout-all and invalid-cookie refresh clear it. With `cookie_mode: true` (or an existing `vidra_refresh` cookie) the refresh token is delivered as an httpOnly `vidra_refresh` cookie (Path=/api/v1/auth, SameSite=Lax, Secure on https instances) instead of in the response body. When the account has two-factor authentication enabled, valid credentials return `{mfa_required: true, mfa_token}` with NO session tokens — complete the login at POST /api/v1/auth/mfa/challenge within 5 minutes.
          */
         post: operations["login"];
         delete?: never;
@@ -694,6 +694,66 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List recognised devices
+         * @description The browsers and devices the account has signed in from, most recent first, and whether the new-device sign-in email is on. A device is a long-lived random `vidra_device` cookie (httpOnly, Path=/api/v1/auth) bound to the browser family and OS; only a hash and a coarse label such as "Chrome on macOS" are stored, never an IP address. `current` marks the device making this request.
+         */
+        get: operations["listRecognisedDevices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/devices/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Forget a recognised device
+         * @description Removes the record, so the next sign-in from that device is treated as new (and mails the account, unless that is turned off). It does NOT end sessions: sessions carry no device link, so use sign out of all devices for that. Audited as `auth.device.forget`.
+         */
+        delete: operations["forgetRecognisedDevice"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/security-prefs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Turn the new-device sign-in email on or off
+         * @description The email is on by default. At most one such email is sent to an account per hour, and an account with no recognised device yet never gets one (its first sign-in just records).
+         */
+        patch: operations["updateSecurityPrefs"];
         trace?: never;
     };
     "/api/v1/auth/mfa": {
@@ -6043,6 +6103,26 @@ export interface paths {
         patch: operations["updateUser"];
         trace?: never;
     };
+    "/api/v1/admin/users/{id}/login-lockout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Clear an account's failed-login lockout (admin)
+         * @description Drops every failed-login counter and lock for the account, so the holder can sign in again immediately. Admin-only; audited as `admin.user.login_lockout_clear` with the target named. Idempotent: 204 whether or not a lockout existed. No password step-up — it only removes a brake.
+         */
+        delete: operations["adminClearLoginLockout"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/users/{id}/mfa": {
         parameters: {
             query?: never;
@@ -11060,6 +11140,26 @@ export interface components {
             /** @description Short-lived (5 min) single-purpose token. Not an access token — it is only accepted by the MFA challenge endpoint. */
             mfa_token: string;
         };
+        RecognisedDevice: {
+            /** Format: uuid */
+            id: string;
+            /** @example Chrome on macOS */
+            label: string;
+            /** Format: date-time */
+            first_seen_at: string;
+            /** Format: date-time */
+            last_seen_at: string;
+            /** @description True for the device making this request. */
+            current: boolean;
+        };
+        RecognisedDevicesResponse: {
+            devices: components["schemas"]["RecognisedDevice"][];
+            /** @description Whether the new-device sign-in email is on (default true). */
+            new_device_email: boolean;
+        };
+        SecurityPrefsRequest: {
+            new_device_email: boolean;
+        };
         MFAStatusResponse: {
             /** @description Whether TOTP two-factor authentication is enabled. */
             enabled: boolean;
@@ -12729,6 +12829,115 @@ export interface operations {
                 };
             };
             /** @description Validation failed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listRecognisedDevices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The account's recognised devices. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecognisedDevicesResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    forgetRecognisedDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The device was forgotten. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such device on this account. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateSecurityPrefs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SecurityPrefsRequest"];
+            };
+        };
+        responses: {
+            /** @description The stored preference. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecurityPrefsRequest"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation failed (new_device_email is required). */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -28899,6 +29108,53 @@ export interface operations {
             };
             /** @description Validation failed, or an attempt to self-demote/deactivate. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    adminClearLoginLockout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Any lockout on the account was cleared. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such user. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
