@@ -33,6 +33,7 @@ vi.mock("@/components/SearchAutocomplete", () => ({
 }));
 
 import { Header } from "./Header";
+import { I18nProvider } from "./I18nProvider";
 import type { InstanceConfigSnapshot } from "@/lib/instance-config.server";
 import {
   SIDEBAR_ID,
@@ -236,5 +237,29 @@ describe("Header Menu button", () => {
     pathname.value = "/login";
     render(<Header />);
     expect(screen.queryByRole("button", { name: "Menu" })).toBeNull();
+  });
+});
+
+describe("Header i18n", () => {
+  it("keeps the English Create menu and Menu label by default", () => {
+    pathname.value = "/";
+    render(<Header />);
+    expect(screen.getByRole("button", { name: "Menu" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    expect(screen.getByRole("menuitem", { name: "Upload video" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "New channel" })).toBeTruthy();
+  });
+
+  it("renders the provided catalog, en for a missing key", () => {
+    pathname.value = "/";
+    render(
+      <I18nProvider locale="fr" messages={{ "header.menu": "Menu principal", "header.newChannel": "Nouvelle chaîne" }}>
+        <Header />
+      </I18nProvider>,
+    );
+    expect(screen.getByRole("button", { name: "Menu principal" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    expect(screen.getByRole("menuitem", { name: "Nouvelle chaîne" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Upload video" })).toBeTruthy();
   });
 });

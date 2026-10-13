@@ -4,6 +4,7 @@ import {
   BellIcon,
   EyeIcon,
   EyeOffIcon,
+  FlagIcon,
   HeartIcon,
   type IconProps,
   LinkIcon,
@@ -141,6 +142,14 @@ export const SETTINGS_GROUPS: readonly SettingsSectionGroup[] = [
         // pasting a handle. It rides this row so a viewer looking for "blocked"
         // finds both, the way the mutes row already carries its instances page.
         activePaths: ["/settings/blocks/remote"],
+      },
+      {
+        href: "/settings/reports",
+        action: "Manage my reports",
+        title: "My reports",
+        short: "Reports",
+        desc: "Abuse reports you filed, their status, and messages with the moderators.",
+        Icon: FlagIcon,
       },
     ],
   },

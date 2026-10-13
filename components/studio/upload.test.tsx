@@ -181,6 +181,28 @@ describe("UploadSection defaults.publish prefill (W9 race regression)", () => {
     });
   });
 
+  it("keeps an instance default of requires_approval behind the Allow comments switch (core 0161)", async () => {
+    mocks.getInstance.mockResolvedValue({
+      ...instanceWithDefaults,
+      defaults: { publish: { ...instanceWithDefaults.defaults.publish, comment_policy: "requires_approval" } },
+    });
+    mocks.resumableUpload.mockResolvedValue({ video: { id: "v1", state: "published" }, file: { kind: "original" } });
+    mocks.updateVideo.mockResolvedValue({ id: "v1", title: "clip", state: "published" });
+    render(<UploadSection channels={[channel]} config={null} />);
+    await waitFor(() => expect(mocks.getInstance).toHaveBeenCalled());
+    openSheet();
+    pickFile();
+    const allow = () => screen.getByRole("switch", { name: "Allow comments" });
+    await waitFor(() => expect(allow().getAttribute("aria-checked")).toBe("true"));
+    // Off and on again lands back on approval, not on unmoderated comments.
+    fireEvent.click(allow());
+    fireEvent.click(allow());
+    await waitFor(() => expect(mocks.resumableUpload).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+    await waitFor(() => expect(mocks.updateVideo).toHaveBeenCalled());
+    expect(mocks.updateVideo.mock.calls[0][1]).toMatchObject({ comments_policy: "requires_approval" });
+  });
+
   it("narrows the file picker accept list when the extended container set is off (W10)", async () => {
     mocks.getInstance.mockResolvedValue({
       features: { imports: true, upload_additional_extensions: false },

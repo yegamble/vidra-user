@@ -18,6 +18,38 @@ function notif(overrides: Partial<Notification>): Notification {
 }
 
 describe("describeNotification", () => {
+  // report_message has two audiences. The reporter is told by "a moderator" —
+  // the server never names who — and staff are told which reporter wrote,
+  // linked to the queue where the thread lives. Neither carries the body.
+  it("renders report_message for the reporter without naming the moderator", () => {
+    const { lead, rest } = describeNotification(
+      notif({ type: "report_message", report_id: "r-1", report_target_type: "remote_video" }),
+    );
+    expect(lead).toBe("A moderator");
+    expect(rest).toBe(" sent you a message about your remote video report");
+  });
+
+  it("links the reporter's report notifications to that report's page", () => {
+    for (const type of ["report_message", "report_resolved"] as const) {
+      const { href } = describeNotification(notif({ type, report_id: "r-1", report_status: "accepted" }));
+      expect(href).toBe("/settings/reports/r-1");
+    }
+  });
+
+  it("renders report_message for staff as the reporter writing, linking to the queue", () => {
+    const { lead, rest, href } = describeNotification(
+      notif({
+        type: "report_message",
+        actor: { username: "bob", display_name: "" },
+        report_id: "r-1",
+        report_target_type: "video",
+      }),
+    );
+    expect(lead).toBe("bob");
+    expect(rest).toBe(" sent a message about their video report");
+    expect(href).toBe("/moderation");
+  });
+
   it("renders new_report as the reporter filing a report, linking to the admin queue", () => {
     const { lead, rest, href } = describeNotification(
       notif({
@@ -185,6 +217,31 @@ describe("describeNotification", () => {
   });
 });
 
+describe("video_ownership_request", () => {
+  // Someone offered the reader a video. The copy names the giver and the video,
+  // and the link goes where it can be answered — not to the watch page, which a
+  // private video would 404 for the recipient.
+  it("names the giver and the video, linking to the ownership requests page", () => {
+    const { lead, rest, href } = describeNotification(
+      notif({
+        type: "video_ownership_request",
+        actor: { username: "ada", display_name: "Ada" },
+        video_id: "v-1",
+        video_title: "Clip",
+      }),
+    );
+    expect(lead).toBe("Ada");
+    expect(rest).toBe(" offered you “Clip” — accept or refuse it in Studio");
+    expect(href).toBe("/studio/ownership");
+  });
+
+  it("has its own glyph, not the follow fallback", () => {
+    const own = render(<NotificationTypeIcon type="video_ownership_request" />).container.innerHTML;
+    const follow = render(<NotificationTypeIcon type="follow" />).container.innerHTML;
+    expect(own).not.toBe(follow);
+  });
+});
+
 // The chip is decoration, but the WRONG decoration is a claim: the follow glyph
 // in a neutral circle is what an unrecognised type falls through to, which is
 // how a moderation event comes to look like a new follower. Caught in Chromium
@@ -204,6 +261,7 @@ describe("notification pref labels", () => {
     for (const type of [
       "caption_ready",
       "comment",
+      "comment_held",
       "comment_mention",
       "comment_reply",
       "follow",
@@ -214,9 +272,11 @@ describe("notification pref labels", () => {
       "federation_follower_request",
       "new_video",
       "report_resolved",
+      "report_message",
       "video_rejected",
       "video_blocked",
       "video_unblocked",
+      "video_ownership_request",
     ]) {
       expect(TYPE_LABELS[type], `missing TYPE_LABELS entry for ${type}`).toBeDefined();
     }
@@ -242,6 +302,7 @@ describe("describeNotification is exhaustive over the type union", () => {
     follow: { href: "/channels/films", rest: /started following/ },
     comment: { href: "/videos/v-1", rest: /commented on/ },
     comment_reply: { href: "/videos/v-1", rest: /replied to your comment/ },
+    comment_held: { href: "/studio/comments", rest: /awaiting your approval/ },
     comment_mention: { href: "/videos/v-1", rest: /mentioned you/ },
     message: { href: "/messages/conv-1", rest: /sent you a message/ },
     new_video: { href: "/videos/v-1", rest: /published/ },
@@ -256,10 +317,12 @@ describe("describeNotification is exhaustive over the type union", () => {
       rest: /asked to follow/,
     },
     report_resolved: { href: "#", rest: /your report/ },
+    report_message: { href: "#", rest: /message about your report/ },
     video_rejected: { href: "/studio", rest: /rejected/ },
     video_blocked: { href: "/studio/content", rest: /blocked/ },
     video_unblocked: { href: "/videos/v-1", rest: /restored/ },
     caption_ready: { href: "/videos/v-1", rest: /are ready for/ },
+    video_ownership_request: { href: "/studio/ownership", rest: /offered you/ },
   };
 
   for (const [type, want] of Object.entries(expected)) {

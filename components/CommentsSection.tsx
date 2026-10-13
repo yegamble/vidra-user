@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useId, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { useT } from "@/components/I18nProvider";
 import { useWatchSignIn } from "@/components/watch/WatchSignInPrompt";
 import { FederatedOriginBadge } from "@/components/FederatedOriginBadge";
 import {
@@ -18,6 +19,7 @@ import { ReportDialog, type ReportKind } from "@/components/ReportButton";
 import { UserText } from "@/components/UserText";
 import { Alert } from "@/components/ui/Alert";
 import { Avatar } from "@/components/ui/Avatar";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Dropdown, type DropdownItem } from "@/components/ui/Dropdown";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -92,6 +94,7 @@ export function CommentsSection({
   // holds the request until `settled` and re-asks when the viewer changes; see
   // `useSettledSession`. Pages of 100 (the backend maximum) append under a
   // "Load more" instead of silently stopping at the first 100.
+  const t = useT();
   const viewer = useSettledSession();
   const list = useAppendingList<Comment>({
     queryKey: videoId,
@@ -156,28 +159,30 @@ export function CommentsSection({
   const byId = new Map(comments.map((c) => [c.id, c] as const));
 
   return (
-    <section aria-label="Comments" className="flex flex-col gap-4">
+    <section aria-label={t("watch.comments.label")} className="flex flex-col gap-4">
       <h2 className="text-[15px] font-bold tracking-tight">
-        {status === "ready" ? `Comments (${list.total ?? comments.length})` : "Comments"}
+        {status === "ready"
+          ? t("watch.comments.heading", { total: String(list.total ?? comments.length) })
+          : t("watch.comments.label")}
       </h2>
 
       {commentsEnabled ? (
         <CommentForm videoId={videoId} onPosted={onPosted} />
       ) : (
         <p className="rounded-2xl bg-surface-muted px-4 py-3 text-sm text-fg-muted">
-          Comments are turned off for this video.
+          {t("watch.comments.off")}
         </p>
       )}
 
       {status === "loading" ? (
         <div className="flex justify-center py-8">
-          <Spinner label="Loading comments" />
+          <Spinner label={t("watch.comments.loading")} />
         </div>
       ) : status === "error" ? (
-        <ErrorState message="Could not load comments." onRetry={retry} />
+        <ErrorState message={t("watch.comments.error")} onRetry={retry} />
       ) : comments.length === 0 ? (
         <p className="text-sm text-fg-muted">
-          No comments yet. Be the first to comment.
+          {t("watch.comments.empty")}
         </p>
       ) : (
         <ul className="flex flex-col gap-5">
@@ -208,7 +213,7 @@ export function CommentsSection({
           hasMore={list.hasMore}
           autoLoad={autoLoad}
           busy={list.moreStatus === "loading"}
-          error={list.moreStatus === "error" ? "Could not load more comments." : null}
+          error={list.moreStatus === "error" ? t("watch.comments.moreError") : null}
           onLoadMore={list.loadMore}
         />
       ) : null}
@@ -436,6 +441,7 @@ function CommentItem({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [pinBusy, setPinBusy] = useState(false);
   const [heartBusy, setHeartBusy] = useState(false);
+  const [approving, setApproving] = useState(false);
   const [muting, setMuting] = useState(false);
   const [blocking, setBlocking] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -451,6 +457,9 @@ function CommentItem({
   // reply is visible.
   const [repliesOpen, setRepliesOpen] = useState(false);
   const isRemote = comment.remote === true;
+  // Held for review (core 0161): only its author and the video's reviewers ever
+  // receive one, and nobody may reply to or pin it until it is approved.
+  const held = comment.held_for_review === true;
   // Only a top-level comment can be pinned (server rule); a reply carries a
   // parent_id, so it never offers the Pin action.
   const isTopLevel = !comment.parent_id;
@@ -524,6 +533,30 @@ function CommentItem({
       });
     } finally {
       setPinBusy(false);
+    }
+  }
+
+  // A reviewer publishes the held comment AS SHOWN (its updated_at); the
+  // endpoint returns it unheld, so it maps in place like an edit. A 409 means
+  // it was edited since this page loaded: show what is there now, still held,
+  // for another look. Rejecting is the plain delete (remove()).
+  async function approve() {
+    if (approving) return;
+    setApproving(true);
+    try {
+      onEdited(await api.approveComment(videoId, comment.id, comment.updated_at));
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        toast({ message: "This comment changed since you loaded it. Review it again.", variant: "error" });
+        const res = await api.getVideoComments(videoId, { limit: FULL_LIST_LIMIT }).catch(() => null);
+        const fresh = res?.comments.find((c) => c.id === comment.id);
+        if (fresh) onEdited(fresh);
+        else if (res) onDeleted(comment.id);
+      } else {
+        toast({ message: errorMessage(err, "Could not approve this comment."), variant: "error" });
+      }
+    } finally {
+      setApproving(false);
     }
   }
 
@@ -714,7 +747,7 @@ function CommentItem({
   if (canManageComments) {
     // Pin only a top-level comment (server rule); heart works at any depth,
     // replies and remote-authored comments included.
-    if (isTopLevel) {
+    if (isTopLevel && !held) {
       actionItems.push(
         comment.pinned
           ? {
@@ -827,6 +860,7 @@ function CommentItem({
             {comment.edited ? (
               <span className="text-xs text-fg-muted">(edited)</span>
             ) : null}
+            {held ? <Badge variant="warning">Pending approval</Badge> : null}
             {/* Creator-heart marker: a filled heart carrying its own accessible
                 name (role=img + title), so the meaning survives without adjacent
                 text. Suppressed on tombstones via the early return above. */}
@@ -838,7 +872,29 @@ function CommentItem({
               />
             ) : null}
             <span className="ml-auto flex items-center gap-3">
-              {!editing ? (
+              {held && canManageComments ? (
+                <>
+                  <button
+                    type="button"
+                    disabled={approving}
+                    onClick={() => void approve()}
+                    className="focus-ring rounded text-xs font-semibold text-accent-text transition-colors hover:text-fg disabled:opacity-60"
+                  >
+                    Approve
+                  </button>
+                  {!isAuthor ? (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void remove()}
+                      className="focus-ring rounded text-xs font-semibold text-fg-muted transition-colors hover:text-danger disabled:opacity-60"
+                    >
+                      Reject
+                    </button>
+                  ) : null}
+                </>
+              ) : null}
+              {!editing && !held ? (
                 <button
                   type="button"
                   aria-expanded={replying}

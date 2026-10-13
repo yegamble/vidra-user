@@ -17,6 +17,7 @@ import {
   videoThumbnailUrl,
   playlistThumbnailUrl,
 } from "./endpoints";
+import { setAccessToken } from "./auth-store";
 
 function okJson(): Response {
   return new Response(JSON.stringify({}), {
@@ -469,6 +470,19 @@ describe("api endpoints", () => {
     expect(JSON.parse(init.body as string)).toEqual({ title: "Faves", visibility: "public" });
   });
 
+  it("listChannelPlaylists pages a channel's playlists", async () => {
+    await api.listChannelPlaylists("ada", undefined, { limit: 20, offset: 20 });
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/channels/ada/playlists?limit=20&offset=20");
+  });
+
+  it("listUserVideos pages and sorts an account's videos", async () => {
+    await api.listUserVideos("ada", undefined, { limit: 20, offset: 0, sort: "published_at" });
+    const url = calledUrl();
+    expect(url).toContain("http://localhost:8080/api/v1/users/ada/videos?");
+    expect(url).toContain("sort=published_at");
+    expect(url).toContain("limit=20");
+  });
+
   it("getPlaylist targets the detail endpoint", async () => {
     await api.getPlaylist("p1");
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/playlists/p1");
@@ -746,6 +760,24 @@ describe("api endpoints", () => {
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("http://localhost:8080/api/v1/comments/c%2F1/heart");
     expect(init.method).toBe("DELETE");
+  });
+
+  it("approveComment POSTs the reviewed version to the video-scoped approve endpoint", async () => {
+    await api.approveComment("v/1", "c 1", "2026-10-12T10:00:00.123456Z");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/videos/v%2F1/comments/c%201/approve");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ updated_at: "2026-10-12T10:00:00.123456Z" });
+  });
+
+  it("listManagedComments targets the review queue with the held filter and paging", async () => {
+    await api.listManagedComments({ held: true, limit: 10, offset: 20 });
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/me/videos/comments?held=true&limit=10&offset=20");
+  });
+
+  it("listManagedComments omits held when the caller wants every comment", async () => {
+    await api.listManagedComments({ limit: 10 });
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/me/videos/comments?limit=10");
   });
 
   it("reportVideo POSTs the reason to the video report endpoint", async () => {
@@ -1245,6 +1277,43 @@ describe("api endpoints", () => {
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/me/mutes/accounts?limit=100");
   });
 
+  it("getVideoOwnershipChanges pages the caller's incoming ownership requests", async () => {
+    await api.getVideoOwnershipChanges({ limit: 20, offset: 20 });
+    expect(calledUrl()).toBe(
+      "http://localhost:8080/api/v1/me/video-ownership-changes?limit=20&offset=20",
+    );
+  });
+
+  it("giveVideoOwnership POSTs the recipient's username", async () => {
+    await api.giveVideoOwnership("v1", "bob");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/videos/v1/give-ownership");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ username: "bob" });
+  });
+
+  it("cancelVideoOwnership DELETEs the caller's pending offer", async () => {
+    await api.cancelVideoOwnership("v1");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/videos/v1/give-ownership");
+    expect(init.method).toBe("DELETE");
+  });
+
+  it("acceptVideoOwnershipChange POSTs the chosen channel", async () => {
+    await api.acceptVideoOwnershipChange("oc1", "c2");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/me/video-ownership-changes/oc1/accept");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ channel_id: "c2" });
+  });
+
+  it("refuseVideoOwnershipChange POSTs to the refuse route", async () => {
+    await api.refuseVideoOwnershipChange("oc1");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/me/video-ownership-changes/oc1/refuse");
+    expect(init.method).toBe("POST");
+  });
+
   it("startConversation POSTs the recipient id to the conversations endpoint", async () => {
     await api.startConversation("u2");
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
@@ -1548,6 +1617,35 @@ describe("api endpoints", () => {
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("http://localhost:8080/api/v1/videos/v1/captions/en");
     expect(init.method).toBe("DELETE");
+  });
+
+  it("downloadCaptionText GETs the WebVTT body with the bearer token, as text", async () => {
+    fetchMock.mockResolvedValueOnce(new Response("WEBVTT\n", { status: 200 }));
+    await expect(api.downloadCaptionText("v1", "pt-BR")).resolves.toBe("WEBVTT\n");
+    const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/videos/v1/captions/pt-BR");
+  });
+
+  it("downloadCaptionText throws an ApiError carrying the status on failure", async () => {
+    fetchMock.mockResolvedValueOnce(new Response("", { status: 404 }));
+    await expect(api.downloadCaptionText("v1", "en")).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("downloadCaptionText retries once with a refreshed token after a 401", async () => {
+    setAccessToken("old");
+    fetchMock
+      .mockResolvedValueOnce(new Response("", { status: 401 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ token: "fresh", user: {} }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(new Response("WEBVTT\n", { status: 200 }));
+    await expect(api.downloadCaptionText("v1", "en")).resolves.toBe("WEBVTT\n");
+    const last = fetchMock.mock.calls[2] as [string, RequestInit];
+    expect((last[1].headers as Record<string, string>).authorization).toBe("Bearer fresh");
+    setAccessToken(null);
   });
 
   it("requestAutoCaption POSTs the auto-caption endpoint with a language hint", async () => {

@@ -24,12 +24,13 @@ import {
   resumableUpload,
   videoThumbnailUrl,
 } from "@/lib/api";
-import type { Channel, Video, VideoConfigResponse, VideoPrivacy } from "@/lib/api";
+import type { Channel, CommentsPolicy, Video, VideoConfigResponse, VideoPrivacy } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 import { watchPath } from "@/lib/watch-path";
 import { VIDEO_PRIVACY_CHOICES } from "@/lib/video-privacy";
 
 import { SupportTextField } from "./SupportTextField";
+import { TransferOwnershipDialog } from "./TransferOwnershipDialog";
 
 import {
   BlockedBadge,
@@ -56,6 +57,7 @@ export function VideoRow({
   basicOnly = false,
   replaceEnabled = false,
   replaceAccept = "video/*,audio/*",
+  canTransfer = false,
   leading,
 }: {
   video: Video;
@@ -72,6 +74,8 @@ export function VideoRow({
   replaceEnabled?: boolean;
   /** File-picker accept list for the replace flow (extension gate, W10). */
   replaceAccept?: string;
+  /** The caller OWNS this video's channel: only the owner may give it away (core 0165). */
+  canTransfer?: boolean;
   /** Rendered before the thumbnail in the resting row (the bulk-select checkbox). */
   leading?: ReactNode;
 }) {
@@ -97,8 +101,8 @@ export function VideoRow({
   const [sensitiveReason, setSensitiveReason] = useState(video.sensitive_reason ?? "");
   // Per-video publish policies (config-parity W9); like tags/sensitive, the
   // authoritative values arrive with the detail fetch (list rows omit them).
-  const [commentsPolicy, setCommentsPolicy] = useState<"enabled" | "disabled">(
-    video.comments_policy === "disabled" ? "disabled" : "enabled",
+  const [commentsPolicy, setCommentsPolicy] = useState<CommentsPolicy>(
+    video.comments_policy ?? "enabled",
   );
   const [downloadEnabled, setDownloadEnabled] = useState(video.download_enabled !== false);
   // The number of stored passwords (CORE-17), reported up by PasswordManager
@@ -117,6 +121,10 @@ export function VideoRow({
   const canMove = moveTargets.length > 1;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [transferring, setTransferring] = useState(false);
+  // A draft or processing video cannot be given yet (the server answers 409):
+  // its final size, which the recipient's quota is checked against, is unknown.
+  const transferable = canTransfer && video.state !== "draft" && video.state !== "processing";
   // The full detail fetched when Edit opens — the only view carrying hls_url/
   // renditions (list rows omit them per the contract), so the streaming-status
   // note can be honest. null until (unless) the detail fetch succeeds.
@@ -198,7 +206,7 @@ export function VideoRow({
     setPrivacy(video.privacy ?? "private");
     setSensitive(isSensitiveVideo(detail ?? video));
     setSensitiveReason((detail ?? video).sensitive_reason ?? "");
-    setCommentsPolicy((detail ?? video).comments_policy === "disabled" ? "disabled" : "enabled");
+    setCommentsPolicy((detail ?? video).comments_policy ?? "enabled");
     setDownloadEnabled((detail ?? video).download_enabled !== false);
     setPublishAt(toLocalInputValue((detail ?? video).publish_at));
     setChannelId(video.channel_id ?? "");
@@ -223,7 +231,7 @@ export function VideoRow({
       setPrivacy(full.privacy ?? "private");
       setSensitive(isSensitiveVideo(full));
       setSensitiveReason(full.sensitive_reason ?? "");
-      setCommentsPolicy(full.comments_policy === "disabled" ? "disabled" : "enabled");
+      setCommentsPolicy(full.comments_policy ?? "enabled");
       setDownloadEnabled(full.download_enabled !== false);
       setPublishAt(toLocalInputValue(full.publish_at));
     } catch {
@@ -352,15 +360,19 @@ export function VideoRow({
             rule as the sensitive flag. */}
         {detail ? (
           <>
-            <div className="flex items-center justify-between gap-4 text-sm">
-              <span className="font-medium text-fg">Allow comments</span>
-              <Toggle
-                checked={commentsPolicy === "enabled"}
-                onChange={(on) => setCommentsPolicy(on ? "enabled" : "disabled")}
-                label="Edit allow comments"
-                disabled={busy}
-              />
-            </div>
+            {/* Three-way since core 0161: "Require approval" holds each new
+                comment for you (or an editor) to approve in Studio → Comments. */}
+            <Select
+              label="Comments"
+              aria-label="Edit comments"
+              value={commentsPolicy}
+              onChange={(e) => setCommentsPolicy(e.target.value as CommentsPolicy)}
+              disabled={busy}
+            >
+              <option value="enabled">On</option>
+              <option value="requires_approval">Require approval</option>
+              <option value="disabled">Off</option>
+            </Select>
             <div className="flex items-center justify-between gap-4 text-sm">
               <span className="font-medium text-fg">Allow downloads</span>
               <Toggle
@@ -513,6 +525,15 @@ export function VideoRow({
           >
             Edit
           </button>
+          {transferable ? (
+            <button
+              type="button"
+              onClick={() => setTransferring(true)}
+              className={`${ROW_ACTION} text-fg-muted hover:bg-surface-strong hover:text-fg`}
+            >
+              Transfer
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => setMode("confirm-delete")}
@@ -522,6 +543,13 @@ export function VideoRow({
           </button>
         </div>
       )}
+      {transferring ? (
+        <TransferOwnershipDialog
+          videoId={video.id}
+          videoTitle={video.title}
+          onClose={() => setTransferring(false)}
+        />
+      ) : null}
     </li>
   );
 }

@@ -6,6 +6,7 @@ import { Suspense, useSyncExternalStore } from "react";
 
 import { AccountMenu } from "@/components/auth/AccountMenu";
 import { useOptionalSession } from "@/components/auth/AuthProvider";
+import { useT } from "@/components/I18nProvider";
 import { MenuIcon, PlusIcon, PlusSquareIcon, TvIcon, UploadIcon } from "@/components/icons";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { ProtocolRibbon } from "@/components/ProtocolRibbon";
@@ -13,6 +14,7 @@ import { SearchAutocomplete, SearchAutocompleteFallback } from "@/components/Sea
 import { Dropdown, type DropdownItem } from "@/components/ui/Dropdown";
 import { isAdminConsoleRoute, isStandaloneRoute } from "@/lib/app-shell";
 import { brandingAssetUrl } from "@/lib/branding";
+import type { Translate } from "@/lib/i18n";
 import {
   MENU_BUTTON_ATTR,
   SIDEBAR_ID,
@@ -75,17 +77,17 @@ import type { InstanceConfigSnapshot } from "@/lib/instance-config.server";
 // The Go-live row is dropped when the instance reports `features.live: false`
 // (the setting AND the RTMP ingest capability). A menu row that can only ever
 // answer 403/503 is worse than no row.
-function createItems(liveAvailable: boolean): DropdownItem[] {
+function createItems(liveAvailable: boolean, t: Translate): DropdownItem[] {
   return [
     {
-      label: "Upload video",
+      label: t("header.uploadVideo"),
       href: "/studio/content?upload=1",
       icon: <UploadIcon size={18} className="text-accent-text" />,
     },
     ...(liveAvailable
       ? [
           {
-            label: "Go live",
+            label: t("header.goLive"),
             href: "/studio/live?new=1",
             icon: <TvIcon size={18} className="text-live" />,
           } as DropdownItem,
@@ -93,7 +95,7 @@ function createItems(liveAvailable: boolean): DropdownItem[] {
       : []),
     { type: "separator" },
     {
-      label: "New channel",
+      label: t("header.newChannel"),
       href: "/studio/channel?create=1",
       icon: <PlusSquareIcon size={18} />,
     },
@@ -102,6 +104,7 @@ function createItems(liveAvailable: boolean): DropdownItem[] {
 
 export function Header({ instance = null }: { instance?: InstanceConfigSnapshot | null }) {
   const pathname = usePathname();
+  const t = useT();
   const liveAvailable = useLiveAvailable();
   // Shared state keeps the Menu button and rendered rail in sync — called
   // before the standalone early return so the hook order is stable.
@@ -149,7 +152,7 @@ export function Header({ instance = null }: { instance?: InstanceConfigSnapshot 
               type="button"
               {...{ [MENU_BUTTON_ATTR]: "" }}
               onClick={() => (immersive ? setDrawerOpen(!drawerOpen) : setCollapsed(!collapsed))}
-              aria-label="Menu"
+              aria-label={t("header.menu")}
               aria-controls={SIDEBAR_ID}
               aria-expanded={immersive ? drawerOpen : !collapsed}
               className="focus-ring hidden h-11 w-11 shrink-0 items-center justify-center rounded-full text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg sm:inline-flex"
@@ -203,15 +206,15 @@ export function Header({ instance = null }: { instance?: InstanceConfigSnapshot 
         <div className="hidden sm:flex">
           <Dropdown
             align="end"
-            triggerLabel="Create"
+            triggerLabel={t("header.create")}
             triggerClassName="!min-h-10 !gap-1.5 !rounded-[10px] !bg-transparent !px-4 !py-2 !text-[13px] hover:!bg-surface-raised/80"
             trigger={
               <>
                 <PlusIcon size={14} strokeWidth={2.2} aria-hidden="true" />
-                Create
+                {t("header.create")}
               </>
             }
-            items={createItems(liveAvailable)}
+            items={createItems(liveAvailable, t)}
           />
         </div>
         <NotificationsBell />

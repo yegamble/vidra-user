@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { legacyEmbedSearch, legacyWatchSearch } from "./legacy-redirect";
+import { legacyEmbedSearch, legacyPlaylistEmbedSearch, legacyWatchSearch } from "./legacy-redirect";
 
 describe("legacyWatchSearch", () => {
   it("maps PeerTube's start to vidra's t and keeps other params", () => {
@@ -42,5 +42,12 @@ describe("legacyEmbedSearch carries PeerTube embed options", () => {
   });
   it("still drops unknown params and unsafe values", () => {
     expect(legacyEmbedSearch("?playlistPosition=3&autoplay=<script>")).toBe("");
+  });
+});
+
+describe("legacyPlaylistEmbedSearch", () => {
+  it("also carries playlistPosition, validated like the rest", () => {
+    expect(legacyPlaylistEmbedSearch("?start=90&playlistPosition=3&x=1")).toBe("?t=90&playlistPosition=3");
+    expect(legacyPlaylistEmbedSearch("?playlistPosition=<b>")).toBe("");
   });
 });
