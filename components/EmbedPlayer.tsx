@@ -26,7 +26,7 @@ type Status = "loading" | "notfound" | "error" | "locked" | "ready";
 // Read the current framing context for the whitelist check: whether /embed is
 // top-level (a direct open, always allowed), the ancestor frame origins
 // (Chromium), and the referrer (the Firefox fallback). Client-only.
-function readEmbedContext(): EmbedContext {
+export function readEmbedContext(): EmbedContext {
   if (typeof window === "undefined") {
     return { isTopLevel: true, ancestorOrigins: [], referrer: "" };
   }
@@ -40,7 +40,7 @@ function readEmbedContext(): EmbedContext {
 
 // A centered message on the black embed surface (theme-invariant white-on-dark —
 // the documented media-overlay exception; the frame is chrome-less media).
-function EmbedNotice({ children }: { children: React.ReactNode }) {
+export function EmbedNotice({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-dvh items-center justify-center bg-black px-4 text-center text-sm text-white/80">
       {children}
@@ -183,15 +183,25 @@ function parentOrigin(): string {
 // PeerTube URL options (lib/embed-params) are applied to the element here, and
 // `api=1` starts the postMessage player API (lib/embed-player-api). None of this
 // runs before the privacy gate and password unlock above have let the video load.
-function EmbedVideo({
+export function EmbedVideo({
   video,
   params,
   playbackToken,
+  onEnded,
+  overlay,
 }: {
   video: Video;
   params: EmbedParams;
   playbackToken: string | null;
+  /** Playlist embeds advance here; a lone video embed leaves it unset. */
+  onEnded?: () => void;
+  /** Extra chrome over the video (the playlist embed's title + prev/next bar). */
+  overlay?: React.ReactNode;
 }) {
+  const endedRef = useRef(onEnded);
+  useEffect(() => {
+    endedRef.current = onEnded;
+  });
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
@@ -212,6 +222,8 @@ function EmbedVideo({
       if (stopAt !== null && el.currentTime >= stopAt && !el.paused) el.pause();
     };
     el.addEventListener("timeupdate", onTime);
+    const onEndedEv = () => endedRef.current?.();
+    el.addEventListener("ended", onEndedEv);
     let api: ReturnType<typeof startEmbedApi> | null = null;
     let onMeta: (() => void) | null = null;
     if (params.api && window.parent !== window) {
@@ -224,6 +236,7 @@ function EmbedVideo({
     }
     return () => {
       el.removeEventListener("timeupdate", onTime);
+      el.removeEventListener("ended", onEndedEv);
       el.removeEventListener("canplay", tryAutoplay);
       if (onMeta) el.removeEventListener("loadedmetadata", onMeta);
       api?.stop();
@@ -256,6 +269,7 @@ function EmbedVideo({
             </span>
           )
         ) : null}
+        {overlay}
       </VideoPlayer>
     </div>
   );
