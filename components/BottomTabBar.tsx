@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { useT } from "@/components/I18nProvider";
 import { CreateSheet } from "@/components/CreateSheet";
 import {
   BellIcon,
@@ -15,13 +16,14 @@ import {
 } from "@/components/icons";
 import { api } from "@/lib/api";
 import { isStandaloneRoute } from "@/lib/app-shell";
+import type { PlainMessageKey } from "@/lib/i18n";
 
 // The five mobile destinations (design "Vidra App": Home, Search, Create, Inbox,
 // Library). Create is not a route — it opens the Create bottom sheet (Upload /
 // Go live / Open Studio). Inbox covers notifications + messages.
 type TabDef = {
   href: string;
-  label: string;
+  labelKey: PlainMessageKey;
   /** Route prefixes (besides href) that keep this tab marked active. */
   also?: readonly string[];
   icon: React.ReactNode;
@@ -30,24 +32,24 @@ type TabDef = {
 };
 
 const TABS: readonly TabDef[] = [
-  { href: "/", label: "Home", icon: <HomeIcon size={23} /> },
-  { href: "/search", label: "Search", icon: <SearchIcon size={23} /> },
+  { href: "/", labelKey: "nav.home", icon: <HomeIcon size={23} /> },
+  { href: "/search", labelKey: "nav.search", icon: <SearchIcon size={23} /> },
   {
     href: "/studio",
-    label: "Create",
+    labelKey: "nav.create",
     isCreate: true,
     // 30px rounded plus-square (rx6), lighter 1.5 stroke — the design's create glyph.
     icon: <PlusSquareIcon size={30} strokeWidth={1.5} />,
   },
   {
     href: "/notifications",
-    label: "Inbox",
+    labelKey: "nav.inbox",
     also: ["/messages"],
     icon: <BellIcon size={23} />,
   },
   {
     href: "/library",
-    label: "Library",
+    labelKey: "nav.library",
     also: ["/playlists", "/history"],
     icon: <LibraryIcon size={23} />,
   },
@@ -71,6 +73,7 @@ function isTabActive(tab: TabDef, pathname: string | null): boolean {
  */
 export function BottomTabBar() {
   const pathname = usePathname();
+  const t = useT();
   const { status } = useSession();
   const [unread, setUnread] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
@@ -96,7 +99,7 @@ export function BottomTabBar() {
   return (
     <>
       <nav
-        aria-label="Primary"
+        aria-label={t("nav.primary")}
         className="sticky bottom-0 z-30 bg-gradient-to-t from-canvas via-canvas/95 to-transparent px-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-2 sm:hidden"
       >
         <ul className="glass-chrome relative flex items-stretch justify-around rounded-sheet p-1">
@@ -110,27 +113,26 @@ export function BottomTabBar() {
 
             if (tab.isCreate) {
               return (
-                <li key={tab.href + tab.label} className="flex-1">
+                <li key={tab.href + tab.labelKey} className="flex-1">
                   <button
                     type="button"
                     onClick={() => setCreateOpen(true)}
                     aria-haspopup="dialog"
                     aria-expanded={createOpen}
-                    aria-label={tab.label}
+                    aria-label={t(tab.labelKey)}
                     className={`${cellClass} bg-transparent`}
                   >
                     <span className="relative flex">{tab.icon}</span>
-                    <span className="text-[10px] font-medium leading-none">{tab.label}</span>
+                    <span className="text-[10px] font-medium leading-none">{t(tab.labelKey)}</span>
                   </button>
                 </li>
               );
             }
 
-            const showDot = tab.label === "Inbox" && status === "authed" && unread > 0;
-            const label =
-              showDot && unread > 0 ? `${tab.label} (${unread} unread)` : tab.label;
+            const showDot = tab.labelKey === "nav.inbox" && status === "authed" && unread > 0;
+            const label = showDot ? t("nav.inbox.unread", { count: unread }) : t(tab.labelKey);
             return (
-              <li key={tab.href + tab.label} className="flex-1">
+              <li key={tab.href + tab.labelKey} className="flex-1">
                 <Link
                   href={tab.href}
                   aria-current={active ? "page" : undefined}
@@ -149,7 +151,7 @@ export function BottomTabBar() {
                   <span
                     className={`text-[10px] leading-none ${active ? "font-semibold" : "font-medium"}`}
                   >
-                    {tab.label}
+                    {t(tab.labelKey)}
                   </span>
                 </Link>
               </li>

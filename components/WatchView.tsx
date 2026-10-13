@@ -66,6 +66,7 @@ import { parseStartTime } from "@/lib/start-time";
 import { useSensitiveContentPolicy } from "@/lib/use-sensitive-policy";
 import { useRestrictedMode } from "@/lib/device-preferences";
 import { dequeueVideo, useVideoQueue } from "@/lib/video-queue";
+import { useVideoActionPermissions } from "@/lib/use-video-action-permissions";
 import { isSignInRequired } from "@/lib/video-privacy";
 
 type Status = "loading" | "error" | "notfound" | "locked" | "signin" | "ready";
@@ -105,10 +106,6 @@ export function WatchView({
   // as the operator's default sort. null (defaults not landed / no backend)
   // reproduces the shipped recent/local baseline, i.e. the pre-W5 URLs.
   const instanceDefaults = useInstanceDefaults();
-  // The signed-in viewer, so the comments section can offer the creator
-  // pin/heart controls when this is the video owner's own channel (owner-only
-  // client gating; the server independently authorizes editors/moderators too).
-  const { user } = useSession();
   // The shared seam for "don't ask a viewer-scoped question before you know
   // who the viewer is" — see lib/use-settled-session.ts.
   const { settled, viewerKey } = useSettledSession();
@@ -679,13 +676,7 @@ export function WatchView({
       {/* comments_enabled is the server's EFFECTIVE value (instance toggle AND
           this video's comments_policy, config-parity W9); absent (older
           payloads) fails open — the server still gates posting. */}
-      <CommentsSection
-        videoId={video.id}
-        commentsEnabled={video.comments_enabled !== false}
-        durationSeconds={video.duration_seconds ?? null}
-        onSeekToTimestamp={seekToTimestamp}
-        canManageComments={Boolean(user && channel && user.id === channel.owner_id)}
-      />
+      <WatchComments video={video} ownerId={channel?.owner_id} onSeek={seekToTimestamp} />
       </div>
 
       {/* Secondary column: the viewer's up-next queue (renders nothing when
@@ -701,6 +692,35 @@ export function WatchView({
       </div>
     </div>
     </WatchSignInProvider>
+  );
+}
+
+// The comments section, offering the reviewer controls (Approve/Reject held
+// comments, pin, heart) to everyone the server lets review this video's thread
+// — owner, editor members, staff (core 0161) — via the shared permissions seam.
+function WatchComments({
+  video,
+  ownerId,
+  onSeek,
+}: {
+  video: Video;
+  ownerId?: string;
+  onSeek: (seconds: number) => void;
+}) {
+  // The owner is known from the channel this page already loaded: their
+  // controls never wait on (or depend on) the /me/channels read the shared seam
+  // makes for editors.
+  const { user } = useSession();
+  const { canManage } = useVideoActionPermissions(video);
+  const isOwner = Boolean(user && ownerId && user.id === ownerId);
+  return (
+    <CommentsSection
+      videoId={video.id}
+      commentsEnabled={video.comments_enabled !== false}
+      durationSeconds={video.duration_seconds ?? null}
+      onSeekToTimestamp={onSeek}
+      canManageComments={isOwner || canManage}
+    />
   );
 }
 

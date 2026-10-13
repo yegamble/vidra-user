@@ -29,6 +29,7 @@ vi.mock("@/components/auth/AuthProvider", () => ({ useSession: () => ({ user: nu
 vi.mock("@/lib/messaging/availability", () => ({ useMessagingAvailable: () => true }));
 vi.mock("@/components/SidebarFollowing", () => ({ SidebarFollowing: () => null }));
 
+import { I18nProvider } from "./I18nProvider";
 import { Sidebar } from "./Sidebar";
 import {
   SIDEBAR_ID,
@@ -208,5 +209,19 @@ describe("Sidebar — immersive (theater) placement", () => {
       setDrawerOpen(true);
     });
     expect(screen.queryByRole("navigation", { name: "Primary" })).toBeNull();
+  });
+});
+
+describe("Sidebar — i18n", () => {
+  it("renders destination labels from the active catalog, en for a missing key", () => {
+    pathname.value = "/videos/v1";
+    render(
+      <I18nProvider locale="fr" messages={{ "nav.home": "Accueil", "nav.primary": "Principale" }}>
+        <Sidebar />
+      </I18nProvider>,
+    );
+    const nav = screen.getByRole("navigation", { name: "Principale" });
+    expect(nav.textContent).toContain("Accueil");
+    expect(nav.textContent).toContain("Trending");
   });
 });

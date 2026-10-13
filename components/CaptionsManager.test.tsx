@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => {
@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => {
     deleteCaption: vi.fn(),
     requestAutoCaption: vi.fn(),
     getAutoCaption: vi.fn(),
+    downloadCaptionText: vi.fn(),
     getInstanceCached: vi.fn(),
   };
 });
@@ -31,6 +32,7 @@ vi.mock("@/lib/api", () => ({
     deleteCaption: mocks.deleteCaption,
     requestAutoCaption: mocks.requestAutoCaption,
     getAutoCaption: mocks.getAutoCaption,
+    downloadCaptionText: mocks.downloadCaptionText,
   },
   errorMessage: (_error: unknown, fallback: string) => fallback,
   getInstanceCached: mocks.getInstanceCached,
@@ -94,5 +96,18 @@ describe("CaptionsManager transcription feature flag", () => {
       expect(screen.getByRole("button", { name: "Generate automatically" })).toBeDefined(),
     );
     expect(screen.queryByText(UNAVAILABLE)).toBeNull();
+  });
+});
+
+describe("CaptionsManager cue editor", () => {
+  it("opens the cue editor for a track from its row", async () => {
+    mocks.getCaptions.mockResolvedValue({
+      captions: [{ language: "en", label: "English", created_at: "" }],
+    });
+    mocks.downloadCaptionText.mockResolvedValue("WEBVTT\n\n00:00.000 --> 00:01.000\nHi\n");
+    render(<CaptionsManager videoId="v1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Open en cue editor" }));
+    expect(await screen.findByLabelText("Cue 1 text")).toHaveProperty("value", "Hi");
+    expect(mocks.downloadCaptionText).toHaveBeenCalledWith("v1", "en", expect.anything());
   });
 });
