@@ -151,7 +151,7 @@ function Queue() {
             onChange={(next) => list.setFilter("status", next === DEFAULT_STATUS ? "" : next)}
           />
           <Select
-            aria-label="Filter by category"
+            aria-label="Filter reports by category"
             value={reasonFilter}
             onChange={(e) => list.setFilter("reason", e.target.value)}
           >

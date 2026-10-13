@@ -183,7 +183,7 @@ describe("ModerationQueue — report categories and timestamp", () => {
     render(<ModerationQueue />);
     await screen.findByRole("region", { name: "Report detail" });
 
-    fireEvent.change(screen.getByLabelText("Filter by category"), { target: { value: "privacy" } });
+    fireEvent.change(screen.getByLabelText("Filter reports by category"), { target: { value: "privacy" } });
     // The filter lives in the URL (usePagedList); the server does the narrowing.
     await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith(expect.stringContaining("reason=privacy"), expect.anything()));
   });
