@@ -151,6 +151,14 @@ export const ADMIN_NAV: readonly AdminNavItem[] = [
     badge: "signups",
   },
   {
+    href: "/admin/federation/instances",
+    // Not "Instances": "Instance" (the config section) already owns the word,
+    // and two labels sharing it read as one destination.
+    label: "Federation",
+    description: "Follow other instances, and decide which instances may follow this one.",
+    group: "more",
+  },
+  {
     href: "/admin/federation/follower-requests",
     label: "Followers",
     description: "Approve or reject remote accounts asking to follow local channels.",
