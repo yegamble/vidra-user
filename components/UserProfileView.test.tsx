@@ -30,7 +30,8 @@ vi.mock("@/components/ChannelVideoCard", () => ({
 
 vi.mock("@/lib/use-browse-auto-load", () => ({ useBrowseAutoLoad: () => false }));
 
-vi.mock("@/lib/format", () => ({
+vi.mock("@/lib/format", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/format")>()),
   formatCount: (n: number) => String(n),
   formatMonthYear: () => "Jul 2026",
   pluralize: (_n: number, word: string) => word,
