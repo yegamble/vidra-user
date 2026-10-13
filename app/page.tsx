@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { FeaturedBanner } from "@/components/FeaturedBanner";
 import { FeedFilters } from "@/components/FeedFilters";
 import { FeedScopeToggle } from "@/components/FeedScopeToggle";
+import { FeedMoreSorts } from "@/components/FeedMoreSorts";
 import { FeedSortTabs } from "@/components/FeedSortTabs";
 import { HomepageDocument } from "@/components/HomepageDocument";
 import { HomeRecommendationsRail } from "@/components/HomeRecommendationsRail";
@@ -171,6 +172,7 @@ export default async function Home({
           below the fold. Wraps at sm+ and at text-zoom widths. */}
       <div className="scrollbar-none mb-8 flex flex-nowrap items-center gap-2.5 overflow-x-auto sm:flex-wrap sm:overflow-x-visible">
         <FeedScopeToggle active={scope} sort={active} filters={filters} urlDefaults={landingDefaults} />
+        <FeedMoreSorts active={active} filters={filters} urlDefaults={landingDefaults} />
         <FeedFilters sort={active} filters={filters} urlDefaults={landingDefaults} />
       </div>
       <Suspense key={feedKey} fallback={<StreamedFeedFallback />}>

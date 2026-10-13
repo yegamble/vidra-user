@@ -65,6 +65,9 @@ import type {
   ChannelSyncResponse,
   CreateChannelSyncRequest,
   FederationFollowerRequestListResponse,
+  InstanceFollow,
+  InstanceFollowListResponse,
+  InstanceFollowState,
   FollowedChannelsResponse,
   FollowNotificationsResponse,
   NotificationSetting,
@@ -99,6 +102,7 @@ import type {
   LiveTerminationResult,
   TerminateLiveStreamRequest,
   LivePublicListResponse,
+  LiveUpcomingListResponse,
   UpdateLiveStreamRequest,
   MessageListResponse,
   Message,
@@ -165,6 +169,8 @@ import type {
   RejectRegistrationRequest,
   MyReport,
   MyReportListResponse,
+  ReportReason,
+  CreateReportRequest,
   ReportListResponse,
   ReportMessage,
   ReportMessageListResponse,
@@ -200,6 +206,10 @@ import type {
   SuggestionBanResponse,
   WatchedWord,
   WatchedWordListResponse,
+  WatchedWordList,
+  WatchedWordListsPage,
+  CreateWatchedWordListRequest,
+  UpdateWatchedWordListRequest,
   WatchedWordMatchListResponse,
   WatchedWordMatchStatusFilter,
   ResolveWatchedWordMatchRequest,
@@ -280,6 +290,34 @@ export interface JobRunListParams {
   limit?: number;
   offset?: number;
 }
+
+/**
+ * Named watched-word lists (core 0172) exist at two scopes with the same shape:
+ * `/admin/watched-word-lists` (instance lists; moderator/admin) and
+ * `/me/watched-word-lists` (a creator's own lists, applied to comments on their
+ * videos). One factory so the two can never drift apart.
+ */
+function watchedWordListEndpoints(base: string) {
+  const one = (id: string) => `${base}/${encodeURIComponent(id)}`;
+  return {
+    /** GET — one page of lists, default list first; word_count only (no words). */
+    list: (params: PageParams = {}, signal?: AbortSignal) =>
+      apiRequest<WatchedWordListsPage>(base, { query: pageQuery(params), signal }),
+    /** GET — one list WITH its words (the default list's words are paged elsewhere). */
+    get: (id: string, signal?: AbortSignal) => apiRequest<WatchedWordList>(one(id), { signal }),
+    /** POST — create a list (409 on a name already used in this scope). */
+    create: (body: CreateWatchedWordListRequest) =>
+      apiRequest<WatchedWordList>(base, { method: "POST", body }),
+    /** PATCH — rename / change action; `words` REPLACES the terms when present. */
+    update: (id: string, body: UpdateWatchedWordListRequest) =>
+      apiRequest<WatchedWordList>(one(id), { method: "PATCH", body }),
+    /** DELETE — remove a list and its terms (409 for the default list). */
+    remove: (id: string) => apiRequest<void>(one(id), { method: "DELETE" }),
+  };
+}
+
+export const adminWatchedWordLists = watchedWordListEndpoints("/api/v1/admin/watched-word-lists");
+export const myWatchedWordLists = watchedWordListEndpoints("/api/v1/me/watched-word-lists");
 
 /** Typed wrappers for the public vidra-core read endpoints. */
 export const api = {
@@ -1141,6 +1179,20 @@ export const api = {
    * contract deliberately carries NO viewer/concurrent count and NO thumbnail
    * (neither exists server-side yet — W4 dependencies), so neither is surfaced.
    */
+  /**
+   * GET /api/v1/live/upcoming — PUBLIC, not-yet-live streams with a planned
+   * start, soonest first. `channel` (a handle) narrows it to one channel for the
+   * channel page. Auth optional (a muted/blocked owner drops out for the viewer).
+   */
+  listUpcomingLiveStreams: (
+    params: PageParams & { channel?: string } = {},
+    signal?: AbortSignal,
+  ) =>
+    apiRequest<LiveUpcomingListResponse>("/api/v1/live/upcoming", {
+      query: { ...pageQuery(params), channel: params.channel },
+      signal,
+    }),
+
   listLivePublicStreams: (
     params: PageParams = {},
     signal?: AbortSignal,
@@ -1504,6 +1556,25 @@ export const api = {
     apiRequest<VideoOwnershipChangeListResponse>("/api/v1/me/video-ownership-changes", {
       query: pageQuery(params),
       signal,
+    }),
+
+  /**
+   * POST /api/v1/videos/{id}/give-ownership — offer the caller's video to
+   * another local user, who must accept it (204; owner only).
+   */
+  giveVideoOwnership: (videoId: string, username: string) =>
+    apiRequest<void>(`/api/v1/videos/${encodeURIComponent(videoId)}/give-ownership`, {
+      method: "POST",
+      body: { username },
+    }),
+
+  /**
+   * DELETE /api/v1/videos/{id}/give-ownership — withdraw the caller's pending
+   * offer of the video (204; 404 when there is none).
+   */
+  cancelVideoOwnership: (videoId: string) =>
+    apiRequest<void>(`/api/v1/videos/${encodeURIComponent(videoId)}/give-ownership`, {
+      method: "DELETE",
     }),
 
   /** POST …/{id}/accept — take the offered video into one of the caller's channels (204). */
@@ -2047,10 +2118,14 @@ export const api = {
     }),
 
   /** POST /api/v1/videos/{id}/report — file an abuse report on a video (auth; idempotent 204). */
-  reportVideo: (id: string, reason: string) =>
+  reportVideo: (
+    id: string,
+    reason: string,
+    detail: Pick<CreateReportRequest, "reasons" | "start_seconds" | "end_seconds"> = {},
+  ) =>
     apiRequest<void>(`/api/v1/videos/${encodeURIComponent(id)}/report`, {
       method: "POST",
-      body: { reason },
+      body: { reason, ...detail },
     }),
 
   /** POST /api/v1/comments/{id}/report — file an abuse report on a comment (auth; idempotent 204). */
@@ -2295,12 +2370,13 @@ export const api = {
    * rejects an unrecognised value with a 400 instead of quietly widening it.
    */
   getReports: (
-    params: PageParams & { status?: ReportStatusFilter } = {},
+    params: PageParams & { status?: ReportStatusFilter; reason?: ReportReason } = {},
     signal?: AbortSignal,
   ) =>
     apiRequest<ReportListResponse>("/api/v1/admin/reports", {
       query: {
         status: params.status,
+        reason: params.reason,
         ...pageQuery(params),
       },
       signal,
@@ -2521,6 +2597,65 @@ export const api = {
       `/api/v1/admin/federation/follower-requests/${encodeURIComponent(id)}/reject`,
       { method: "POST" },
     ),
+
+  /**
+   * GET /api/v1/admin/federation/instance-followers — remote instances that
+   * follow this instance's actor, newest first, optionally one state (admin).
+   */
+  getInstanceFollowers: (
+    params: PageParams & { state?: InstanceFollowState } = {},
+    signal?: AbortSignal,
+  ) =>
+    apiRequest<InstanceFollowListResponse>("/api/v1/admin/federation/instance-followers", {
+      query: { state: params.state, ...pageQuery(params) },
+      signal,
+    }),
+
+  /** POST …/instance-followers/{id}/accept — accept a pending instance follower (admin, 204). */
+  acceptInstanceFollower: (id: string) =>
+    apiRequest<void>(
+      `/api/v1/admin/federation/instance-followers/${encodeURIComponent(id)}/accept`,
+      { method: "POST" },
+    ),
+
+  /** POST …/instance-followers/{id}/reject — reject an instance follower; it stays rejected (admin, 204). */
+  rejectInstanceFollower: (id: string) =>
+    apiRequest<void>(
+      `/api/v1/admin/federation/instance-followers/${encodeURIComponent(id)}/reject`,
+      { method: "POST" },
+    ),
+
+  /** DELETE …/instance-followers/{id} — remove an instance follower in any state (admin, 204). */
+  removeInstanceFollower: (id: string) =>
+    apiRequest<void>(`/api/v1/admin/federation/instance-followers/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
+
+  /** GET /api/v1/admin/federation/instance-following — instances this one follows (admin). */
+  getInstanceFollowing: (
+    params: PageParams & { state?: InstanceFollowState } = {},
+    signal?: AbortSignal,
+  ) =>
+    apiRequest<InstanceFollowListResponse>("/api/v1/admin/federation/instance-following", {
+      query: { state: params.state, ...pageQuery(params) },
+      signal,
+    }),
+
+  /**
+   * POST /api/v1/admin/federation/instance-following — follow a remote instance
+   * by host as this instance's actor (admin; 201, pending until it Accepts).
+   */
+  followInstance: (host: string) =>
+    apiRequest<InstanceFollow>("/api/v1/admin/federation/instance-following", {
+      method: "POST",
+      body: { host },
+    }),
+
+  /** DELETE …/instance-following/{id} — stop following a remote instance (admin, 204). */
+  unfollowInstance: (id: string) =>
+    apiRequest<void>(`/api/v1/admin/federation/instance-following/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
 
   /** GET /api/v1/admin/audit-log — the security audit trail, newest first (admin). */
   getAuditLog: (

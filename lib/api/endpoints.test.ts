@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  adminWatchedWordLists,
   api,
+  myWatchedWordLists,
   channelAvatarUrl,
   channelBannerUrl,
   ipfsHlsMasterUrl,
@@ -788,6 +790,22 @@ describe("api endpoints", () => {
     expect(JSON.parse(init.body as string)).toEqual({ reason: "spam" });
   });
 
+  it("reportVideo sends predefined reasons and the time range when given", async () => {
+    await api.reportVideo("v1", "spam", { reasons: ["captions"], start_seconds: 5, end_seconds: 9 });
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({
+      reason: "spam",
+      reasons: ["captions"],
+      start_seconds: 5,
+      end_seconds: 9,
+    });
+  });
+
+  it("getReports passes the reason filter", async () => {
+    await api.getReports({ status: "open", reason: "privacy" });
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/reports?status=open&reason=privacy");
+  });
+
   it("reportComment POSTs the reason to the comment report endpoint", async () => {
     await api.reportComment("c1", "abuse");
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
@@ -884,6 +902,12 @@ describe("api endpoints", () => {
   it("getLiveStream targets the single live-stream endpoint", async () => {
     await api.getLiveStream("s1");
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/live/s1");
+  });
+
+  it("listUpcomingLiveStreams targets /live/upcoming with the channel filter", async () => {
+    await api.listUpcomingLiveStreams({ channel: "ada", limit: 1 });
+    const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/live/upcoming?limit=1&channel=ada");
   });
 
   it("updateLiveStream PATCHes the metadata (incl. replay_enabled)", async () => {
@@ -1282,6 +1306,21 @@ describe("api endpoints", () => {
     expect(calledUrl()).toBe(
       "http://localhost:8080/api/v1/me/video-ownership-changes?limit=20&offset=20",
     );
+  });
+
+  it("giveVideoOwnership POSTs the recipient's username", async () => {
+    await api.giveVideoOwnership("v1", "bob");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/videos/v1/give-ownership");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ username: "bob" });
+  });
+
+  it("cancelVideoOwnership DELETEs the caller's pending offer", async () => {
+    await api.cancelVideoOwnership("v1");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/videos/v1/give-ownership");
+    expect(init.method).toBe("DELETE");
   });
 
   it("acceptVideoOwnershipChange POSTs the chosen channel", async () => {
@@ -1693,6 +1732,27 @@ describe("api endpoints", () => {
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("http://localhost:8080/api/v1/admin/watched-words/w1");
     expect(init.method).toBe("DELETE");
+  });
+
+  it("watched-word lists: the admin scope and the account scope are distinct URLs", async () => {
+    await adminWatchedWordLists.list({ limit: 20 });
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/watched-word-lists?limit=20");
+    fetchMock.mockClear();
+    fetchMock.mockResolvedValue(okJson());
+    await myWatchedWordLists.get("l 1");
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/me/watched-word-lists/l%201");
+  });
+
+  it("watched-word lists: update PATCHes the replaced words, remove DELETEs", async () => {
+    await myWatchedWordLists.update("l1", { action: "hold", words: [] });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/me/watched-word-lists/l1");
+    expect(init.method).toBe("PATCH");
+    expect(JSON.parse(init.body as string)).toEqual({ action: "hold", words: [] });
+    fetchMock.mockClear();
+    fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
+    await adminWatchedWordLists.remove("l1");
+    expect((fetchMock.mock.calls[0] as [string, RequestInit])[1].method).toBe("DELETE");
   });
 
   it("getVideoStats targets the video stats endpoint with the id encoded", async () => {

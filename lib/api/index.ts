@@ -10,7 +10,9 @@ export {
 export { isUploadCancelled, uploadWithProgress } from "./upload";
 export type { UploadOptions, UploadPhase, UploadProgress } from "./upload";
 export {
+  adminWatchedWordLists,
   api,
+  myWatchedWordLists,
   channelAvatarUrl,
   channelBannerUrl,
   ipfsHlsMasterUrl,

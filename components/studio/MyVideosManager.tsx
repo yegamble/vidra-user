@@ -2,11 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { useT } from "@/components/I18nProvider";
 import { PlaylistIcon, SearchIcon, TrashIcon } from "@/components/icons";
 import { Alert, Button, Dropdown, EmptyState, ErrorState, Input, Modal, Select, Spinner } from "@/components/ui";
 import { ListTail } from "@/components/ui/ListTail";
 import { ApiError, api, errorMessage } from "@/lib/api";
 import type { Channel, Video, VideoConfigResponse, VideoPrivacy, VideoState } from "@/lib/api";
+import type { PlainMessageKey } from "@/lib/i18n";
 import { videoAcceptAttr } from "@/lib/upload-accept";
 import { useAppendingList } from "@/lib/use-appending-list";
 import { useBrowseAutoLoad } from "@/lib/use-browse-auto-load";
@@ -20,25 +22,25 @@ import { VideoRow } from "./VideoRow";
 // so a reload, Back or a shared link restores the same view.
 const FILTER_KEYS = ["q", "privacy", "state", "channel"] as const;
 
-const PRIVACIES: { value: VideoPrivacy; label: string }[] = [
-  { value: "public", label: "Public" },
-  { value: "unlisted", label: "Unlisted" },
-  { value: "private", label: "Private" },
-  { value: "internal", label: "Internal" },
-  { value: "password", label: "Password" },
+const PRIVACIES: { value: VideoPrivacy; label: PlainMessageKey }[] = [
+  { value: "public", label: "studio.privacy.public" },
+  { value: "unlisted", label: "studio.privacy.unlisted" },
+  { value: "private", label: "studio.privacy.private" },
+  { value: "internal", label: "studio.privacy.internal" },
+  { value: "password", label: "studio.privacy.password" },
 ];
 // "password" needs a stored password per video, so it is a filter value only;
 // bulk-setting it would fail every item.
 const BULK_PRIVACIES = PRIVACIES.filter((p) => p.value !== "password");
 
-const STATES: { value: VideoState; label: string }[] = [
-  { value: "draft", label: "Draft" },
-  { value: "processing", label: "Processing" },
-  { value: "transcoding", label: "Transcoding" },
-  { value: "scheduled", label: "Scheduled" },
-  { value: "published", label: "Published" },
-  { value: "quarantined", label: "Quarantined" },
-  { value: "failed", label: "Failed" },
+const STATES: { value: VideoState; label: PlainMessageKey }[] = [
+  { value: "draft", label: "studio.state.draft" },
+  { value: "processing", label: "studio.state.processing" },
+  { value: "transcoding", label: "studio.state.transcoding" },
+  { value: "scheduled", label: "studio.state.scheduled" },
+  { value: "published", label: "studio.state.published" },
+  { value: "quarantined", label: "studio.state.quarantined" },
+  { value: "failed", label: "studio.state.failed" },
 ];
 
 type Summary = {
@@ -73,6 +75,7 @@ export function MyVideosManager({
    */
   defaultChannel?: Channel | null;
 }) {
+    const t = useT();
   const autoLoad = useBrowseAutoLoad();
   const query = useListQuery({ prefix: "mv", filterKeys: FILTER_KEYS });
   const { filters } = query;
@@ -168,7 +171,7 @@ export function MyVideosManager({
 
   async function runBulk(
     body: { action: "delete" } | { action: "set_privacy"; privacy: VideoPrivacy },
-    verb: string,
+        verb: "deleted" | "updated",
   ) {
     if (busy || chosen.length === 0) return;
     setBusy(true);
@@ -181,14 +184,18 @@ export function MyVideosManager({
         .map((r) => ({
           id: r.video_id,
           title: titles.get(r.video_id) ?? r.video_id,
-          error: r.error ?? "Failed.",
+          error: r.error ?? t("studio.bulk.failed"),
         }));
       setSummary({
         kind: failures.length === 0 ? "success" : "warning",
         message:
           failures.length === 0
-            ? `${verb} ${res.succeeded} ${res.succeeded === 1 ? "video" : "videos"}.`
-            : `${verb} ${res.succeeded} of ${ids.length}. ${failures.length} failed:`,
+                        ? t(`studio.bulk.${verb}`, { videos: t("studio.videos", { count: String(res.succeeded) }) })
+            : t(`studio.bulk.${verb}Partial`, {
+                succeeded: res.succeeded,
+                total: ids.length,
+                failed: failures.length,
+              }),
         failures,
       });
       // Failed items stay selected so the creator can see and retry them.
@@ -202,8 +209,8 @@ export function MyVideosManager({
       setSummary({
         kind: "danger",
         message: refused
-          ? `${errorMessage(err, "The request was refused.")} Nothing was changed.`
-          : "Couldn't confirm the result, so the list was refreshed. Check it before retrying.",
+                    ? t("studio.bulk.refusedNote", { reason: errorMessage(err, t("studio.bulk.refused")) })
+          : t("studio.bulk.unconfirmed"),
         failures: [],
       });
       if (!refused) list.reload();
@@ -223,44 +230,45 @@ export function MyVideosManager({
   return (
     <section className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-[15px] font-bold tracking-tight">Your videos</h2>
+        <h2 className="text-[15px] font-bold tracking-tight">{t("studio.list.title")}</h2>
         <Button variant="secondary" size="sm" onClick={list.reload}>
-          Refresh
+                    {t("studio.list.refresh")}
+
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4" role="search" aria-label="Filter your videos">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4" role="search" aria-label={t("studio.list.filterLabel")}>
         <div className="relative">
           <Input
-            label="Filter by title"
+            label={t("studio.list.filterTitle")}
             type="search"
-            placeholder="Search titles"
+            placeholder={t("studio.list.searchTitles")}
             value={text}
             onChange={(e) => setText(e.target.value)}
             maxLength={200}
           />
           <SearchIcon size={16} className="pointer-events-none absolute bottom-3 right-3 text-fg-muted" />
         </div>
-        <Select label="Filter by privacy" value={privacy ?? ""} onChange={(e) => query.setFilter("privacy", e.target.value)}>
-          <option value="">Any privacy</option>
+        <Select label={t("studio.list.filterPrivacy")} value={privacy ?? ""} onChange={(e) => query.setFilter("privacy", e.target.value)}>
+          <option value="">{t("studio.list.anyPrivacy")}</option>
           {PRIVACIES.map((p) => (
-            <option key={p.value} value={p.value}>{p.label}</option>
+            <option key={p.value} value={p.value}>{t(p.label)}</option>
           ))}
         </Select>
-        <Select label="Filter by state" value={state ?? ""} onChange={(e) => query.setFilter("state", e.target.value)}>
-          <option value="">Any state</option>
+        <Select label={t("studio.list.filterState")} value={state ?? ""} onChange={(e) => query.setFilter("state", e.target.value)}>
+          <option value="">{t("studio.list.anyState")}</option>
           {STATES.map((s) => (
-            <option key={s.value} value={s.value}>{s.label}</option>
+            <option key={s.value} value={s.value}>{t(s.label)}</option>
           ))}
         </Select>
         <Select
-          label="Filter by channel"
+          label={t("studio.list.filterChannel")}
           value={allChannels ? "all" : (channelId ?? "all")}
           onChange={(e) =>
             query.setFilter("channel", e.target.value === defaultChannel?.id ? undefined : e.target.value)
           }
         >
-          <option value="all">All channels</option>
+          <option value="all">{t("studio.list.allChannels")}</option>
           {channels.map((c) => (
             <option key={c.id} value={c.id}>{c.display_name || c.handle}</option>
           ))}
@@ -268,7 +276,7 @@ export function MyVideosManager({
       </div>
 
       {status === "ready" && videos.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-surface-muted px-4 py-2" role="toolbar" aria-label="Bulk actions">
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-surface-muted px-4 py-2" role="toolbar" aria-label={t("studio.bulk.label")}>
           <label className="flex cursor-pointer items-center gap-2 text-sm text-fg">
             <input
               type="checkbox"
@@ -276,37 +284,37 @@ export function MyVideosManager({
               checked={allSelected}
               onChange={() => setSelected(allSelected ? NO_SELECTION : new Set(videos.slice(0, MAX_BULK).map((v) => v.id)))}
             />
-            <span>{videos.length > MAX_BULK ? `Select first ${MAX_BULK}` : "Select all loaded"}</span>
+            <span>{videos.length > MAX_BULK ? t("studio.bulk.selectFirst", { max: MAX_BULK }) : t("studio.bulk.selectAll")}</span>
           </label>
           <span className="text-sm text-fg-muted" aria-live="polite">
             {selected.size === 0
               ? list.total !== undefined
-                ? `${list.total} ${list.total === 1 ? "video" : "videos"}`
+                ? t("studio.videos", { count: String(list.total) })
                 : ""
-              : `${selected.size} selected`}
+              : t("studio.bulk.selected", { selected: selected.size })}
           </span>
           {atCap ? (
             <span className="text-sm text-warning" role="status">
-              Selection is limited to {MAX_BULK} videos per action.
+              {t("studio.bulk.limit", { max: MAX_BULK })}
             </span>
           ) : null}
           {selected.size > 0 ? (
             <div className="ml-auto flex flex-wrap items-center gap-2">
               <Dropdown
-                trigger="Change privacy"
-                triggerLabel={`Change privacy of ${selected.size} selected`}
+                trigger={t("studio.bulk.changePrivacy")}
+                triggerLabel={t("studio.bulk.changePrivacyOf", { selected: selected.size })}
                 align="end"
                 items={BULK_PRIVACIES.map((p) => ({
-                  label: p.label,
+                  label: t(p.label),
                   onSelect: () => setPendingPrivacy(p.value),
                   disabled: busy,
                 }))}
               />
               <Button variant="secondary" size="sm" onClick={() => setPlaylistOpen(true)} disabled={busy}>
-                <PlaylistIcon size={16} /> Add to playlist
+                <PlaylistIcon size={16} /> {t("studio.bulk.addToPlaylist")}
               </Button>
               <Button variant="danger" size="sm" onClick={() => setConfirmDelete(true)} disabled={busy}>
-                <TrashIcon size={16} /> Delete
+                <TrashIcon size={16} /> {t("studio.bulk.delete")}
               </Button>
             </div>
           ) : null}
@@ -317,7 +325,7 @@ export function MyVideosManager({
         <div className="flex flex-col gap-2">
           <Alert variant={summary.kind}>{summary.message}</Alert>
           {summary.failures.length > 0 ? (
-            <ul className="flex max-h-40 flex-col gap-1 overflow-y-auto text-sm" aria-label="Videos that failed">
+            <ul className="flex max-h-40 flex-col gap-1 overflow-y-auto text-sm" aria-label={t("studio.bulk.failedList")}>
               {summary.failures.map((f) => (
                 <li key={f.id} className="rounded-lg bg-danger-surface px-3 py-2 text-danger">
                   <span className="font-medium">{f.title}</span>: {f.error}
@@ -330,20 +338,20 @@ export function MyVideosManager({
 
       {status === "loading" ? (
         <div className="flex justify-center py-8">
-          <Spinner label="Loading your videos" />
+          <Spinner label={t("studio.list.loading")} />
         </div>
       ) : status === "error" ? (
-        <ErrorState message="Could not load your videos." onRetry={list.reload} />
+        <ErrorState message={t("studio.list.error")} onRetry={list.reload} />
       ) : videos.length === 0 ? (
         filtered ? (
           <EmptyState
             icon={<SearchIcon size={24} />}
-            title="No videos match these filters"
-            message="Try a different search, or clear the filters."
+            title={t("studio.list.noMatch.title")}
+            message={t("studio.list.noMatch.message")}
           />
         ) : (
           <p className="text-sm text-fg-muted">
-            {scope ? "No videos in this channel yet." : "No videos yet."}
+            {scope ? t("studio.list.emptyChannel") : t("studio.list.empty")}
           </p>
         )
       ) : (
@@ -356,10 +364,14 @@ export function MyVideosManager({
               channels={channels}
               replaceEnabled={replaceEnabled}
               replaceAccept={videoAcceptAttr(additionalExts)}
+              // Every row here is in one of the caller's OWN channels (GET
+              // /me/videos, or a channel list scoped to an own channel), so the
+              // owner-only transfer (core 0165) is always theirs to offer.
+              canTransfer
               leading={
                 <input
                   type="checkbox"
-                  aria-label={`Include ${v.title} in bulk actions`}
+                  aria-label={t("studio.list.include", { title: v.title })}
                   className="h-4 w-4 shrink-0 rounded border-border accent-accent focus-ring"
                   checked={selected.has(v.id)}
                   onChange={() => toggle(v.id)}
@@ -374,7 +386,8 @@ export function MyVideosManager({
       {filtered && status !== "loading" ? (
         <div>
           <Button variant="secondary" size="sm" onClick={clearFilters}>
-            Clear filters
+                        {t("studio.list.clearFilters")}
+
           </Button>
         </div>
       ) : null}
@@ -383,22 +396,22 @@ export function MyVideosManager({
           hasMore={list.hasMore}
           autoLoad={autoLoad}
           busy={list.moreStatus === "loading"}
-          error={list.moreStatus === "error" ? "Could not load more videos." : null}
+          error={list.moreStatus === "error" ? t("studio.list.moreError") : null}
           onLoadMore={list.loadMore}
         />
       ) : null}
 
       {confirmDelete ? (
-        <Modal title={`Delete ${chosen.length} ${chosen.length === 1 ? "video" : "videos"}?`} onClose={() => setConfirmDelete(false)}>
+        <Modal title={t("studio.bulk.deleteTitle", { videos: t("studio.videos", { count: String(chosen.length) }) })} onClose={() => setConfirmDelete(false)}>
           <p className="mb-4 text-sm text-fg-muted">
-            This permanently deletes {chosen.length} {chosen.length === 1 ? "video" : "videos"} and cannot be undone.
+                        {t("studio.bulk.deleteMessage", { videos: t("studio.videos", { count: String(chosen.length) }) })}
           </p>
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setConfirmDelete(false)} disabled={busy}>
-              Cancel
+                            {t("studio.bulk.cancel")}
             </Button>
-            <Button variant="danger" onClick={() => void runBulk({ action: "delete" }, "Deleted")} disabled={busy}>
-              {busy ? "Deleting..." : `Delete ${chosen.length}`}
+            <Button variant="danger" onClick={() => void runBulk({ action: "delete" }, "deleted")} disabled={busy}>
+              {busy ? t("studio.bulk.deleting") : t("studio.bulk.deleteN", { n: chosen.length })}
             </Button>
           </div>
         </Modal>
@@ -406,24 +419,22 @@ export function MyVideosManager({
 
       {pendingPrivacy ? (
         <Modal
-          title={`Make ${chosen.length} ${chosen.length === 1 ? "video" : "videos"} ${pendingPrivacy}?`}
+          title={t("studio.bulk.privacyTitle", { videos: t("studio.videos", { count: String(chosen.length) }), privacy: pendingPrivacy })}
           onClose={() => setPendingPrivacy(null)}
         >
           <p className="mb-4 text-sm text-fg-muted">
-            This changes the privacy of {chosen.length} {chosen.length === 1 ? "video" : "videos"} to {pendingPrivacy}.
-            {pendingPrivacy === "public"
-              ? " Public videos are shared with other servers (federated) and appear in search and feeds."
-              : ""}
+                        {t("studio.bulk.privacyMessage", { videos: t("studio.videos", { count: String(chosen.length) }), privacy: pendingPrivacy })}
+            {pendingPrivacy === "public" ? ` ${t("studio.bulk.publicNote")}` : ""}
           </p>
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setPendingPrivacy(null)} disabled={busy}>
-              Cancel
+                            {t("studio.bulk.cancel")}
             </Button>
             <Button
-              onClick={() => void runBulk({ action: "set_privacy", privacy: pendingPrivacy }, "Updated")}
+              onClick={() => void runBulk({ action: "set_privacy", privacy: pendingPrivacy }, "updated")}
               disabled={busy}
             >
-              {busy ? "Updating..." : `Make ${pendingPrivacy}`}
+              {busy ? t("studio.bulk.updating") : t("studio.bulk.makePrivacy", { privacy: pendingPrivacy })}
             </Button>
           </div>
         </Modal>

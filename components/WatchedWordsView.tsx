@@ -5,6 +5,7 @@ import { useState } from "react";
 import { ListBoundary } from "@/components/admin/ListBoundary";
 import { PagedListShell } from "@/components/admin/PagedListShell";
 import { RoleGate } from "@/components/RoleGate";
+import { WordListsManager } from "@/components/WordListsManager";
 import { Button } from "@/components/ui/Button";
 import { ApiError, api, errorMessage } from "@/lib/api";
 import type { WatchedWord } from "@/lib/api";
@@ -23,6 +24,7 @@ export function WatchedWordsView() {
       <ListBoundary label="watched words">
         <WordsList />
       </ListBoundary>
+      <WordListsManager scope="admin" />
     </RoleGate>
   );
 }
