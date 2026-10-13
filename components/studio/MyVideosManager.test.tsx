@@ -40,6 +40,8 @@ vi.mock("./VideoRow", () => ({
 
 import { ApiError } from "@/lib/api";
 
+import { I18nProvider } from "@/components/I18nProvider";
+
 import { MyVideosManager } from "./MyVideosManager";
 
 const channels = [
@@ -65,6 +67,21 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+});
+
+describe("MyVideosManager catalog", () => {
+  it("renders the provided catalog, en for a missing key, with the video-count plural", async () => {
+    mocks.listMyVideos.mockResolvedValue({ videos: rows(1), total: 1, limit: 20, offset: 0 });
+    render(
+      <I18nProvider locale="fr" messages={{ "studio.list.title": "Vos vidéos" }}>
+        <MyVideosManager config={null} channels={channels} />
+      </I18nProvider>,
+    );
+    await screen.findByText("Clip 0");
+    expect(screen.getByText("Vos vidéos")).toBeTruthy();
+    expect(screen.getByText("1 video")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Refresh" })).toBeTruthy();
+  });
 });
 
 describe("MyVideosManager filters", () => {
