@@ -1611,6 +1611,11 @@ describe("api endpoints", () => {
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/comments?q=spam&limit=100");
   });
 
+  it("getAdminComments forwards the auto_tag filter", async () => {
+    await api.getAdminComments({ auto_tag: "external-link", limit: 10 });
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/comments?auto_tag=external-link&limit=10");
+  });
+
   it("bulkRemoveAdminComments POSTs the account to the bulk-remove endpoint", async () => {
     await api.bulkRemoveAdminComments("spammer");
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];

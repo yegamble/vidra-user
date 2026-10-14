@@ -35,6 +35,8 @@ export function AdminSearch({
   onSubmit,
   onClear,
   hasQuery,
+  submitLabel = "Search",
+  clearLabel = "Clear",
 }: {
   label: string;
   placeholder: string;
@@ -43,6 +45,9 @@ export function AdminSearch({
   onSubmit: () => void;
   onClear: () => void;
   hasQuery: boolean;
+  /** Button text; override when two searches share a page so names stay unique. */
+  submitLabel?: string;
+  clearLabel?: string;
 }) {
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -63,11 +68,11 @@ export function AdminSearch({
         />
       </div>
       <Button type="submit" size="sm">
-        Search
+        {submitLabel}
       </Button>
       {hasQuery ? (
         <Button variant="secondary" size="sm" onClick={onClear}>
-          Clear
+          {clearLabel}
         </Button>
       ) : null}
     </form>

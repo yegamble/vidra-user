@@ -6,8 +6,10 @@ import { useState } from "react";
 import { ListBoundary } from "@/components/admin/ListBoundary";
 import { ListSearch } from "@/components/admin/ListToolbar";
 import { PagedListShell } from "@/components/admin/PagedListShell";
+import { useT } from "@/components/I18nProvider";
 import { RoleGate } from "@/components/RoleGate";
 import { UserText } from "@/components/UserText";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { api, errorMessage } from "@/lib/api";
 import type { AdminComment } from "@/lib/api";
@@ -28,12 +30,13 @@ export function AdminCommentsView() {
 }
 
 function CommentsList() {
+  const t = useT();
   const list = usePagedList<AdminComment>({
-    filterKeys: ["q"],
+    filterKeys: ["q", "auto_tag"],
     load: (query, signal) =>
       api
         .getAdminComments(
-          { q: query.filters.q, limit: query.limit, offset: query.offset },
+          { q: query.filters.q, auto_tag: query.filters.auto_tag, limit: query.limit, offset: query.offset },
           signal,
         )
         .then((res) => ({
@@ -43,7 +46,7 @@ function CommentsList() {
           offset: res.offset,
         })),
   });
-  const searched = Boolean(list.filters.q);
+  const searched = Boolean(list.filters.q || list.filters.auto_tag);
   const [notice, setNotice] = useState<string | null>(null);
 
   function onBulkRemoved(account: string, removed: number) {
@@ -65,6 +68,14 @@ function CommentsList() {
             value={list.filters.q ?? ""}
             onSubmit={(next) => list.setFilter("q", next)}
           />
+          <ListSearch
+            label={t("admin.comments.autoTag.label")}
+            placeholder={t("admin.comments.autoTag.placeholder")}
+            value={list.filters.auto_tag ?? ""}
+            submitLabel={t("admin.comments.autoTag.submit")}
+            clearLabel={t("admin.comments.autoTag.clear")}
+            onSubmit={(next) => list.setFilter("auto_tag", next)}
+          />
           {notice ? (
             <p role="status" className="text-sm text-fg">
               {notice}
@@ -76,7 +87,9 @@ function CommentsList() {
       emptyTitle={searched ? "No matching comments" : "No comments yet"}
       emptyMessage={
         searched
-          ? "Try a different search term."
+          ? list.filters.auto_tag && !list.filters.q
+            ? t("admin.comments.autoTag.empty")
+            : "Try a different search term."
           : "Comments will appear here as viewers post them."
       }
     >
@@ -106,6 +119,7 @@ function CommentRow({
 }) {
   // Bulk removal targets a LOCAL username; a remote author's comment carries no
   // actor URL in the list payload, so it gets no bulk action.
+  const t = useT();
   const bulkAccount =
     !comment.remote && comment.author_username ? comment.author_username : null;
   const [bulkConfirming, setBulkConfirming] = useState(false);
@@ -162,6 +176,16 @@ function CommentRow({
       </div>
 
       <UserText variant="comment" text={comment.body} timestamps={false} className="mt-2 text-sm text-fg" />
+
+      {comment.automatic_tags?.length ? (
+        <ul aria-label={t("admin.comments.autoTag.listLabel")} className="mt-2 flex flex-wrap gap-1.5">
+          {comment.automatic_tags.map((tag) => (
+            <li key={tag}>
+              <Badge>{tag}</Badge>
+            </li>
+          ))}
+        </ul>
+      ) : null}
 
       {error ? <p className="mt-2 text-sm text-danger">{error}</p> : null}
 
