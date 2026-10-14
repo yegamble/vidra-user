@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 
+import { useT } from "@/components/I18nProvider";
 import { ListBoundary } from "@/components/admin/ListBoundary";
 import { PagedListShell } from "@/components/admin/PagedListShell";
 import { GlobeIcon, ServerIcon } from "@/components/icons";
@@ -11,6 +12,7 @@ import { Button } from "@/components/ui/Button";
 import { ApiError, api, errorMessage } from "@/lib/api";
 import type { InstanceFollow, InstanceFollowState } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
+import type { PlainMessageKey, Translate } from "@/lib/i18n";
 import { useAsyncAction } from "@/lib/use-async-action";
 import { usePagedList } from "@/lib/use-paged-list";
 
@@ -19,12 +21,13 @@ import { usePagedList } from "@/lib/use-paged-list";
 // public videos arrive here once they accept — and other instances follow it,
 // receiving its public videos. Admin only; every action is audited server-side.
 export function AdminFederationInstancesView() {
+  const t = useT();
   return (
     <RoleGate minRole="admin" action="manage instance follows">
       <div className="flex flex-col gap-10">
         <section aria-labelledby="instance-following-heading" className="flex flex-col gap-3">
           <h2 id="instance-following-heading" className="text-lg font-semibold tracking-tight text-fg">
-            Following
+            {t("admin.fedInstances.following")}
           </h2>
           <ListBoundary label="followed instances">
             <FollowingList />
@@ -32,7 +35,7 @@ export function AdminFederationInstancesView() {
         </section>
         <section aria-labelledby="instance-followers-heading" className="flex flex-col gap-3">
           <h2 id="instance-followers-heading" className="text-lg font-semibold tracking-tight text-fg">
-            Followers
+            {t("admin.fedInstances.followers")}
           </h2>
           <ListBoundary label="instance followers">
             <FollowersList />
@@ -43,13 +46,14 @@ export function AdminFederationInstancesView() {
   );
 }
 
-const STATE_BADGE: Record<InstanceFollowState, { label: string; variant: BadgeVariant }> = {
-  pending: { label: "Pending", variant: "warning" },
-  accepted: { label: "Accepted", variant: "success" },
-  rejected: { label: "Rejected", variant: "danger" },
+const STATE_BADGE: Record<InstanceFollowState, { labelKey: PlainMessageKey; variant: BadgeVariant }> = {
+  pending: { labelKey: "admin.fedInstances.state.pending", variant: "warning" },
+  accepted: { labelKey: "admin.fedInstances.state.accepted", variant: "success" },
+  rejected: { labelKey: "admin.fedInstances.state.rejected", variant: "danger" },
 };
 
 function FollowingList() {
+  const t = useT();
   const list = usePagedList<InstanceFollow>({
     load: (query, signal) =>
       api
@@ -71,10 +75,10 @@ function FollowingList() {
       list={list}
       noun="followed instance"
       toolbar={<FollowInstanceForm onFollowed={onFollowed} />}
-      errorMessage="Could not load the instances this one follows."
+      errorMessage={t("admin.fedInstances.followingLoadError")}
       emptyIcon={<ServerIcon size={24} />}
-      emptyTitle="Not following any instances"
-      emptyMessage="Follow an instance above. Its public videos start arriving here once it accepts."
+      emptyTitle={t("admin.fedInstances.followingEmptyTitle")}
+      emptyMessage={t("admin.fedInstances.followingEmptyMessage")}
     >
       <ul className="flex flex-col gap-2">
         {list.items.map((f) => (
@@ -83,8 +87,8 @@ function FollowingList() {
               follow={f}
               actions={[
                 {
-                  label: "Unfollow",
-                  confirm: `Stop following ${f.host}? Its new videos stop arriving.`,
+                  id: "unfollow",
+                  confirm: true,
                   run: async () => {
                     await api.unfollowInstance(f.id);
                     list.drop((i) => i.id !== f.id);
@@ -100,6 +104,7 @@ function FollowingList() {
 }
 
 function FollowersList() {
+  const t = useT();
   const list = usePagedList<InstanceFollow>({
     load: (query, signal) =>
       api
@@ -112,33 +117,33 @@ function FollowersList() {
     <PagedListShell
       list={list}
       noun="instance follower"
-      errorMessage="Could not load the instances following this one."
+      errorMessage={t("admin.fedInstances.followersLoadError")}
       emptyIcon={<GlobeIcon size={24} />}
-      emptyTitle="No instance follows this one yet"
-      emptyMessage="When a PeerTube or vidra instance follows this one, it appears here. While follower approval is on, it waits for you."
+      emptyTitle={t("admin.fedInstances.followersEmptyTitle")}
+      emptyMessage={t("admin.fedInstances.followersEmptyMessage")}
     >
       <ul className="flex flex-col gap-2">
         {list.items.map((f) => {
           const accept: RowAction = {
-            label: "Accept",
+            id: "accept",
             primary: true,
-            confirm: `Accept ${f.host}? It receives this instance's public videos.`,
+            confirm: true,
             run: async () => {
               await api.acceptInstanceFollower(f.id);
               setState(f.id, "accepted");
             },
           };
           const reject: RowAction = {
-            label: "Reject",
-            confirm: `Reject ${f.host}? It stops receiving videos and cannot follow again until removed.`,
+            id: "reject",
+            confirm: true,
             run: async () => {
               await api.rejectInstanceFollower(f.id);
               setState(f.id, "rejected");
             },
           };
           const removeRow: RowAction = {
-            label: "Remove",
-            confirm: `Remove ${f.host}? It may follow again later.`,
+            id: "remove",
+            confirm: true,
             run: async () => {
               await api.removeInstanceFollower(f.id);
               list.drop((i) => i.id !== f.id);
@@ -158,16 +163,17 @@ function FollowersList() {
 }
 
 function FollowInstanceForm({ onFollowed }: { onFollowed: (f: InstanceFollow) => void }) {
+  const t = useT();
   const [host, setHost] = useState("");
   const { run, busy, error, clearError } = useAsyncAction(
     async (h: string) => {
       onFollowed(await api.followInstance(h));
       setHost("");
     },
-    "Could not follow this instance.",
+    t("admin.fedInstances.followError"),
     (err) =>
       err instanceof ApiError && err.status === 422
-        ? "Enter the host of a reachable PeerTube or vidra instance, e.g. videos.example."
+        ? t("admin.fedInstances.invalidHost")
         : null,
   );
   return (
@@ -182,8 +188,8 @@ function FollowInstanceForm({ onFollowed }: { onFollowed: (f: InstanceFollow) =>
       <div className="flex flex-wrap gap-2">
         <input
           type="text"
-          aria-label="Instance host to follow"
-          placeholder="Instance host, e.g. videos.example"
+          aria-label={t("admin.fedInstances.hostLabel")}
+          placeholder={t("admin.fedInstances.hostPlaceholder")}
           value={host}
           onChange={(e) => {
             setHost(e.target.value);
@@ -192,7 +198,7 @@ function FollowInstanceForm({ onFollowed }: { onFollowed: (f: InstanceFollow) =>
           className="focus-ring w-full max-w-xs rounded-xl border border-border bg-surface px-3.5 py-2 text-sm text-fg placeholder:text-fg-muted"
         />
         <Button type="submit" size="sm" disabled={busy || host.trim() === ""}>
-          {busy ? "Following…" : "Follow"}
+          {busy ? t("admin.fedInstances.followBusy") : t("admin.fedInstances.follow")}
         </Button>
       </div>
       {error ? (
@@ -204,13 +210,59 @@ function FollowInstanceForm({ onFollowed }: { onFollowed: (f: InstanceFollow) =>
   );
 }
 
-type RowAction = { label: string; primary?: boolean; confirm?: string; run: () => Promise<void> };
+type RowAction = {
+  id: "unfollow" | "accept" | "reject" | "remove";
+  primary?: boolean;
+  /** Ask first; the question is `actionCopy(...).confirm`. */
+  confirm?: boolean;
+  run: () => Promise<void>;
+};
+
+/** Every sentence a row action speaks, for one action on one host. */
+function actionCopy(t: Translate, id: RowAction["id"], host: string) {
+  switch (id) {
+    case "unfollow":
+      return {
+        label: t("admin.fedInstances.unfollow.label"),
+        confirm: t("admin.fedInstances.unfollow.confirm", { host }),
+        confirmAria: t("admin.fedInstances.unfollow.confirmAria", { host }),
+        aria: t("admin.fedInstances.unfollow.aria", { host }),
+        error: t("admin.fedInstances.unfollow.error", { host }),
+      };
+    case "accept":
+      return {
+        label: t("admin.fedInstances.accept.label"),
+        confirm: t("admin.fedInstances.accept.confirm", { host }),
+        confirmAria: t("admin.fedInstances.accept.confirmAria", { host }),
+        aria: t("admin.fedInstances.accept.aria", { host }),
+        error: t("admin.fedInstances.accept.error", { host }),
+      };
+    case "reject":
+      return {
+        label: t("admin.fedInstances.reject.label"),
+        confirm: t("admin.fedInstances.reject.confirm", { host }),
+        confirmAria: t("admin.fedInstances.reject.confirmAria", { host }),
+        aria: t("admin.fedInstances.reject.aria", { host }),
+        error: t("admin.fedInstances.reject.error", { host }),
+      };
+    case "remove":
+      return {
+        label: t("admin.fedInstances.remove.label"),
+        confirm: t("admin.fedInstances.remove.confirm", { host }),
+        confirmAria: t("admin.fedInstances.remove.confirmAria", { host }),
+        aria: t("admin.fedInstances.remove.aria", { host }),
+        error: t("admin.fedInstances.remove.error", { host }),
+      };
+  }
+}
 
 function InstanceRow({ follow, actions }: { follow: InstanceFollow; actions: RowAction[] }) {
+  const t = useT();
   const [confirming, setConfirming] = useState<RowAction | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const badge = STATE_BADGE[follow.state];
+  const confirmCopy = confirming ? actionCopy(t, confirming.id, follow.host) : null;
 
   async function perform(action: RowAction) {
     setBusy(true);
@@ -219,7 +271,7 @@ function InstanceRow({ follow, actions }: { follow: InstanceFollow; actions: Row
       await action.run();
       setConfirming(null);
     } catch (err) {
-      setError(errorMessage(err, `Could not ${action.label.toLowerCase()} ${follow.host}.`));
+      setError(errorMessage(err, actionCopy(t, action.id, follow.host).error));
     } finally {
       setBusy(false);
     }
@@ -229,8 +281,8 @@ function InstanceRow({ follow, actions }: { follow: InstanceFollow; actions: Row
     <article className="rounded-2xl bg-surface-muted p-4">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <span className="font-semibold tracking-tight text-fg">{follow.host}</span>
-        <Badge variant={badge.variant}>{badge.label}</Badge>
-        <span className="text-[13px] text-fg-muted">since {relativeTime(follow.created_at)}</span>
+        <Badge variant={badge.variant}>{t(badge.labelKey)}</Badge>
+        <span className="text-[13px] text-fg-muted">{t("admin.fedInstances.since", { when: relativeTime(follow.created_at) })}</span>
       </div>
       <p className="mt-1 break-all text-xs text-fg-muted">{follow.handle}</p>
       {error ? (
@@ -241,33 +293,36 @@ function InstanceRow({ follow, actions }: { follow: InstanceFollow; actions: Row
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {confirming ? (
           <>
-            <span className="text-sm text-fg-muted">{confirming.confirm}</span>
+            <span className="text-sm text-fg-muted">{confirmCopy?.confirm}</span>
             <Button
               size="sm"
               variant={confirming.primary ? "primary" : "danger"}
-              aria-label={`Confirm ${confirming.label.toLowerCase()} ${follow.host}`}
+              aria-label={confirmCopy?.confirmAria}
               disabled={busy}
               onClick={() => void perform(confirming)}
             >
-              {confirming.label}
+              {confirmCopy?.label}
             </Button>
             <Button variant="secondary" size="sm" disabled={busy} onClick={() => setConfirming(null)}>
-              Cancel
+              {t("common.cancel")}
             </Button>
           </>
         ) : (
-          actions.map((a) => (
-            <Button
-              key={a.label}
-              size="sm"
-              variant={a.primary ? "primary" : "secondary"}
-              aria-label={`${a.label} ${follow.host}`}
-              disabled={busy}
-              onClick={() => (a.confirm ? setConfirming(a) : void perform(a))}
-            >
-              {a.label}
-            </Button>
-          ))
+          actions.map((a) => {
+            const copy = actionCopy(t, a.id, follow.host);
+            return (
+              <Button
+                key={a.id}
+                size="sm"
+                variant={a.primary ? "primary" : "secondary"}
+                aria-label={copy.aria}
+                disabled={busy}
+                onClick={() => (a.confirm ? setConfirming(a) : void perform(a))}
+              >
+                {copy.label}
+              </Button>
+            );
+          })
         )}
       </div>
     </article>

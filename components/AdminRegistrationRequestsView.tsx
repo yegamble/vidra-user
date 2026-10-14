@@ -2,13 +2,16 @@
 
 import { useCallback, useState } from "react";
 
+import { useT } from "@/components/I18nProvider";
+import { SLOT, withSlot } from "@/components/admin/messageSlot";
 import { ListBoundary } from "@/components/admin/ListBoundary";
 import { PagedListShell } from "@/components/admin/PagedListShell";
 import { useSession } from "@/components/auth/AuthProvider";
 import { UsersIcon } from "@/components/icons";
 import { RoleGate } from "@/components/RoleGate";
 import { Button } from "@/components/ui/Button";
-import { FilterChipGroup, type FilterChipOption } from "@/components/ui/FilterChips";
+import { FilterChipGroup } from "@/components/ui/FilterChips";
+import type { PlainMessageKey } from "@/lib/i18n";
 import { ApiError, api, errorMessage } from "@/lib/api";
 import type {
   RegistrationRequest,
@@ -26,32 +29,23 @@ const MAX_NOTE_LEN = 2000;
  * than `pending` fell through to "everything", and the rejected pile was
  * unaskable.
  */
-const STATUS_OPTIONS: readonly FilterChipOption<RegistrationRequestFilter>[] = [
-  { value: "pending", label: "Pending" },
-  { value: "approved", label: "Approved" },
-  { value: "rejected", label: "Rejected" },
-  { value: "all", label: "All" },
+const STATUS_OPTIONS: readonly { value: RegistrationRequestFilter; labelKey: PlainMessageKey }[] = [
+  { value: "pending", labelKey: "admin.reg.filter.pending" },
+  { value: "approved", labelKey: "admin.reg.filter.approved" },
+  { value: "rejected", labelKey: "admin.reg.filter.rejected" },
+  { value: "all", labelKey: "admin.reg.filter.all" },
 ];
 
 const DEFAULT_STATUS: RegistrationRequestFilter = "pending";
 
-const EMPTY_COPY: Record<RegistrationRequestFilter, { title: string; message: string }> = {
-  pending: {
-    title: "No pending requests",
-    message: "Nothing to review right now. Signups awaiting approval will appear here.",
-  },
-  approved: {
-    title: "No approved requests",
-    message: "Requests you approve are kept here as a record.",
-  },
-  rejected: {
-    title: "No rejected requests",
-    message: "Requests you reject are kept here as a record.",
-  },
-  all: {
-    title: "No registration requests yet",
-    message: "When this instance requires signup approval, requests show up here.",
-  },
+const EMPTY_COPY: Record<
+  RegistrationRequestFilter,
+  { title: PlainMessageKey; message: PlainMessageKey }
+> = {
+  pending: { title: "admin.reg.empty.pending.title", message: "admin.reg.empty.pending.message" },
+  approved: { title: "admin.reg.empty.approved.title", message: "admin.reg.empty.approved.message" },
+  rejected: { title: "admin.reg.empty.rejected.title", message: "admin.reg.empty.rejected.message" },
+  all: { title: "admin.reg.empty.all.title", message: "admin.reg.empty.all.message" },
 };
 
 // AdminRegistrationRequestsView is the admin-only registration approval queue,
@@ -73,6 +67,7 @@ export function AdminRegistrationRequestsView() {
 }
 
 function RequestQueue({ reviewerUsername }: { reviewerUsername: string }) {
+  const t = useT();
   const list = usePagedList<RegistrationRequest>({
     filterKeys: ["status"],
     load: (query, signal) =>
@@ -135,18 +130,18 @@ function RequestQueue({ reviewerUsername }: { reviewerUsername: string }) {
       noun="registration request"
       toolbar={
         <FilterChipGroup<RegistrationRequestFilter>
-          label="Filter registration requests"
-          options={STATUS_OPTIONS}
+          label={t("admin.reg.filterLabel")}
+          options={STATUS_OPTIONS.map((o) => ({ value: o.value, label: t(o.labelKey) }))}
           value={status}
           onChange={(next) =>
             list.setFilter("status", next === DEFAULT_STATUS ? "" : next)
           }
         />
       }
-      errorMessage="Could not load registration requests."
+      errorMessage={t("admin.reg.loadError")}
       emptyIcon={<UsersIcon size={24} />}
-      emptyTitle={EMPTY_COPY[status].title}
-      emptyMessage={EMPTY_COPY[status].message}
+      emptyTitle={t(EMPTY_COPY[status].title)}
+      emptyMessage={t(EMPTY_COPY[status].message)}
     >
       <ul className="flex flex-col gap-3">
         {list.items.map((request) => (
@@ -158,6 +153,12 @@ function RequestQueue({ reviewerUsername }: { reviewerUsername: string }) {
     </PagedListShell>
   );
 }
+
+const STATUS_LABEL: Record<RegistrationRequestStatus, PlainMessageKey> = {
+  pending: "admin.reg.status.pending",
+  approved: "admin.reg.status.approved",
+  rejected: "admin.reg.status.rejected",
+};
 
 const STATUS_STYLE: Record<RegistrationRequestStatus, string> = {
   pending: "bg-warning/15 text-warning",
@@ -174,6 +175,7 @@ function RequestRow({
   request: RegistrationRequest;
   onResolved: (id: string, status: RegistrationRequestStatus, moderatorNote?: string) => void;
 }) {
+  const t = useT();
   const [note, setNote] = useState("");
   const [rowState, setRowState] = useState<RowState>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -188,9 +190,9 @@ function RequestRow({
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
         // The username/email was taken between filing and approval.
-        setError("That username or email has since been taken, so this request cannot be approved.");
+        setError(t("admin.reg.takenError"));
       } else {
-        setError(errorMessage(err, "Could not approve this request."));
+        setError(errorMessage(err, t("admin.reg.approveError")));
       }
       setRowState("idle");
     }
@@ -205,7 +207,7 @@ function RequestRow({
       await api.rejectRegistrationRequest(request.id, trimmed ? { note: trimmed } : {});
       onResolved(request.id, "rejected", trimmed || undefined);
     } catch (err) {
-      setError(errorMessage(err, "Could not reject this request."));
+      setError(errorMessage(err, t("admin.reg.rejectError")));
       setRowState("idle");
     }
   }
@@ -218,10 +220,10 @@ function RequestRow({
         <span
           className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10.5px] font-bold tracking-[0.04em] uppercase ${STATUS_STYLE[request.status]}`}
         >
-          {request.status}
+          {t(STATUS_LABEL[request.status])}
         </span>
         <span className="text-[13px] text-fg-muted">
-          requested {relativeTime(request.created_at)}
+          {t("admin.reg.requested", { when: relativeTime(request.created_at) })}
         </span>
       </div>
 
@@ -233,18 +235,21 @@ function RequestRow({
 
       {request.status !== "pending" ? (
         <p className="mt-2 text-xs text-fg-muted">
-          {request.status === "approved" ? "Approved" : "Rejected"}
+          {request.status === "approved" ? t("admin.reg.approved") : t("admin.reg.rejected")}
           {request.reviewer_username ? (
             <>
               {" "}
-              by <span className="font-medium">{request.reviewer_username}</span>
+              {withSlot(
+                t("admin.reg.by", { name: SLOT }),
+                <span className="font-medium">{request.reviewer_username}</span>,
+              )}
             </>
           ) : null}
           {request.reviewed_at ? <> {relativeTime(request.reviewed_at)}</> : null}
           {request.moderator_note ? (
             <>
               {" "}
-              · <span className="font-medium">Note:</span> {request.moderator_note}
+              · <span className="font-medium">{t("admin.reg.note")}</span> {request.moderator_note}
             </>
           ) : null}
         </p>
@@ -252,10 +257,10 @@ function RequestRow({
         <div className="mt-3 flex flex-col gap-2">
           <label className="flex flex-col gap-1 text-xs">
             <span className="font-medium text-fg-muted">
-              Internal note (optional, recorded on reject)
+              {t("admin.reg.noteLabel")}
             </span>
             <textarea
-              aria-label={`Internal note for ${request.username}`}
+              aria-label={t("admin.reg.noteAria", { name: request.username })}
               rows={2}
               maxLength={MAX_NOTE_LEN}
               value={note}
@@ -271,20 +276,20 @@ function RequestRow({
           <div className="flex gap-2">
             <Button
               size="sm"
-              aria-label={`Approve ${request.username}`}
+              aria-label={t("admin.followers.approveAria", { name: request.username })}
               disabled={rowState === "submitting"}
               onClick={() => void approve()}
             >
-              Approve
+              {t("admin.action.approve")}
             </Button>
             <Button
               variant="secondary"
               size="sm"
-              aria-label={`Reject ${request.username}`}
+              aria-label={t("admin.followers.rejectAria", { name: request.username })}
               disabled={rowState === "submitting"}
               onClick={() => void reject()}
             >
-              Reject
+              {t("admin.action.reject")}
             </Button>
           </div>
         </div>
