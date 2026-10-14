@@ -33,7 +33,7 @@ export function PrivateFeedSection() {
     let live = true;
     api
       .getFeedToken()
-      .then((t) => live && setToken(t))
+      .then((tok) => live && setToken(tok))
       .catch((e) => live && setError(errorMessage(e, t("settings.feed.loadError"))));
     return () => {
       live = false;
