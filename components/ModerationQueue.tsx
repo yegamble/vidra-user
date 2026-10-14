@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
 
+import { useT } from "@/components/I18nProvider";
+import { SLOT, withSlot } from "@/components/admin/messageSlot";
 import { ListBoundary } from "@/components/admin/ListBoundary";
 import { PagedListShell } from "@/components/admin/PagedListShell";
 import { ReportThread } from "@/components/reports/ReportThread";
@@ -13,11 +15,12 @@ import { Badge, type BadgeVariant } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { FilterChipGroup, type FilterChipOption } from "@/components/ui/FilterChips";
+import { FilterChipGroup } from "@/components/ui/FilterChips";
 import { cn } from "@/lib/cn";
 import { api, errorMessage } from "@/lib/api";
 import type { Report, ReportReason, ReportStatus, ReportStatusFilter } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
+import type { PlainMessageKey, Translate } from "@/lib/i18n";
 import { formatReportRange, reasonLabel, REPORT_REASONS } from "@/lib/report-reasons";
 import { usePagedList } from "@/lib/use-paged-list";
 
@@ -40,27 +43,18 @@ function isWideViewport(): boolean {
  * view narrowed the page it had been handed, so "Open" meant "the open ones
  * among the first hundred reports".
  */
-const STATUS_OPTIONS: readonly FilterChipOption<ReportStatusFilter>[] = [
-  { value: "open", label: "Open" },
-  { value: "resolved", label: "Resolved" },
-  { value: "all", label: "All" },
+const STATUS_OPTIONS: readonly { value: ReportStatusFilter; labelKey: PlainMessageKey }[] = [
+  { value: "open", labelKey: "admin.queue.filter.open" },
+  { value: "resolved", labelKey: "admin.queue.filter.resolved" },
+  { value: "all", labelKey: "admin.queue.filter.all" },
 ];
 
 const DEFAULT_STATUS: ReportStatusFilter = "open";
 
-const EMPTY_COPY: Record<ReportStatusFilter, { title: string; message: string }> = {
-  open: {
-    title: "No open reports",
-    message: "Nothing to review right now. Reports filed by viewers will appear here.",
-  },
-  resolved: {
-    title: "No resolved reports",
-    message: "Reports you accept or reject are kept here as a record.",
-  },
-  all: {
-    title: "No reports yet",
-    message: "When viewers report a video or comment, it shows up here.",
-  },
+const EMPTY_COPY: Record<ReportStatusFilter, { title: PlainMessageKey; message: PlainMessageKey }> = {
+  open: { title: "admin.queue.empty.open.title", message: "admin.queue.empty.open.message" },
+  resolved: { title: "admin.queue.empty.resolved.title", message: "admin.queue.empty.resolved.message" },
+  all: { title: "admin.queue.empty.all.title", message: "admin.queue.empty.all.message" },
 };
 
 // ModerationQueue is the moderator/admin abuse-report triage, styled as a Mail
@@ -78,6 +72,7 @@ export function ModerationQueue() {
 }
 
 function Queue() {
+  const t = useT();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const list = usePagedList<Report>({
     filterKeys: ["status", "reason"],
@@ -145,17 +140,17 @@ function Queue() {
       toolbar={
         <div className="flex flex-wrap items-center gap-3">
           <FilterChipGroup<ReportStatusFilter>
-            label="Filter reports"
-            options={STATUS_OPTIONS}
+            label={t("admin.queue.filterLabel")}
+            options={STATUS_OPTIONS.map((o) => ({ value: o.value, label: t(o.labelKey) }))}
             value={status}
             onChange={(next) => list.setFilter("status", next === DEFAULT_STATUS ? "" : next)}
           />
           <Select
-            aria-label="Filter reports by category"
+            aria-label={t("admin.queue.categoryLabel")}
             value={reasonFilter}
             onChange={(e) => list.setFilter("reason", e.target.value)}
           >
-            <option value="">All categories</option>
+            <option value="">{t("admin.queue.allCategories")}</option>
             {REPORT_REASONS.map((r) => (
               <option key={r.value} value={r.value}>
                 {r.label}
@@ -164,15 +159,15 @@ function Queue() {
           </Select>
         </div>
       }
-      errorMessage="Could not load the moderation queue."
+      errorMessage={t("admin.queue.loadError")}
       emptyIcon={<FlagIcon size={24} />}
-      emptyTitle={EMPTY_COPY[status].title}
-      emptyMessage={EMPTY_COPY[status].message}
+      emptyTitle={t(EMPTY_COPY[status].title)}
+      emptyMessage={t(EMPTY_COPY[status].message)}
     >
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(260px,340px)_minmax(0,1fr)] lg:items-start">
         {/* Queue list — hidden on narrow viewports once a report is open. */}
         <ul
-          aria-label="Report queue"
+          aria-label={t("admin.queue.listLabel")}
           className={cn("flex-col gap-1.5", selected ? "hidden lg:flex" : "flex")}
         >
           {items.map((report) => (
@@ -200,8 +195,8 @@ function Queue() {
             <div className="hidden rounded-2xl bg-surface-muted lg:block">
               <EmptyState
                 icon={<FlagIcon size={24} />}
-                title="No report selected"
-                message="Choose a report from the queue to review it."
+                title={t("admin.queue.noneSelected.title")}
+                message={t("admin.queue.noneSelected.message")}
               />
             </div>
           )}
@@ -225,36 +220,60 @@ const STATUS_DOT: Record<ReportStatus, string> = {
   rejected: "bg-fg-subtle",
 };
 
-// "remote_video" reads as "remote video"; used for the detail type pill.
-function typeLabel(report: Report): string {
-  return report.target_type.replace("_", " ");
+// "remote_video" reads as "remote video"; used for the detail type pill. A
+// target type this build does not know falls back to the raw wire value.
+function typeLabel(report: Report, t: Translate): string {
+  switch (report.target_type) {
+    case "video":
+      return t("admin.queue.type.video");
+    case "remote_video":
+      return t("admin.queue.type.remoteVideo");
+    case "comment":
+      return t("admin.queue.type.comment");
+    case "message":
+      return t("admin.queue.type.message");
+    case "account":
+      return t("admin.queue.type.account");
+    default:
+      return String(report.target_type).replace("_", " ");
+  }
 }
+
+const STATUS_LABEL: Record<ReportStatus, PlainMessageKey> = {
+  open: "admin.queue.status.open",
+  accepted: "admin.queue.status.accepted",
+  rejected: "admin.queue.status.rejected",
+};
 
 // A short subject line for the queue row (never the reported body itself — that
 // lives in the detail pane).
-function reportSubject(report: Report): string {
+function reportSubject(report: Report, t: Translate): string {
   switch (report.target_type) {
     case "video":
-      return report.video_title || "Untitled video";
+      return report.video_title || t("admin.queue.untitledVideo");
     case "remote_video":
-      return report.remote_video_title || "Remote video report";
+      return report.remote_video_title || t("admin.queue.remoteVideoReport");
     case "comment":
-      return "Comment report";
+      return t("admin.queue.commentReport");
     case "message":
-      return "Message report";
+      return t("admin.queue.messageReport");
     case "account":
-      return report.reported_username || "Account report";
+      return report.reported_username || t("admin.queue.accountReport");
     default:
-      return "Report";
+      return t("admin.queue.report");
   }
 }
 
 // A deterministic accessible name for the queue row (also announces the status,
 // which the colored dot conveys visually).
-function reportRowLabel(report: Report): string {
-  const type = typeLabel(report);
+function reportRowLabel(report: Report, t: Translate): string {
+  const type = typeLabel(report, t);
   const capitalized = type.charAt(0).toUpperCase() + type.slice(1);
-  return `${capitalized} report by ${report.reporter.username}, ${report.status}`;
+  return t("admin.queue.rowAria", {
+    type: capitalized,
+    user: report.reporter.username,
+    status: t(STATUS_LABEL[report.status]),
+  });
 }
 
 function ReportRow({
@@ -266,10 +285,11 @@ function ReportRow({
   active: boolean;
   onSelect: () => void;
 }) {
+  const t = useT();
   return (
     <button
       type="button"
-      aria-label={reportRowLabel(report)}
+      aria-label={reportRowLabel(report, t)}
       aria-current={active ? "true" : undefined}
       onClick={onSelect}
       className={cn(
@@ -288,7 +308,7 @@ function ReportRow({
             active ? "text-accent-text" : "text-fg",
           )}
         >
-          {reportSubject(report)}
+          {reportSubject(report, t)}
         </span>
       </span>
       <span className="truncate text-footnote text-fg-muted">
@@ -305,12 +325,13 @@ function ReportRow({
 // Spans only (no list): the row renders these inside a <button>, where block
 // and list content is invalid HTML. The labels read as one sentence to AT.
 function ReasonChips({ report }: { report: Report }) {
+  const t = useT();
   // `?? []`: an older core (or a mocked fixture) omits the field entirely.
   const reasons = report.reasons ?? [];
   if (reasons.length === 0) return null;
   return (
     <span className="flex flex-wrap gap-1">
-      <span className="sr-only">Categories: </span>
+      <span className="sr-only">{t("admin.queue.categories")}</span>
       {reasons.map((r) => (
         <Badge key={r} variant="strong">
           {reasonLabel(r)}
@@ -333,6 +354,7 @@ function ReportDetail({
   onResolved: (id: string, status: ReportStatus) => void;
   onDeleted: (id: string) => void;
 }) {
+  const t = useT();
   const { user } = useSession();
   const [note, setNote] = useState("");
   const [rowState, setRowState] = useState<RowState>("idle");
@@ -353,7 +375,7 @@ function ReportDetail({
       await api.resolveReport(report.id, { status, note: note.trim() || undefined });
       onResolved(report.id, status);
     } catch (err) {
-      setError(errorMessage(err, "Could not resolve this report."));
+      setError(errorMessage(err, t("admin.queue.resolveError")));
       setRowState("idle");
     }
   }
@@ -368,7 +390,7 @@ function ReportDetail({
       await api.deleteReport(report.id);
       onDeleted(report.id);
     } catch (err) {
-      setDeleteError(errorMessage(err, "Could not delete this report."));
+      setDeleteError(errorMessage(err, t("admin.queue.deleteError")));
       setDeleteState("idle");
     }
   }
@@ -409,7 +431,7 @@ function ReportDetail({
 
   return (
     <section
-      aria-label="Report detail"
+      aria-label={t("admin.queue.detailLabel")}
       className="overflow-hidden rounded-2xl bg-surface shadow-soft"
     >
       <div className="flex flex-col gap-3 p-4 sm:p-5">
@@ -419,18 +441,21 @@ function ReportDetail({
           className="focus-ring -ml-1 inline-flex items-center gap-1 self-start rounded-lg py-1 pr-2 text-footnote font-semibold text-accent-text transition-colors hover:bg-surface-muted lg:hidden"
         >
           <ChevronLeftIcon size={16} aria-hidden />
-          Queue
+          {t("admin.queue.back")}
         </button>
 
         <div className="flex flex-wrap items-center gap-2 text-footnote text-fg-muted">
           <Badge variant={STATUS_BADGE[report.status]} status>
-            {report.status}
+            {t(STATUS_LABEL[report.status])}
           </Badge>
           <Badge variant="strong" status>
-            {typeLabel(report)}
+            {typeLabel(report, t)}
           </Badge>
           <span>
-            Reported by <span className="font-medium text-fg">{report.reporter.username}</span>
+            {withSlot(
+              t("admin.queue.reportedBy", { name: SLOT }),
+              <span className="font-medium text-fg">{report.reporter.username}</span>,
+            )}
           </span>
           <span aria-hidden>·</span>
           <span>{relativeTime(report.created_at)}</span>
@@ -441,7 +466,7 @@ function ReportDetail({
         <ReasonChips report={report} />
         {report.start_seconds !== undefined && report.video_id ? (
           <p className="text-sm text-fg-muted">
-            <span className="font-semibold text-fg">At:</span>{" "}
+            <span className="font-semibold text-fg">{t("admin.queue.at")}</span>{" "}
             <Link
               href={`/videos/${report.video_id}?t=${report.start_seconds}`}
               className="focus-ring rounded-sm font-semibold text-fg underline underline-offset-2 transition-colors hover:text-fg-muted"
@@ -452,20 +477,20 @@ function ReportDetail({
         ) : null}
 
         <p className="text-sm text-fg-muted">
-          <span className="font-semibold text-fg">Reason:</span> {report.reason}
+          <span className="font-semibold text-fg">{t("admin.queue.reason")}</span> {report.reason}
         </p>
 
         {!isOpen && report.moderator_note ? (
           <p className="text-footnote text-fg-muted">
-            <span className="font-semibold text-fg">Note:</span> {report.moderator_note}
+            <span className="font-semibold text-fg">{t("admin.reg.note")}</span> {report.moderator_note}
           </p>
         ) : null}
 
         {isOpen ? (
           <label className="flex flex-col gap-1 text-xs">
-            <span className="font-medium text-fg-muted">Internal note (optional)</span>
+            <span className="font-medium text-fg-muted">{t("admin.queue.noteLabel")}</span>
             <textarea
-              aria-label="Internal moderator note"
+              aria-label={t("admin.queue.noteAria")}
               rows={2}
               maxLength={MAX_NOTE_LEN}
               value={note}
@@ -485,14 +510,13 @@ function ReportDetail({
         {blockState === "composing" ? (
           <label className="block">
             <span className="mb-1 block text-sm font-medium text-fg">
-              Why this video is being blocked
+              {t("admin.queue.blockWhy")}
             </span>
             <span className="mb-1.5 block text-xs text-fg-muted">
-              The creator sees this on their video and in their notification, so write it for
-              them. Leave it empty and they are only told the video was blocked.
+              {t("admin.queue.blockHint")}
             </span>
             <textarea
-              aria-label="Block reason"
+              aria-label={t("admin.queue.blockReasonAria")}
               rows={2}
               maxLength={MAX_NOTE_LEN}
               value={blockReason}
@@ -521,7 +545,7 @@ function ReportDetail({
             disabled={rowState === "submitting"}
             onClick={() => void resolve("accepted")}
           >
-            Accept
+            {t("admin.queue.accept")}
           </Button>
           <Button
             variant="tonal"
@@ -529,14 +553,14 @@ function ReportDetail({
             disabled={rowState === "submitting"}
             onClick={() => void resolve("rejected")}
           >
-            Reject
+            {t("admin.action.reject")}
           </Button>
           {report.target_type === "video" && report.video_id ? (
             blockState === "blocked" ? (
               <BlockedNote manageHref="/moderation/blocked" />
             ) : blockState === "idle" ? (
               <Button variant="danger" size="sm" onClick={() => setBlockState("composing")}>
-                Block video
+                {t("admin.queue.blockVideo")}
               </Button>
             ) : (
               <>
@@ -546,7 +570,7 @@ function ReportDetail({
                   disabled={blockState === "blocking"}
                   onClick={() => void blockVideo(report.video_id as string)}
                 >
-                  {blockState === "blocking" ? "Blocking…" : "Confirm block"}
+                  {blockState === "blocking" ? t("admin.action.blocking") : t("admin.queue.confirmBlock")}
                 </Button>
                 <Button
                   variant="tonal"
@@ -554,7 +578,7 @@ function ReportDetail({
                   disabled={blockState === "blocking"}
                   onClick={() => setBlockState("idle")}
                 >
-                  Cancel
+                  {t("common.cancel")}
                 </Button>
               </>
             )
@@ -569,7 +593,7 @@ function ReportDetail({
                 disabled={blockState === "blocking"}
                 onClick={() => void blockRemoteVideo(report.remote_video_id as string)}
               >
-                {blockState === "blocking" ? "Blocking…" : "Block video"}
+                {blockState === "blocking" ? t("admin.action.blocking") : t("admin.queue.blockVideo")}
               </Button>
             )
           ) : null}
@@ -582,16 +606,16 @@ function ReportDetail({
             <Button
               variant="danger-outline"
               size="sm"
-              aria-label={`Delete this ${typeLabel(report)} report`}
+              aria-label={t("admin.queue.deleteAria", { type: typeLabel(report, t) })}
               onClick={() => setDeleteState("confirm")}
               className="self-start"
             >
-              Delete
+              {t("admin.queue.delete")}
             </Button>
           ) : (
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <span className="text-fg-muted">
-                Permanently delete this report? This cannot be undone.
+                {t("admin.queue.deleteConfirm")}
               </span>
               <button
                 type="button"
@@ -599,7 +623,7 @@ function ReportDetail({
                 onClick={() => void hardDelete()}
                 className="focus-ring rounded-full font-semibold text-danger transition-colors hover:text-danger/80 disabled:opacity-60"
               >
-                {deleteState === "deleting" ? "Deleting…" : "Confirm"}
+                {deleteState === "deleting" ? t("admin.queue.deleting") : t("admin.queue.confirm")}
               </button>
               <button
                 type="button"
@@ -607,7 +631,7 @@ function ReportDetail({
                 onClick={() => setDeleteState("idle")}
                 className="focus-ring rounded-full font-semibold text-fg-muted transition-colors hover:text-fg disabled:opacity-60"
               >
-                Cancel
+                {t("common.cancel")}
               </button>
             </div>
           )}
@@ -618,14 +642,15 @@ function ReportDetail({
 }
 
 function BlockedNote({ manageHref }: { manageHref: string }) {
+  const t = useT();
   return (
     <span className="inline-flex items-center gap-1 text-sm text-fg-muted">
-      Video blocked ·{" "}
+      {t("admin.queue.blocked")}{" "}
       <Link
         href={manageHref}
         className="focus-ring rounded-sm underline transition-colors hover:text-fg"
       >
-        Manage
+        {t("admin.queue.manage")}
       </Link>
     </span>
   );
@@ -636,6 +661,7 @@ function BlockedNote({ manageHref }: { manageHref: string }) {
 // reports, or the origin + title + local remote-watch link for remote_video
 // reports (federated content).
 function ReportTarget({ report }: { report: Report }) {
+  const t = useT();
   if (report.target_type === "video" && report.video_id) {
     return (
       <p className="text-sm">
@@ -643,7 +669,7 @@ function ReportTarget({ report }: { report: Report }) {
           href={`/videos/${report.video_id}`}
           className="focus-ring rounded-sm font-semibold text-fg underline underline-offset-2 transition-colors hover:text-fg-muted"
         >
-          {report.video_title || "Untitled video"}
+          {report.video_title || t("admin.queue.untitledVideo")}
         </Link>
       </p>
     );
@@ -656,16 +682,16 @@ function ReportTarget({ report }: { report: Report }) {
             href={`/remote/${report.remote_video_id}`}
             className="focus-ring rounded-sm font-semibold text-fg underline underline-offset-2 transition-colors hover:text-fg-muted"
           >
-            {report.remote_video_title || "(remote video unavailable)"}
+            {report.remote_video_title || t("admin.queue.remoteUnavailable")}
           </Link>
         ) : (
           <span className="font-semibold text-fg">
-            {report.remote_video_title || "(remote video unavailable)"}
+            {report.remote_video_title || t("admin.queue.remoteUnavailable")}
           </span>
         )}
         {report.remote_video_domain ? (
           <span className="rounded-full bg-surface-muted px-2 py-0.5 text-xs font-medium text-fg-muted">
-            <span className="sr-only">From </span>
+            <span className="sr-only">{t("admin.queue.from")}</span>
             {report.remote_video_domain}
           </span>
         ) : null}
@@ -675,7 +701,7 @@ function ReportTarget({ report }: { report: Report }) {
   if (report.target_type === "comment") {
     return (
       <blockquote className="border-l-2 border-border pl-3 text-sm text-fg-muted italic">
-        {report.comment_body || "(comment unavailable)"}
+        {report.comment_body || t("admin.queue.commentUnavailable")}
       </blockquote>
     );
   }
@@ -686,18 +712,18 @@ function ReportTarget({ report }: { report: Report }) {
     return (
       <div>
         <blockquote className="border-l-2 border-border pl-3 text-sm text-fg-muted italic">
-          {report.message_body || "(message unavailable)"}
+          {report.message_body || t("admin.queue.messageUnavailable")}
         </blockquote>
-        <p className="mt-1 text-xs text-fg-muted">Direct message</p>
+        <p className="mt-1 text-xs text-fg-muted">{t("admin.queue.directMessage")}</p>
       </div>
     );
   }
   if (report.target_type === "account") {
     return (
       <p className="text-sm text-fg-muted">
-        Reported account:{" "}
+        {t("admin.queue.reportedAccount")}{" "}
         <span className="font-semibold text-fg">
-          {report.reported_username || "(account unavailable)"}
+          {report.reported_username || t("admin.queue.accountUnavailable")}
         </span>
       </p>
     );
