@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
+import { useT } from "@/components/I18nProvider";
+import { SLOT, withSlot } from "@/components/admin/messageSlot";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -10,11 +12,12 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { api, errorMessage, fieldErrors } from "@/lib/api";
 import type { AdminCreateUserResponse, UserRole } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
+import type { PlainMessageKey } from "@/lib/i18n";
 
-const ROLES: readonly { value: UserRole; label: string }[] = [
-  { value: "user", label: "User" },
-  { value: "moderator", label: "Moderator" },
-  { value: "admin", label: "Admin" },
+const ROLES: readonly { value: UserRole; labelKey: PlainMessageKey }[] = [
+  { value: "user", labelKey: "admin.role.user" },
+  { value: "moderator", labelKey: "admin.role.moderator" },
+  { value: "admin", labelKey: "admin.role.admin" },
 ];
 
 /**
@@ -34,6 +37,7 @@ export function CreateUserDialog({
   /** Fired once the account exists, so the list can refetch. */
   onCreated: () => void;
 }) {
+  const t = useT();
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<UserRole>("user");
@@ -75,10 +79,7 @@ export function CreateUserDialog({
       if (!alive.current) return;
       setFields(fieldErrors(err) ?? {});
       setError(
-        errorMessage(
-          err,
-          "Could not create the user. If the account was created and then deactivated, its username and email stay taken until you delete it from the users list.",
-        ),
+        errorMessage(err, t("admin.createUser.error")),
       );
     } finally {
       if (alive.current) setBusy(false);
@@ -97,22 +98,31 @@ export function CreateUserDialog({
 
   if (result) {
     return (
-      <Modal title="User created" onClose={onClose} hideClose={!!result.reset_url}>
+      <Modal title={t("admin.createUser.createdTitle")} onClose={onClose} hideClose={!!result.reset_url}>
         <div className="flex flex-col gap-4">
           {result.link_emailed || !result.reset_url ? (
             <Alert variant="success">
-              <strong>{result.user.username}</strong> was created. A link to choose their password
-              was emailed to them; it works once and expires at {formatDateTime(result.expires_at)}.
+              {withSlot(
+                t("admin.createUser.emailed", {
+                  name: SLOT,
+                  expires: formatDateTime(result.expires_at),
+                }),
+                <strong>{result.user.username}</strong>,
+              )}
             </Alert>
           ) : (
             <>
               <Alert variant="warning">
-                <strong>{result.user.username}</strong> was created without a password. Anyone with
-                this link can set it. Send it to them over a channel you trust. It works once and
-                expires at {formatDateTime(result.expires_at)}.
+                {withSlot(
+                  t("admin.createUser.manual", {
+                    name: SLOT,
+                    expires: formatDateTime(result.expires_at),
+                  }),
+                  <strong>{result.user.username}</strong>,
+                )}
               </Alert>
               <Input
-                label="Set-password link"
+                label={t("admin.createUser.linkField")}
                 readOnly
                 value={result.reset_url}
                 autoComplete="off"
@@ -121,22 +131,22 @@ export function CreateUserDialog({
               />
               <div className="flex items-center gap-2">
                 <Button type="button" onClick={() => void copyLink()}>
-                  {copy === "copied" ? "Copied" : "Copy link"}
+                  {copy === "copied" ? t("admin.link.copied") : t("admin.link.copy")}
                 </Button>
               </div>
               {copy === "failed" ? (
                 <p className="text-sm text-danger">
-                  Could not copy automatically. Select the link above and copy it by hand.
+                  {t("admin.link.copyFailed")}
                 </p>
               ) : null}
               <p className="text-[12px] leading-relaxed text-fg-muted">
-                This is the only time the link is shown. Closing this window discards it.
+                {t("admin.link.shownOnce")}
               </p>
             </>
           )}
           <div>
             <Button type="button" variant="secondary" onClick={onClose}>
-              Done
+              {t("admin.link.done")}
             </Button>
           </div>
         </div>
@@ -145,21 +155,20 @@ export function CreateUserDialog({
   }
 
   return (
-    <Modal title="Create user" onClose={onClose}>
+    <Modal title={t("admin.createUser.title")} onClose={onClose}>
       <form onSubmit={(e) => void submit(e)} className="flex flex-col gap-4">
         <p className="text-[13px] leading-relaxed text-fg-muted">
-          The new user chooses their own password from a one-time link. The email address is marked
-          verified, and the action is recorded in the audit log.
+          {t("admin.createUser.intro")}
         </p>
         <Input
-          label="Username"
+          label={t("admin.createUser.username")}
           autoComplete="off"
           value={username}
           error={fields.username}
           onChange={(e) => setUsername(e.target.value)}
         />
         <Input
-          label="Email"
+          label={t("admin.createUser.email")}
           type="email"
           autoComplete="off"
           value={email}
@@ -167,14 +176,14 @@ export function CreateUserDialog({
           onChange={(e) => setEmail(e.target.value)}
         />
         <SegmentedControl<UserRole>
-          label="Role"
-          options={ROLES}
+          label={t("admin.createUser.role")}
+          options={ROLES.map((r) => ({ value: r.value, label: t(r.labelKey) }))}
           value={role}
           onChange={setRole}
           disabled={busy}
         />
         <Input
-          label="Your password"
+          label={t("admin.createUser.password")}
           type="password"
           autoComplete="current-password"
           value={password}
@@ -184,10 +193,10 @@ export function CreateUserDialog({
         {error ? <Alert>{error}</Alert> : null}
         <div className="flex items-center gap-2">
           <Button type="submit" disabled={busy || username.trim() === "" || email.trim() === "" || password === ""}>
-            {busy ? "Creating…" : "Create user"}
+            {busy ? t("admin.createUser.busy") : t("admin.createUser.submit")}
           </Button>
           <Button type="button" variant="secondary" onClick={onClose}>
-            Cancel
+            {t("common.cancel")}
           </Button>
         </div>
       </form>
