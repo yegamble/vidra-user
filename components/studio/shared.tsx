@@ -3,6 +3,7 @@
 import { ChevronDownIcon } from "@/components/icons";
 import { ApiError, api, errorMessage, forgetUploadSession } from "@/lib/api";
 import type { StoredUploadSession, VideoConfigOption, VideoState } from "@/lib/api";
+import type { Translate } from "@/lib/i18n";
 
 // Shared studio building blocks — the constants, types, small field components,
 // and pure helpers that the split studio surfaces (UploadSection, VideoRow,
@@ -190,6 +191,11 @@ export function scheduleToIso(local: string): string | undefined {
 // telling an attacker their probe worked, and the signature name is an oracle
 // for tuning a payload against the instance's engine. The verdict lives in the
 // audit trail and the moderation queue, which only staff can read.
+//
+// This constant is the MATCH KEY for the async paths (it is what the backend
+// writes into failure_reason / the job error), so it stays English; what the
+// creator SEES is the catalog's studio.errors.safetyScan, which must equal it
+// in English (pinned by safety-scan.test.tsx).
 export const SAFETY_SCAN_REJECTED_MESSAGE =
   "This file was rejected by the instance's safety scan and was not stored.";
 
@@ -207,19 +213,19 @@ export const SCANNER_NOT_CONFIGURED_CODE = "scanner_not_configured";
 
 // importOrUploadError maps a publish failure to a friendly message, tailored to
 // whether the source was a file upload or a URL import.
-export function importOrUploadError(err: unknown, source: "file" | "url"): string {
+export function importOrUploadError(err: unknown, source: "file" | "url", t: Translate): string {
   if (err instanceof ApiError) {
-    if (err.code === SAFETY_SCAN_REJECTED_CODE) return SAFETY_SCAN_REJECTED_MESSAGE;
+    if (err.code === SAFETY_SCAN_REJECTED_CODE) return t("studio.errors.safetyScan");
     if (err.code === SCANNER_NOT_CONFIGURED_CODE) {
-      return "This instance cannot accept files right now: its safety scanner is not available. Nothing was stored — try again later, or ask the operator.";
+      return t("studio.errors.scannerNotConfigured");
     }
-    if (err.status === 415) return "That is not a supported video type.";
-    if (err.status === 413) return "That file is too large.";
+    if (err.status === 415) return t("studio.errors.unsupportedType");
+    if (err.status === 413) return t("studio.errors.tooLarge");
     if (err.code === "quota_exceeded") {
-      return "This upload would exceed your storage quota. Free up space or remove older videos and try again.";
+      return t("studio.errors.quota");
     }
     if (err.code === "daily_quota_exceeded") {
-      return "This upload would exceed your daily upload limit. Try again later — the limit is a rolling 24-hour window.";
+      return t("studio.errors.dailyQuota");
     }
     // The async paths report the refusal out of band rather than as a coded
     // response: the upload session's failure_reason and the import job's error
@@ -227,26 +233,26 @@ export function importOrUploadError(err: unknown, source: "file" | "url"): strin
     // upload_failed. Recognise the sentence there so the same outcome does not
     // get the generic "check the URL" copy, which would send a creator to debug
     // a link that was fetched perfectly well.
-    if (err.message === SAFETY_SCAN_REJECTED_MESSAGE) return SAFETY_SCAN_REJECTED_MESSAGE;
+    if (err.message === SAFETY_SCAN_REJECTED_MESSAGE) return t("studio.errors.safetyScan");
     if (source === "url" && err.status === 422) {
-      return "Couldn't fetch that URL — it must be a public link to a video file.";
+      return t("studio.errors.urlUnreachable");
     }
   }
   // Network / rate-limit / 5xx get the shared friendly copy; a truly unknown
   // failure gets the source-specific default.
   return errorMessage(
     err,
-    source === "url" ? "Import failed. Please try again." : "Upload failed. Please try again.",
+    source === "url" ? t("studio.errors.importFailed") : t("studio.errors.uploadFailed"),
   );
 }
 
 // failedStateError is the message for an upload/import whose HTTP call succeeded
 // but whose returned video came back state="failed" (the backend's probe/scan
 // rejected the file) — a dead upload must never be reported as published.
-export function failedStateError(source: "file" | "url"): string {
+export function failedStateError(source: "file" | "url", t: Translate): string {
   return source === "url"
-    ? "Processing failed — the imported file could not be published. Check that the URL points to a valid video file and try again."
-    : "Processing failed — the file could not be published. Check that it is a valid video file and try again.";
+    ? t("studio.errors.failedUrl")
+    : t("studio.errors.failedFile");
 }
 
 // uploadCancelled builds the same cancellation ApiError the upload layer throws
@@ -280,23 +286,23 @@ export function sleep(ms: number, signal: AbortSignal): Promise<void> {
 // 409 replace_conflict envelope carries a specific, client-safe reason from
 // the server (mid-transcode, another replacement in flight, …) — surface it
 // verbatim; the quota codes reuse the upload wording.
-export function replaceErrorMessage(err: unknown): string {
+export function replaceErrorMessage(err: unknown, t: Translate): string {
   if (err instanceof ApiError) {
     if (err.code === "replace_conflict" && err.message.trim() !== "") return err.message;
     if (err.code === "feature_disabled") {
-      return "Replacing video files has been turned off on this instance.";
+      return t("studio.errors.replaceOff");
     }
     if (err.code === "quota_exceeded") {
-      return "This file would exceed your storage quota. Free up space and try again.";
+      return t("studio.errors.replaceQuota");
     }
     if (err.code === "daily_quota_exceeded") {
-      return "This file would exceed your daily upload limit. Try again later — the limit is a rolling 24-hour window.";
+      return t("studio.errors.replaceDailyQuota");
     }
     if (err.status === 415) {
-      return "That file type is not accepted here. Pick a supported video container.";
+      return t("studio.errors.replaceType");
     }
   }
-  return errorMessage(err, "Could not replace the video file.");
+  return errorMessage(err, t("studio.errors.replaceFailed"));
 }
 
 // discardSession abandons a lingering resumable session: DELETE the session
