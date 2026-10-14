@@ -96,6 +96,7 @@ function BlockInstanceForm({ onBlocked }: { onBlocked: (instance: BlockedInstanc
         domain: trimmedDomain,
         reason: reason.trim(),
         blocked_at: new Date().toISOString(),
+        source: "manual",
       });
       setDomain("");
       setReason("");
@@ -185,6 +186,12 @@ function BlockedInstanceRow({
         </p>
         {instance.reason ? (
           <p className="mt-1 text-[13px] text-fg-muted">{instance.reason}</p>
+        ) : null}
+        {instance.source?.startsWith("subscription:") ? (
+          <p className="mt-1 text-[13px] text-fg-muted">
+            Added by a blocklist subscription. Unblocking it here lasts only until the next sync;
+            exempt the domain on the Blocklists page to keep it unblocked.
+          </p>
         ) : null}
         {error ? <p className="mt-1 text-xs text-danger">{error}</p> : null}
       </div>

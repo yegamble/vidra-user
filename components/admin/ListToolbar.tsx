@@ -27,9 +27,13 @@ export function ListSearch({
   placeholder,
   value,
   onSubmit,
+  submitLabel,
+  clearLabel,
 }: {
   label: string;
   placeholder: string;
+  submitLabel?: string;
+  clearLabel?: string;
   /** The term the current results were fetched with ("" when unfiltered). */
   value: string;
   /** Called with the trimmed term on submit, and with "" on clear. */
@@ -61,6 +65,8 @@ export function ListSearch({
         submit("");
       }}
       hasQuery={Boolean(value)}
+      submitLabel={submitLabel}
+      clearLabel={clearLabel}
     />
   );
 }
