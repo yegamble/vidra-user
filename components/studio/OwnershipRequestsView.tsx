@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { useT, useFormat } from "@/components/I18nProvider";
 import { useSession } from "@/components/auth/AuthProvider";
 import { ShareIcon } from "@/components/icons";
 import { Badge } from "@/components/ui/Badge";
@@ -14,9 +15,10 @@ import { Select } from "@/components/ui/Select";
 import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, api, errorMessage } from "@/lib/api";
 import type { Channel, VideoOwnershipChange } from "@/lib/api";
-import { relativeTime } from "@/lib/format";
 import { useAppendingList } from "@/lib/use-appending-list";
 import { useBrowseAutoLoad } from "@/lib/use-browse-auto-load";
+
+import type { PlainMessageKey, Translate } from "@/lib/i18n";
 
 import { useStudio } from "./StudioContext";
 
@@ -45,6 +47,7 @@ export function OwnershipRequestsView({
   /** Load state of `channels`: requests can arrive before the channel list. */
   channelsStatus?: ChannelsStatus;
 }) {
+  const t = useT();
   const autoLoad = useBrowseAutoLoad();
   const list = useAppendingList<VideoOwnershipChange>({
     queryKey: "video-ownership-changes",
@@ -59,23 +62,20 @@ export function OwnershipRequestsView({
   return (
     <section className="flex flex-col gap-3">
       <div>
-        <h2 className="text-[15px] font-bold tracking-tight">Ownership requests</h2>
-        <p className="mt-1 text-sm text-fg-muted">
-          Videos other people on this instance offered to give you. Accepting moves the video into
-          one of your channels and counts it against your storage.
-        </p>
+        <h2 className="text-[15px] font-bold tracking-tight">{t("studio.own.heading")}</h2>
+        <p className="mt-1 text-sm text-fg-muted">{t("studio.own.intro")}</p>
       </div>
       {status === "loading" ? (
         <div className="flex justify-center py-8">
-          <Spinner label="Loading ownership requests" />
+          <Spinner label={t("studio.own.loading")} />
         </div>
       ) : status === "error" ? (
-        <ErrorState message="Could not load your ownership requests." onRetry={list.reload} />
+        <ErrorState message={t("studio.own.loadError")} onRetry={list.reload} />
       ) : items.length === 0 ? (
         <EmptyState
           icon={<ShareIcon size={24} />}
-          title="No ownership requests"
-          message="When someone offers you one of their videos, it appears here."
+          title={t("studio.own.emptyTitle")}
+          message={t("studio.own.emptyMessage")}
         />
       ) : (
         <ul className="flex flex-col divide-y divide-border-subtle overflow-hidden rounded-2xl border border-border-subtle bg-surface">
@@ -97,7 +97,7 @@ export function OwnershipRequestsView({
           hasMore={list.hasMore}
           autoLoad={autoLoad}
           busy={list.moreStatus === "loading"}
-          error={list.moreStatus === "error" ? "Could not load more requests." : null}
+          error={list.moreStatus === "error" ? t("studio.own.moreError") : null}
           onLoadMore={list.loadMore}
         />
       ) : null}
@@ -108,24 +108,26 @@ export function OwnershipRequestsView({
 // The two quota refusals get copy that says what to do; everything else (an
 // answered or stale request, a channel that is not the caller's) carries a
 // server message specific enough to show.
-function answerError(err: unknown, accepting: boolean): string {
+function answerError(err: unknown, accepting: boolean, t: Translate): string {
   if (err instanceof ApiError && err.code === "quota_exceeded") {
-    return "This video does not fit your storage quota. Free up space, then accept it again.";
+    return t("studio.own.quota");
   }
   if (err instanceof ApiError && err.code === "daily_quota_exceeded") {
-    return "This video would go over your daily upload limit. Try accepting it again later.";
+    return t("studio.own.dailyQuota");
   }
-  return errorMessage(err, accepting ? "Could not accept the video." : "Could not refuse the video.");
+  return errorMessage(err, accepting ? t("studio.own.acceptError") : t("studio.own.refuseError"));
 }
 
 // What each answered status reads as; pending rows show actions instead.
 // Core reports a withdrawn, timed-out or no-longer-honourable offer alike as
 // "expired" — the recipient is deliberately not told which — so it reads as
 // "No longer available", not as a claim about time.
-const STATUS_BADGE: Partial<Record<VideoOwnershipChange["status"], { label: string; variant?: "success" }>> = {
-  accepted: { label: "Accepted", variant: "success" },
-  refused: { label: "Refused" },
-  expired: { label: "No longer available" },
+const STATUS_BADGE: Partial<
+  Record<VideoOwnershipChange["status"], { label: PlainMessageKey; variant?: "success" }>
+> = {
+  accepted: { label: "studio.own.accepted", variant: "success" },
+  refused: { label: "studio.own.refused" },
+  expired: { label: "studio.own.expired" },
 };
 
 function OwnershipRequestRow({
@@ -139,12 +141,15 @@ function OwnershipRequestRow({
   channelsStatus: ChannelsStatus;
   onAnswered: (status: "accepted" | "refused") => void;
 }) {
+  const t = useT();
+  const { relativeTime } = useFormat();
   // The picked channel, else the first one — derived on every render, so a
   // channel list that arrives after this row mounted is still honoured.
   const [picked, setChannelId] = useState("");
   const channelId = channels.some((c) => c.id === picked) ? picked : (channels[0]?.id ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const badge = STATUS_BADGE[change.status];
   const giver = change.initiator.display_name || change.initiator.username;
 
   async function answer(accepting: boolean) {
@@ -156,7 +161,7 @@ function OwnershipRequestRow({
       else await api.refuseVideoOwnershipChange(change.id);
       onAnswered(accepting ? "accepted" : "refused");
     } catch (err) {
-      setError(answerError(err, accepting));
+      setError(answerError(err, accepting, t));
     } finally {
       setBusy(false);
     }
@@ -166,14 +171,16 @@ function OwnershipRequestRow({
     <li className="flex flex-col gap-3 px-4 py-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold">{change.video.title || "Untitled video"}</p>
+          <p className="truncate text-sm font-semibold">{change.video.title || t("studio.own.untitled")}</p>
           <p className="mt-1 text-xs text-fg-muted">
-            Offered by {giver} (@{change.initiator.username}) · {relativeTime(change.created_at)}
+            {t("studio.own.offeredBy", {
+              giver,
+              username: change.initiator.username,
+              time: relativeTime(change.created_at),
+            })}
           </p>
         </div>
-        {STATUS_BADGE[change.status] ? (
-          <Badge variant={STATUS_BADGE[change.status]?.variant}>{STATUS_BADGE[change.status]?.label}</Badge>
-        ) : null}
+        {badge ? <Badge variant={badge.variant}>{t(badge.label)}</Badge> : null}
       </div>
       {change.status === "pending" ? (
         <div className="flex flex-wrap items-end gap-2">
@@ -181,7 +188,7 @@ function OwnershipRequestRow({
             <>
               <div className="min-w-48 flex-1 sm:flex-none">
                 <Select
-                  label="Accept into channel"
+                  label={t("studio.own.acceptInto")}
                   value={channelId}
                   onChange={(e) => setChannelId(e.target.value)}
                   disabled={busy}
@@ -194,25 +201,23 @@ function OwnershipRequestRow({
                 </Select>
               </div>
               <Button size="sm" disabled={busy || channelId === ""} onClick={() => void answer(true)}>
-                Accept
+                {t("studio.own.accept")}
               </Button>
             </>
           ) : channelsStatus === "loading" ? (
-            <p className="text-sm text-fg-muted">Loading your channels…</p>
+            <p className="text-sm text-fg-muted">{t("studio.own.loadingChannels")}</p>
           ) : channelsStatus === "error" ? (
-            <p className="text-sm text-fg-muted">
-              Your channels could not be loaded. Reload the page to accept this video.
-            </p>
+            <p className="text-sm text-fg-muted">{t("studio.own.channelsError")}</p>
           ) : (
             <p className="text-sm text-fg-muted">
               <Link href="/studio/channel?create=1" className="focus-ring font-semibold text-accent-text hover:underline">
-                Create a channel
+                {t("studio.own.createChannel")}
               </Link>{" "}
-              to accept this video.
+              {t("studio.own.toAccept")}
             </p>
           )}
           <Button variant="secondary" size="sm" disabled={busy} onClick={() => void answer(false)}>
-            Refuse
+            {t("studio.own.refuse")}
           </Button>
         </div>
       ) : null}

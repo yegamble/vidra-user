@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/components/I18nProvider";
 import { Textarea } from "@/components/ui/Textarea";
 
 /** PeerTube's (and vidra-core's) cap on a channel/video support message. */
@@ -22,19 +23,20 @@ export function SupportTextField({
   onChange: (next: string) => void;
   ariaLabel: string;
 }) {
+  const t = useT();
   const used = [...value].length;
   return (
     <Textarea
-      label="Support text"
+      label={t("studio.support.label")}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       aria-label={ariaLabel}
       rows={3}
       maxLength={SUPPORT_TEXT_MAX}
       className="resize-y"
-      placeholder="Support me on Liberapay: https://…"
-      hint={`Markdown, shown behind the Support button. ${used}/${SUPPORT_TEXT_MAX}`}
-      error={used > SUPPORT_TEXT_MAX ? `At most ${SUPPORT_TEXT_MAX} characters.` : undefined}
+      placeholder={t("studio.support.placeholder")}
+      hint={t("studio.support.hint", { used, max: SUPPORT_TEXT_MAX })}
+      error={used > SUPPORT_TEXT_MAX ? t("studio.support.tooLong", { max: SUPPORT_TEXT_MAX }) : undefined}
     />
   );
 }
