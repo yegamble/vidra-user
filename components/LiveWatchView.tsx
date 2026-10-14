@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { useFormat, useT } from "@/components/I18nProvider";
 import { useOptionalSession } from "@/components/auth/AuthProvider";
 import { LiveTerminateDialog } from "@/components/LiveTerminateDialog";
 import { InfoIcon } from "@/components/icons";
@@ -10,8 +11,9 @@ import { QualityMenu } from "@/components/QualityMenu";
 import { Button, EmptyState, ErrorState, Spinner } from "@/components/ui";
 import { UserText } from "@/components/UserText";
 import { ApiError, api } from "@/lib/api";
+import type { Translate } from "@/lib/i18n";
 import type { LiveStream } from "@/lib/api";
-import { formatCountdown, formatDateTime } from "@/lib/format";
+import { formatCountdown } from "@/lib/format";
 import { terminationHeadline } from "@/lib/live/termination";
 import { useNow } from "@/lib/live/use-now";
 import { useLivePlayback } from "@/lib/use-playback-engine";
@@ -48,6 +50,7 @@ const UPCOMING_GRACE_MS = 3_600_000;
 // honestly — a stream that has not started, or has finished, never pretends to
 // play. A 404 (no such stream, or private and not the viewer's) is its own state.
 export function LiveWatchView({ id }: { id: string }) {
+  const t = useT();
   const [status, setStatus] = useState<Status>("loading");
   const [stream, setStream] = useState<LiveStream | null>(null);
   // A PRIVATE stream is visible only to its owner (and the channel's content
@@ -133,20 +136,20 @@ export function LiveWatchView({ id }: { id: string }) {
   if (status === "loading") {
     return (
       <div className="flex justify-center py-24">
-        <Spinner label="Loading live stream" />
+        <Spinner label={t("live.watch.loading")} />
       </div>
     );
   }
   if (status === "notfound") {
     return (
       <EmptyState
-        title="Live stream not found"
-        message="This live stream does not exist, or it is private."
+        title={t("live.watch.notFound.title")}
+        message={t("live.watch.notFound.message")}
       />
     );
   }
   if (status === "error" || stream === null) {
-    return <ErrorState message="Could not load this live stream." onRetry={() => void load()} />;
+    return <ErrorState message={t("live.watch.error")} onRetry={() => void load()} />;
   }
 
   const channelName = stream.channel_display_name || stream.channel_handle;
@@ -166,8 +169,8 @@ export function LiveWatchView({ id }: { id: string }) {
         // Live, but no playlist path yet (media server not serving it): honest,
         // not a dead player. The offline poll does not run here, so offer Refresh.
         <StreamState
-          title="Live now"
-          message="This stream is live, but its video feed isn't available yet. Try refreshing in a moment."
+          title={t("live.watch.noFeed.title")}
+          message={t("live.watch.noFeed.message")}
           onRefresh={() => void load()}
         />
       ) : stream.state === "ended" || stream.termination ? (
@@ -182,16 +185,16 @@ export function LiveWatchView({ id }: { id: string }) {
         // PERMANENT stream returns to `offline` rather than `ended` when it is
         // terminated — it is reusable — and the reason has to survive that.
         <StreamState
-          title="Stream ended"
-          message={endedMessage(stream)}
+          title={t("live.watch.ended.title")}
+          message={endedMessage(stream, t)}
           onRefresh={() => void load()}
         />
       ) : upcoming ? (
         <UpcomingState at={upcoming} />
       ) : (
         <StreamState
-          title="Not live yet"
-          message="This stream hasn't started. It will begin playing here automatically once it goes live."
+          title={t("live.watch.notYet.title")}
+          message={t("live.watch.notYet.message")}
         />
       )}
 
@@ -212,7 +215,7 @@ export function LiveWatchView({ id }: { id: string }) {
               onClick={() => setTerminating(true)}
               className="ml-auto"
             >
-              End stream
+              {t("live.watch.endStream")}
             </Button>
           ) : null}
         </div>
@@ -255,14 +258,15 @@ export function LiveWatchView({ id }: { id: string }) {
 // progressive fallback for a live stream, so a fatal playback failure shows an
 // honest message instead of a dead <video>.
 function LivePlayer({ stream }: { stream: LiveStream }) {
+  const t = useT();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const playback = useLivePlayback(videoRef, stream.id);
 
   if (playback.failed) {
     return (
       <StreamState
-        title="Can't play this live stream"
-        message="Your browser could not play the live video feed."
+        title={t("live.watch.playFail.title")}
+        message={t("live.watch.playFail.message")}
       />
     );
   }
@@ -274,11 +278,11 @@ function LivePlayer({ stream }: { stream: LiveStream }) {
         controls
         autoPlay
         playsInline
-        aria-label={`Live: ${stream.title}`}
+        aria-label={t("live.watch.playerLabel", { title: stream.title })}
         className="aspect-video w-full rounded-2xl bg-black"
         src={playback.src}
       >
-        Your browser does not support the video tag.
+        {t("live.watch.noVideoTag")}
       </video>
       {/* Only hls.js playback exposes controllable quality; the menu hides itself
           for native-HLS playback (levels is empty). Sharing VOD's lifecycle also
@@ -306,6 +310,7 @@ function StreamState({
   message: string;
   onRefresh?: () => void;
 }) {
+  const t = useT();
   return (
     <div className="flex flex-col items-center justify-center gap-3 rounded-2xl bg-surface-muted px-6 py-16 text-center">
       <InfoIcon size={20} strokeWidth={2} className="text-fg-muted" />
@@ -313,7 +318,7 @@ function StreamState({
       <p className="max-w-sm text-[13px] leading-relaxed text-fg-muted">{message}</p>
       {onRefresh ? (
         <Button variant="secondary" size="sm" onClick={onRefresh}>
-          Refresh
+          {t("live.watch.refresh")}
         </Button>
       ) : null}
     </div>
@@ -325,6 +330,8 @@ function StreamState({
 // a courtesy — the stream starts when the broadcaster connects, so a start time
 // that passes just reads "Starting soon" and the page keeps waiting.
 function UpcomingState({ at }: { at: string }) {
+  const t = useT();
+  const { formatDateTime } = useFormat();
   const now = useNow(true);
   // Core stops listing a start once it is more than an hour stale; match that
   // window here, then fall back to the plain not-live state instead of reading
@@ -332,26 +339,31 @@ function UpcomingState({ at }: { at: string }) {
   if (now.getTime() - new Date(at).getTime() > UPCOMING_GRACE_MS) {
     return (
       <StreamState
-        title="Not live yet"
-        message="This stream hasn't started. It will begin playing here automatically once it goes live."
+        title={t("live.watch.notYet.title")}
+        message={t("live.watch.notYet.message")}
       />
     );
   }
   const countdown = formatCountdown(at, now);
   return (
     <StreamState
-      title="Upcoming live"
-      message={`Scheduled for ${formatDateTime(at)}${countdown ? ` · ${countdown}` : ""}. This page will start playing automatically once the stream goes live.`}
+      title={t("live.watch.upcoming.title")}
+      message={
+        countdown
+          ? t("live.watch.upcoming.withCountdown", { when: formatDateTime(at), countdown })
+          : t("live.watch.upcoming.message", { when: formatDateTime(at) })
+      }
     />
   );
 }
 
 function UpcomingBadge({ at }: { at: string }) {
+  const t = useT();
   const now = useNow(true);
   if (now.getTime() - new Date(at).getTime() > UPCOMING_GRACE_MS) return null;
   return (
     <span className="inline-flex items-center rounded-full bg-surface-strong px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-[0.04em] text-fg-muted">
-      Upcoming
+      {t("live.upcoming.label")}
     </span>
   );
 }
@@ -360,16 +372,16 @@ function UpcomingBadge({ at }: { at: string }) {
 // first because it is the answer to the question the creator actually has, and
 // the moderator's own words follow it — the code says WHAT rule, the free text
 // says what happened.
-function endedMessage(stream: LiveStream): string {
+function endedMessage(stream: LiveStream, t: Translate): string {
   const parts: string[] = [];
   if (stream.termination) {
     parts.push(terminationHeadline(stream.termination));
     if (stream.termination.reason) parts.push(stream.termination.reason);
   } else {
-    parts.push("This live stream has ended.");
+    parts.push(t("live.watch.ended.message"));
   }
   if (stream.replay_enabled) {
-    parts.push("Its replay will appear as a normal video on the channel shortly.");
+    parts.push(t("live.watch.ended.replay"));
   }
   return parts.join(" ");
 }
@@ -380,21 +392,23 @@ function endedMessage(stream: LiveStream): string {
 // what keeps a creator from being shown a confident "0 watching" by an instance
 // with no Redis.
 function ViewerCount({ count }: { count: number }) {
+  const t = useT();
   return (
     <span className="text-[12.5px] font-medium text-fg-muted" aria-live="polite">
-      {count.toLocaleString()} {count === 1 ? "viewer" : "viewers"}
+      {t("live.watch.viewers", { count: count.toLocaleString() })}
     </span>
   );
 }
 
 function LiveBadge() {
+  const t = useT();
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full bg-danger/15 px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-[0.04em] text-danger">
       <span
         aria-hidden="true"
         className="h-1.5 w-1.5 rounded-full bg-live animate-[live-pulse_1.6s_ease-in-out_infinite]"
       />
-      Live
+      {t("live.rail.badge")}
     </span>
   );
 }
