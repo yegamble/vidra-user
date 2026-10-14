@@ -132,6 +132,7 @@ import type {
   AdminRemoteBlockRequest,
   RemoteVideo,
   RemoteVideoCommentListResponse,
+  RemoteVideoRating,
   AuthoredRemoteComment,
   FeedScope,
   CreateChannelRequest,
@@ -1726,6 +1727,23 @@ export const api = {
    */
   deleteRemoteVideoComment: (id: string) =>
     apiRequest<void>(`/api/v1/remote-video-comments/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
+
+  /** GET /api/v1/remote-videos/{id}/rating — the caller's own vote (auth). */
+  getRemoteVideoRating: (id: string, signal?: AbortSignal) =>
+    apiRequest<RemoteVideoRating>(`/api/v1/remote-videos/${encodeURIComponent(id)}/rating`, { signal }),
+
+  /** PUT /api/v1/remote-videos/{id}/rating — like/dislike a federated video (auth). */
+  setRemoteVideoRating: (id: string, rating: RatingValue) =>
+    apiRequest<RemoteVideoRating>(`/api/v1/remote-videos/${encodeURIComponent(id)}/rating`, {
+      method: "PUT",
+      body: { rating },
+    }),
+
+  /** DELETE /api/v1/remote-videos/{id}/rating — clear your vote (auth). */
+  clearRemoteVideoRating: (id: string) =>
+    apiRequest<RemoteVideoRating>(`/api/v1/remote-videos/${encodeURIComponent(id)}/rating`, {
       method: "DELETE",
     }),
 

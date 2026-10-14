@@ -643,6 +643,7 @@ export type EncryptedMessageListResponse = Schemas["EncryptedMessageListResponse
 // --- Ratings / watch progress / history -------------------------------------
 export type RatingValue = NonNullable<Schemas["VideoRating"]["my_rating"]>;
 export type VideoRating = Schemas["VideoRating"];
+export type RemoteVideoRating = Schemas["RemoteVideoRating"];
 export type WatchProgress = Schemas["WatchProgress"];
 export type HistoryItem = Schemas["HistoryItem"];
 export type WatchHistoryResponse = Schemas["WatchHistoryResponse"];
