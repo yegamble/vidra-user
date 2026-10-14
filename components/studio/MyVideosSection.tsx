@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { useT } from "@/components/I18nProvider";
 import { Button } from "@/components/ui/Button";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { ListTail } from "@/components/ui/ListTail";
@@ -30,6 +31,7 @@ export function MyVideosSection({
   /** The caller's manageable channels; enables moving a video between them. */
   channels?: Channel[];
 }) {
+  const t = useT();
   const autoLoad = useBrowseAutoLoad();
   // Paged from the server: the owner view used to fetch once, so a creator with
   // more than 20 videos could never reach (or manage) the older ones.
@@ -68,20 +70,20 @@ export function MyVideosSection({
   return (
     <section className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-[15px] font-bold tracking-tight">Your videos</h2>
+        <h2 className="text-[15px] font-bold tracking-tight">{t("studio.list.title")}</h2>
         <Button variant="secondary" size="sm" onClick={list.reload}>
-          Refresh
+          {t("studio.list.refresh")}
         </Button>
       </div>
 
       {status === "loading" ? (
         <div className="flex justify-center py-8">
-          <Spinner label="Loading your videos" />
+          <Spinner label={t("studio.list.loading")} />
         </div>
       ) : status === "error" ? (
-        <ErrorState message="Could not load your videos." onRetry={list.reload} />
+        <ErrorState message={t("studio.list.error")} onRetry={list.reload} />
       ) : videos.length === 0 ? (
-        <p className="text-sm text-fg-muted">No videos in this channel yet.</p>
+        <p className="text-sm text-fg-muted">{t("studio.list.emptyChannel")}</p>
       ) : (
         <ul className="flex flex-col divide-y divide-border-subtle overflow-hidden rounded-2xl bg-surface-muted">
           {videos.map((v) => (
@@ -108,7 +110,7 @@ export function MyVideosSection({
           hasMore={list.hasMore}
           autoLoad={autoLoad}
           busy={list.moreStatus === "loading"}
-          error={list.moreStatus === "error" ? "Could not load more videos." : null}
+          error={list.moreStatus === "error" ? t("studio.list.moreError") : null}
           onLoadMore={list.loadMore}
         />
       ) : null}

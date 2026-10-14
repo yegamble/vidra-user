@@ -1,3 +1,4 @@
+import { useT } from "@/components/I18nProvider";
 import { Badge } from "@/components/ui/Badge";
 import { cn } from "@/lib/cn";
 import type { Channel } from "@/lib/api";
@@ -17,6 +18,7 @@ export function ChannelProtocolBadges({
   channel: Channel;
   className?: string;
 }) {
+  const t = useT();
   const activitypub = channel.activitypub_enabled;
   const atproto = channel.atproto_active === true;
 
@@ -32,7 +34,7 @@ export function ChannelProtocolBadges({
           ATProto
         </Badge>
       ) : null}
-      {!activitypub && !atproto ? <Badge variant="neutral">Local only</Badge> : null}
+      {!activitypub && !atproto ? <Badge variant="neutral">{t("studio.protocol.localOnly")}</Badge> : null}
     </span>
   );
 }
