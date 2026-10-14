@@ -50,4 +50,48 @@ export const admin = {
   "admin.comments.autoTag.submit": "Filter by tag",
   "admin.comments.autoTag.clear": "Clear tag",
   "admin.comments.autoTag.empty": "No comments with this automatic tag.",
+
+  // Shared by the admin moderation views.
+  "admin.role.user": "User",
+  "admin.role.moderator": "Moderator",
+  "admin.role.admin": "Admin",
+  "admin.link.copy": "Copy link",
+  "admin.link.copied": "Copied",
+  "admin.link.done": "Done",
+  "admin.link.copyFailed": "Could not copy automatically. Select the link above and copy it by hand.",
+  "admin.link.shownOnce": "This is the only time the link is shown. Closing this window discards it.",
+
+  // PasswordResetLinkCard.
+  "admin.resetLink.title": "Password reset link",
+  "admin.resetLink.card.body": "When this instance cannot send mail, {name} cannot request a reset link themselves. Create one here and send it to them yourself. It works once, signs them out everywhere when they use it, and the action is recorded in the audit log.",
+  "admin.resetLink.card.aria": "Create password reset link for {name}",
+  "admin.resetLink.card.cta": "Create password reset link",
+  "admin.resetLink.dialogTitle": "Create password reset link",
+  "admin.resetLink.error": "Could not create a reset link. Nothing was issued.",
+  "admin.resetLink.warning": "Anyone with this link can set a new password for this account. Send it to the user over a channel you trust. It works once and expires at {expires}. Creating another link cancels this one.",
+  "admin.resetLink.field": "Reset link",
+  "admin.resetLink.confirm": "Confirm it is you. Enter your own password to create a one-time link that lets {name} choose a new password.",
+  "admin.resetLink.password": "Your password",
+  "admin.resetLink.busy": "Creating…",
+  "admin.resetLink.submit": "Create link",
+
+  // CreateUserDialog.
+  "admin.createUser.title": "Create user",
+  "admin.createUser.intro": "The new user chooses their own password from a one-time link. The email address is marked verified, and the action is recorded in the audit log.",
+  "admin.createUser.username": "Username",
+  "admin.createUser.email": "Email",
+  "admin.createUser.role": "Role",
+  "admin.createUser.password": "Your password",
+  "admin.createUser.busy": "Creating…",
+  "admin.createUser.submit": "Create user",
+  "admin.createUser.error": "Could not create the user. If the account was created and then deactivated, its username and email stay taken until you delete it from the users list.",
+  "admin.createUser.createdTitle": "User created",
+  "admin.createUser.emailed": "{name} was created. A link to choose their password was emailed to them; it works once and expires at {expires}.",
+  "admin.createUser.manual": "{name} was created without a password. Anyone with this link can set it. Send it to them over a channel you trust. It works once and expires at {expires}.",
+  "admin.createUser.linkField": "Set-password link",
+
+  // AccountModerationMenu (Mute and Block reuse comments.menu.*).
+  "admin.accountMenu.unmute": "Unmute",
+  "admin.accountMenu.unblock": "Unblock",
+  "admin.accountMenu.trigger": "Actions for {name}",
 } as const;
