@@ -14,6 +14,7 @@ import type { Channel, ChannelStatsResponse, Video, VideoStatsResponse } from "@
 import { formatCount } from "@/lib/format";
 import { useApiResource } from "@/lib/use-api-resource";
 
+import { PlaybackStatsPanel } from "./PlaybackStatsPanel";
 import { type Status } from "./shared";
 import { useStudio } from "./StudioContext";
 import { type AllChannelsStats, getAllChannelsStats, views28d } from "./all-channels-stats";
@@ -412,6 +413,7 @@ function VideoStatsPanel({ videoId }: { videoId: string }) {
         ]}
       />
       <StatsChart series={stats.daily_views} label="Daily views for this video" />
+      <PlaybackStatsPanel videoId={videoId} />
     </div>
   );
 }

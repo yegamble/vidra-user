@@ -26,6 +26,7 @@ import { WatchActions } from "@/components/watch/WatchActions";
 import { WatchSignInProvider } from "@/components/watch/WatchSignInPrompt";
 import type { PlaybackDelivery } from "@/lib/use-playback-engine";
 import { useAmbientMode } from "@/lib/player-ambient";
+import { usePlaybackBeacon } from "@/lib/use-playback-beacon";
 import { AmbientGlow } from "@/components/watch/AmbientGlow";
 import { IpfsSourceBar } from "@/components/watch/IpfsSourceBar";
 import { PasswordUnlockPanel } from "@/components/watch/PasswordUnlockPanel";
@@ -64,10 +65,11 @@ import { trackSearchEvent } from "@/lib/search-events";
 import { useSettledSession } from "@/lib/use-settled-session";
 import { useShortWatchUrl } from "@/lib/use-short-watch-url";
 import { parseStartTime } from "@/lib/start-time";
-import { useSensitiveContentPolicy } from "@/lib/use-sensitive-policy";
+import { useVideoSensitivePolicy } from "@/lib/use-video-sensitive-policy";
 import { useRestrictedMode } from "@/lib/device-preferences";
 import { dequeueVideo, useVideoQueue } from "@/lib/video-queue";
 import { useVideoActionPermissions } from "@/lib/use-video-action-permissions";
+import { readLastPosition, writeLastPosition } from "@/lib/last-position";
 import { isSignInRequired } from "@/lib/video-privacy";
 
 type Status = "loading" | "error" | "notfound" | "locked" | "signin" | "ready";
@@ -199,7 +201,7 @@ export function WatchView({
   // viewer explicitly proceeds. `hide` normally drops flagged videos from
   // listings server-side, but a direct link can still reach this watch page, so
   // it is gated here too. `display` (or an absent policy) plays normally.
-  const sensitivePolicy = useSensitiveContentPolicy();
+  const sensitivePolicy = useVideoSensitivePolicy(video ?? {});
   const restrictedMode = useRestrictedMode();
   const [sensitiveAccepted, setSensitiveAccepted] = useState(false);
   // The engine reports the source it selected, including automatic fallback.
@@ -759,6 +761,9 @@ function Player({
 }) {
   const { status: sessionStatus } = useSession();
   const authed = sessionStatus === "authed";
+  // Signed-out viewers keep their place in localStorage (lib/last-position);
+  // "restoring" is neither — the silent refresh may still turn out signed in.
+  const anon = sessionStatus === "anon";
   const lastSentRef = useRef(0);
   const [resumeAt, setResumeAt] = useState<number | null>(null);
   const [tracks, setTracks] = useState<CaptionTrack[]>([]);
@@ -766,10 +771,12 @@ function Player({
   // Report the current position (whole seconds). No-op unless signed in.
   const record = useCallback(() => {
     const el = videoRef.current;
-    if (!authed || !el) return;
+    if (!el) return;
     const pos = Math.floor(el.currentTime || 0);
+    if (anon) writeLastPosition(video.id, pos, el.duration);
+    if (!authed) return;
     void api.recordWatchProgress(video.id, pos).catch(() => {});
-  }, [authed, video.id, videoRef]);
+  }, [authed, anon, video.id, videoRef]);
 
   // Throttled variant for the high-frequency timeupdate/play events.
   const recordThrottled = useCallback(() => {
@@ -787,7 +794,10 @@ function Player({
   // Keyed by video id so navigating to another video re-arms it, while a
   // pause/replay/seek of the same video never re-fires.
   const viewCountedForRef = useRef<string | null>(null);
+  // Anonymous watch-time samples for the creator's analytics (no identifiers).
+  const beacon = usePlaybackBeacon(video.id, videoRef);
   const handlePlay = useCallback(() => {
+    beacon.onPlay();
     if (viewCountedForRef.current !== video.id) {
       viewCountedForRef.current = video.id;
       // Fire-and-forget: a failed view count is best-effort telemetry the viewer
@@ -797,7 +807,16 @@ function Player({
       });
     }
     recordThrottled();
-  }, [video.id, recordThrottled]);
+  }, [video.id, recordThrottled, beacon]);
+
+  const handleTimeUpdate = useCallback(() => {
+    beacon.onTimeUpdate();
+    recordThrottled();
+  }, [beacon, recordThrottled]);
+  const handlePause = useCallback(() => {
+    beacon.onPause();
+    record();
+  }, [beacon, record]);
 
   // Load the saved resume position once (signed in only, and not when the URL
   // carries an explicit ?t= start).
@@ -812,6 +831,18 @@ function Player({
       .catch(() => {});
     return () => controller.abort();
   }, [authed, video.id, startAt]);
+
+  // The same Resume offer for a signed-out viewer, from this browser's storage.
+  useEffect(() => {
+    if (!anon || startAt !== null) return;
+    // Read after hydration (storage is client-only), off the effect's sync path.
+    let cancelled = false;
+    void Promise.resolve().then(() => {
+      const at = readLastPosition(video.id, video.duration_seconds);
+      if (!cancelled && at !== null) setResumeAt(at);
+    });
+    return () => { cancelled = true; };
+  }, [anon, video.id, video.duration_seconds, startAt]);
 
   // Flush the final position when leaving the page / switching videos.
   useEffect(() => {
@@ -885,8 +916,8 @@ function Player({
           onDeliveryChange={onDeliveryChange}
           playbackToken={playbackToken}
           onPlay={handlePlay}
-          onTimeUpdate={recordThrottled}
-          onPause={record}
+          onTimeUpdate={handleTimeUpdate}
+          onPause={handlePause}
         />
       </div>
       {/* Quiet under-player row: Resume (when known) left, the shortcuts

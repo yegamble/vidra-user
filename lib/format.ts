@@ -140,6 +140,26 @@ export function formatDateTime(iso: string, locale?: string): string {
 }
 
 /**
+ * formatCountdown renders the time remaining until a FUTURE instant in the
+ * viewer's locale ("in 3 hours", "in 12 minutes"), coarse on purpose: it is the
+ * "Upcoming" line of a scheduled live, not a stopwatch. A moment that is now or
+ * already past reads "Starting soon" (a broadcaster a few minutes late is not
+ * "in -4 minutes"), and an unparseable value is "". Pure over `now` so a ticking
+ * caller and a test agree.
+ */
+export function formatCountdown(iso: string, now: Date = new Date()): string {
+  const at = new Date(iso).getTime();
+  if (Number.isNaN(at)) return "";
+  const secs = Math.floor((at - now.getTime()) / 1000);
+  if (secs <= 0) return "Starting soon";
+  const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: "always" });
+  if (secs < 60) return rtf.format(secs, "second");
+  if (secs < 3600) return rtf.format(Math.floor(secs / 60), "minute");
+  if (secs < 86400) return rtf.format(Math.floor(secs / 3600), "hour");
+  return rtf.format(Math.floor(secs / 86400), "day");
+}
+
+/**
  * formatMonthYear renders an ISO timestamp as a "Month YYYY" label in the
  * viewer's locale (e.g. "July 2026") — the "Joined …" affordance on a channel's
  * About panel, where the day-level precision of formatDateTime is unwanted.

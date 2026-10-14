@@ -2,17 +2,16 @@
 
 import { useId, useState } from "react";
 
+import { useT } from "@/components/I18nProvider";
 import { LockIcon } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
 import { ApiError, api } from "@/lib/api";
 import { cn } from "@/lib/cn";
 
-// The messages a viewer sees for the two expected unlock rejections. A wrong
-// password is an inline field error; hitting the (login-strict) rate limit is a
-// calmer "wait a moment" note. Anything else falls back to the generic line.
-const WRONG_PASSWORD = "That password is incorrect.";
-const RATE_LIMITED = "Too many attempts. Please wait a moment and try again.";
-const GENERIC = "Could not unlock this video. Please try again.";
+// The messages a viewer sees for the two expected unlock rejections (catalog
+// keys panels.unlock.*). A wrong password is an inline field error; hitting
+// the (login-strict) rate limit is a calmer "wait a moment" note. Anything
+// else falls back to the generic line.
 
 /**
  * PasswordUnlockPanel is the CORE-17 unlock prompt shown in place of the player
@@ -36,6 +35,7 @@ export function PasswordUnlockPanel({
   onUnlocked: (playbackToken: string) => void;
   variant?: "watch" | "embed";
 }) {
+  const t = useT();
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -55,9 +55,9 @@ export function PasswordUnlockPanel({
       setPassword("");
       onUnlocked(res.playback_token);
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) setError(WRONG_PASSWORD);
-      else if (err instanceof ApiError && err.status === 429) setError(RATE_LIMITED);
-      else setError(GENERIC);
+      if (err instanceof ApiError && err.status === 401) setError(t("panels.unlock.wrong"));
+      else if (err instanceof ApiError && err.status === 429) setError(t("panels.unlock.rateLimited"));
+      else setError(t("panels.unlock.generic"));
       setBusy(false);
     }
   }
@@ -81,15 +81,15 @@ export function PasswordUnlockPanel({
       </span>
       <div className="flex flex-col gap-1">
         <p className={cn("text-[15px] font-semibold", embed ? "text-white" : "text-fg")}>
-          This video is password protected
+          {t("panels.unlock.title")}
         </p>
         <p className={cn("text-[13px]", embed ? "text-white/70" : "text-fg-muted")}>
-          Enter the password to watch it.
+          {t("panels.unlock.prompt")}
         </p>
       </div>
       <form onSubmit={submit} className="flex w-full max-w-xs flex-col gap-2">
         <label htmlFor={inputId} className="sr-only">
-          Video password
+          {t("panels.unlock.label")}
         </label>
         <input
           id={inputId}
@@ -103,7 +103,7 @@ export function PasswordUnlockPanel({
           disabled={busy}
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? errorId : undefined}
-          placeholder="Password"
+          placeholder={t("panels.unlock.placeholder")}
           className={cn(
             "focus-ring w-full rounded-xl border px-3.5 py-2 text-sm disabled:opacity-60",
             embed
@@ -127,7 +127,7 @@ export function PasswordUnlockPanel({
           disabled={busy || password === ""}
           className={cn("w-full", embed ? "bg-white text-black hover:bg-white/90" : null)}
         >
-          {busy ? "Unlocking…" : "Unlock"}
+          {busy ? t("panels.unlock.busy") : t("panels.unlock.submit")}
         </Button>
       </form>
     </div>

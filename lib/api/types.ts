@@ -342,6 +342,9 @@ export type RejectRegistrationRequest = Schemas["RejectRegistrationRequest"];
 export type FederationFollowerRequest = Schemas["FederationFollowerRequest"];
 export type FederationFollowerRequestListResponse =
   Schemas["FederationFollowerRequestListResponse"];
+export type InstanceFollow = Schemas["InstanceFollow"];
+export type InstanceFollowState = InstanceFollow["state"];
+export type InstanceFollowListResponse = Schemas["InstanceFollowListResponse"];
 export type User = Schemas["User"];
 export type PublicUserProfile = Schemas["PublicUserProfile"];
 export type ProfileImage = Schemas["ProfileImage"];
@@ -424,6 +427,7 @@ export type CreateVideoRequest = Schemas["CreateVideoRequest"];
 
 // --- Reports / moderation ---------------------------------------------------
 export type CreateReportRequest = Schemas["CreateReportRequest"];
+export type ReportReason = Schemas["ReportReason"];
 export type ReportTargetType = NonNullable<Schemas["Report"]["target_type"]>;
 export type ReportStatus = NonNullable<Schemas["Report"]["status"]>;
 export type ReportReporter = Schemas["ReportReporter"];
@@ -461,6 +465,12 @@ export type BulkRemoveCommentsResponse = Schemas["BulkRemoveCommentsResponse"];
 export type WatchedWord = Schemas["WatchedWord"];
 export type WatchedWordListResponse = Schemas["WatchedWordListResponse"];
 export type CreateWatchedWordRequest = Schemas["CreateWatchedWordRequest"];
+export type WatchedWordList = Schemas["WatchedWordList"];
+export type WatchedWordListsPage = Schemas["WatchedWordListsPage"];
+export type CreateWatchedWordListRequest = Schemas["CreateWatchedWordListRequest"];
+export type UpdateWatchedWordListRequest = Schemas["UpdateWatchedWordListRequest"];
+/** What a list does to a matching comment: record a match, or also hold it for approval. */
+export type WatchedWordListAction = WatchedWordList["action"];
 export type WatchedWordMatch = Schemas["WatchedWordMatch"];
 export type WatchedWordMatchListResponse = Schemas["WatchedWordMatchListResponse"];
 /**
@@ -520,6 +530,9 @@ export type LiveTerminationResult = Schemas["LiveTerminationResult"];
 // server-side yet). Distinct from LiveStream (the owner/watch metadata).
 export type LiveStreamCard = Schemas["LiveStreamCard"];
 export type LivePublicListResponse = Schemas["LivePublicListResponse"];
+// The public "Upcoming" listing: PUBLIC, not-yet-live streams with a planned start.
+export type LiveStreamUpcomingCard = Schemas["LiveStreamUpcomingCard"];
+export type LiveUpcomingListResponse = Schemas["LiveUpcomingListResponse"];
 
 // --- Comments ---------------------------------------------------------------
 export type Comment = Schemas["Comment"];
@@ -645,6 +658,10 @@ export type UpdatePlaylistRequest = Schemas["UpdatePlaylistRequest"];
 export type DailyViews = Schemas["DailyViews"];
 export type VideoStatsResponse = Schemas["VideoStatsResponse"];
 export type ChannelStatsResponse = Schemas["ChannelStatsResponse"];
+// Per-video watch time / retention / device split (GET /videos/{id}/playback-stats).
+export type PlaybackStatsResponse = Schemas["PlaybackStatsResponse"];
+export type PlaybackBeaconRequest = Schemas["PlaybackBeaconRequest"];
+export type PlaybackShare = Schemas["PlaybackShare"];
 // Account-level rollup (GET /me/stats): totals summed across all OWNED channels,
 // the aggregated 30-day daily series, and a per-channel breakdown row per channel.
 export type AccountStatsResponse = Schemas["AccountStatsResponse"];
@@ -665,3 +682,8 @@ export type UpdatePlayerSettingsRequest = Schemas["UpdatePlayerSettingsRequest"]
 export type QuarantinedVideo = Schemas["QuarantinedVideo"];
 export type QuarantinedVideoListResponse = Schemas["QuarantinedVideoListResponse"];
 export type RejectQuarantinedVideoRequest = Schemas["RejectQuarantinedVideoRequest"];
+
+// --- Content preferences (per-flag sensitive policies) -----------------------
+export type SensitiveFlag = Schemas["SensitiveFlag"];
+export type ContentPreferences = Schemas["ContentPreferences"];
+export type UpdateContentPreferencesRequest = Schemas["UpdateContentPreferencesRequest"];
