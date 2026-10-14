@@ -40,6 +40,7 @@ import {
 import { SeekBar } from "@/components/player/SeekBar";
 import { VolumeControl } from "@/components/player/VolumeControl";
 import { qualityLabel } from "@/lib/hls";
+import { StatsOverlay } from "@/components/player/StatsOverlay";
 import { toggleAmbientMode, useAmbientMode } from "@/lib/player-ambient";
 import { useSleepTimer } from "@/components/player/use-sleep-timer";
 import { api, videoThumbnailUrl, type Video } from "@/lib/api";
@@ -200,6 +201,11 @@ export function VideoPlayer({
   // constant would be right at every stage width.
   const controlsRef = useRef<HTMLDivElement | null>(null);
   const ambientEnabled = useAmbientMode();
+  const [statsOpen, setStatsOpen] = useState(false);
+  const closeStats = useCallback(() => {
+    setStatsOpen(false);
+    containerRef.current?.querySelector<HTMLElement>('button[aria-label="Settings"]')?.focus({ preventScroll: true });
+  }, []);
   const sleepTimer = useSleepTimer(videoRef, video.id);
 
   // Seek-preview storyboard (CORE-16): null when the detail has none, so the
@@ -965,6 +971,7 @@ export function VideoPlayer({
           { id: "ambient", label: "Ambient mode", pressed: ambientEnabled, onToggle: toggleAmbientMode },
         ]
       : []),
+    { id: "stats", label: "Stats for nerds", pressed: statsOpen, onToggle: () => setStatsOpen((o) => !o) },
     ...(pipSupported
       ? [
           {
@@ -1070,6 +1077,10 @@ export function VideoPlayer({
           the control bar instead of behind it. A child of the stage, so it
           follows theater and fullscreen; under the bar's z-index by
           construction. */}
+      {statsOpen ? (
+        <StatsOverlay videoRef={videoRef} getEngine={playback.statsEngine}
+          engineName={playback.mode ?? "none"} onClose={closeStats} />
+      ) : null}
       <CaptionLayer
         videoRef={videoRef}
         stageRef={containerRef}

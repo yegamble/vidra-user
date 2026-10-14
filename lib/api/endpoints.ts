@@ -34,6 +34,7 @@ import type {
   JobRunsResponse,
   JobRunState,
   IPFSReconcileResult,
+  IPFSRepinStatus,
   IPFSStatus,
   IPFSConfigDocument,
   IPFSConfigUpdate,
@@ -114,6 +115,13 @@ import type {
   VideoOwnershipChangeListResponse,
   BlockInstanceRequest,
   BlockedInstanceListResponse,
+  BlocklistAllowRequest,
+  BlocklistAllowlistResponse,
+  BlocklistSubscription,
+  BlocklistSubscriptionListResponse,
+  BlocklistSyncResult,
+  CreateBlocklistSubscriptionRequest,
+  UpdateBlocklistSubscriptionRequest,
   CreateRemoteFollowRequest,
   RemoteFollow,
   RemoteFollowListResponse,
@@ -1841,6 +1849,57 @@ export const api = {
       method: "DELETE",
     }),
 
+  /** GET /api/v1/admin/instances/blocklist-subscriptions — shared denylists synced into the blocklist (admin). */
+  getBlocklistSubscriptions: (params: PageParams = {}, signal?: AbortSignal) =>
+    apiRequest<BlocklistSubscriptionListResponse>("/api/v1/admin/instances/blocklist-subscriptions", {
+      query: pageQuery(params),
+      signal,
+    }),
+
+  /** POST /api/v1/admin/instances/blocklist-subscriptions — subscribe to a list (admin; 409 duplicate URL, 422 bad URL/format). */
+  createBlocklistSubscription: (body: CreateBlocklistSubscriptionRequest) =>
+    apiRequest<BlocklistSubscription>("/api/v1/admin/instances/blocklist-subscriptions", {
+      method: "POST",
+      body,
+    }),
+
+  /** PATCH /api/v1/admin/instances/blocklist-subscriptions/{id} — label / enabled (admin). */
+  updateBlocklistSubscription: (id: string, body: UpdateBlocklistSubscriptionRequest) =>
+    apiRequest<BlocklistSubscription>(
+      `/api/v1/admin/instances/blocklist-subscriptions/${encodeURIComponent(id)}`,
+      { method: "PATCH", body },
+    ),
+
+  /** DELETE /api/v1/admin/instances/blocklist-subscriptions/{id} — remove it AND only the blocks it created (admin; 204). */
+  deleteBlocklistSubscription: (id: string) =>
+    apiRequest<void>(`/api/v1/admin/instances/blocklist-subscriptions/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
+
+  /** POST /api/v1/admin/instances/blocklist-subscriptions/{id}/sync — sync now (admin; 429 when over 6/min). */
+  syncBlocklistSubscription: (id: string, confirm = false) =>
+    apiRequest<BlocklistSyncResult>(
+      `/api/v1/admin/instances/blocklist-subscriptions/${encodeURIComponent(id)}/sync`,
+      { method: "POST", ...(confirm ? { body: { confirm: true } } : {}) },
+    ),
+
+  /** GET /api/v1/admin/instances/blocklist-allowlist — domains exempt from every subscription (admin). */
+  getBlocklistAllowlist: (params: PageParams = {}, signal?: AbortSignal) =>
+    apiRequest<BlocklistAllowlistResponse>("/api/v1/admin/instances/blocklist-allowlist", {
+      query: pageQuery(params),
+      signal,
+    }),
+
+  /** POST /api/v1/admin/instances/blocklist-allowlist — exempt a domain (admin; idempotent 204; 422 bad domain). */
+  addBlocklistAllow: (body: BlocklistAllowRequest) =>
+    apiRequest<void>("/api/v1/admin/instances/blocklist-allowlist", { method: "POST", body }),
+
+  /** DELETE /api/v1/admin/instances/blocklist-allowlist/{domain} — lift an exemption (admin; idempotent 204). */
+  removeBlocklistAllow: (domain: string) =>
+    apiRequest<void>(`/api/v1/admin/instances/blocklist-allowlist/${encodeURIComponent(domain)}`, {
+      method: "DELETE",
+    }),
+
   /**
    * GET /api/v1/admin/federation/blocked-actors — the REMOTE accounts blocked
    * for everyone on this instance, newest first (admin/moderator).
@@ -2922,6 +2981,21 @@ export const api = {
       method: "POST",
       query: { network },
     }),
+
+  /**
+   * POST /api/v1/admin/ipfs/repin-playback-only — start the bulk re-pin of pinned
+   * HLS trees to the playback-only set (409 if one is already running).
+   */
+  startIPFSRepin: () =>
+    apiRequest<IPFSRepinStatus>("/api/v1/admin/ipfs/repin-playback-only", { method: "POST" }),
+
+  /** DELETE /api/v1/admin/ipfs/repin-playback-only — stop arming rows; armed rows finish (409 if none runs). */
+  cancelIPFSRepin: () =>
+    apiRequest<IPFSRepinStatus>("/api/v1/admin/ipfs/repin-playback-only", { method: "DELETE" }),
+
+  /** GET /api/v1/admin/ipfs/repin-playback-only — progress of the current or last run. */
+  getIPFSRepin: (signal?: AbortSignal) =>
+    apiRequest<IPFSRepinStatus>("/api/v1/admin/ipfs/repin-playback-only", { signal }),
 
   /**
    * GET /api/v1/admin/stats — instance-wide overview counts for the admin

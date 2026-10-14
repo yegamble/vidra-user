@@ -243,3 +243,20 @@ describe("WatchView support text", () => {
     expect(supportButton.mock.calls.every(([p]) => !p.text)).toBe(true);
   });
 });
+
+describe("WatchView signed-out resume", () => {
+  it("offers Resume from the position this browser remembers", async () => {
+    window.localStorage.setItem("vidra.position.v1", "75");
+    render(<WatchView id="v1" initialVideo={video()} />);
+    await act(async () => {});
+    expect(screen.getByRole("button", { name: "Resume from 1:15" })).toBeTruthy();
+    expect(mocks.getWatchProgress).not.toHaveBeenCalled();
+    window.localStorage.clear();
+  });
+
+  it("offers nothing when no position is remembered or the URL carries ?t=", async () => {
+    render(<WatchView id="v1" initialVideo={video()} />);
+    await act(async () => {});
+    expect(screen.queryByRole("button", { name: /Resume from/ })).toBeNull();
+  });
+});
