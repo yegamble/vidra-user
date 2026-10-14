@@ -4596,6 +4596,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/remote-videos/{id}/view": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record a view of a federated video
+         * @description The remote twin of recordVideoView. The origin instance owns the view count, so nothing is counted here: when federation is enabled the view is sent to the origin as an ActivityPub View signed by this instance's actor (never the viewer's account), at most once per viewer per window (the user id when authenticated, else the client IP, hashed), and at most a fixed number of Views per origin domain per hour. Always returns 204 for a visible remote video, whether or not a View was sent.
+         */
+        post: operations["recordRemoteVideoView"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/remote-videos/{id}/comments": {
         parameters: {
             query?: never;
@@ -25576,6 +25596,44 @@ export interface operations {
             };
             /** @description Federation is disabled on this instance. */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    recordRemoteVideoView: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The view ping was accepted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such remote video, or it (or its origin) is blocked here. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Per-IP view-ping budget exhausted (60 per minute); Retry-After is set. */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
