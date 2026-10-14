@@ -48,6 +48,15 @@ describe("AccountMenu", () => {
     expect(screen.getByRole("link", { name: "Sign in" }).getAttribute("href")).toBe("/login");
   });
 
+  it("opens the keyboard reference with ? for a signed-out visitor, and Escape closes it", () => {
+    session.value = { status: "anon", user: null, logout: vi.fn() };
+    render(<AccountMenu />);
+    fireEvent.keyDown(document.body, { key: "?" });
+    expect(screen.getByRole("dialog", { name: "Keyboard shortcuts" })).toBeTruthy();
+    fireEvent.keyDown(screen.getByRole("dialog", { name: "Keyboard shortcuts" }), { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Keyboard shortcuts" })).toBeNull();
+  });
+
   it("opens an avatar menu with account destinations and device preferences", () => {
     session.value = { status: "authed", user, logout: vi.fn() };
     render(<AccountMenu />);
