@@ -1,5 +1,8 @@
+"use client";
+
 import { Suspense, type ReactNode } from "react";
 
+import { useT } from "@/components/I18nProvider";
 import { Spinner } from "@/components/ui/Spinner";
 
 /**
@@ -17,11 +20,12 @@ import { Spinner } from "@/components/ui/Spinner";
  * first page" is invisible.
  */
 export function ListBoundary({ label, children }: { label: string; children: ReactNode }) {
+  const t = useT();
   return (
     <Suspense
       fallback={
         <div className="flex justify-center py-24">
-          <Spinner label={`Loading ${label}`} />
+          <Spinner label={t("admin.list.loading", { label })} />
         </div>
       }
     >

@@ -1,4 +1,48 @@
 export const admin = {
+  // Shared admin controls (AdminControls, ListToolbar, ListBoundary, PagedListShell, AdminTable).
+  "admin.search.submit": "Search",
+  "admin.search.clear": "Clear",
+  "admin.pagination.label": "Paginate {label}",
+  "admin.pagination.range": "{start}–{end} of {total}",
+  "admin.pagination.page": "Page {page} of {pageCount}",
+  "admin.pagination.rowsPerPage": "Rows per page",
+  "admin.pagination.previous": "Previous",
+  "admin.pagination.next": "Next",
+  "admin.toolbar.sort": "Sort",
+  "admin.toolbar.activeCount": "{count} active",
+  "admin.list.loading": "Loading {label}",
+  "admin.list.empty": "No {label}",
+
+  // Admin / moderation navigation.
+  "admin.configNav.label": "Configuration pages",
+  "admin.tabs.label": "Admin sections",
+  "admin.tabs.select": "Admin section",
+  "admin.tabs.group.console": "Console",
+  "admin.tabs.group.more": "More",
+  "admin.tabs.group.moderation": "Moderation",
+  "admin.modNav.label": "Moderation sections",
+  "admin.modNav.trigger": "Moderation section: {section}",
+  "admin.modNav.console": "Admin console",
+  "admin.modNav.queues": "Queues",
+  "admin.modNav.quarantine": "Quarantine",
+  "admin.modNav.blocked": "Blocked videos",
+  "admin.modNav.content": "Content",
+  "admin.modNav.comments": "Comments",
+  "admin.modNav.watchedWords": "Watched words",
+  "admin.modNav.wordMatches": "Word matches",
+  "admin.modNav.instances": "Instances",
+  "admin.modNav.remoteAccounts": "Remote accounts",
+  "admin.modNav.users": "Users",
+  "admin.modNav.registrations": "Registrations",
+  "admin.modNav.autosuggest": "Autosuggest",
+
+  // BanUserDialog.
+  "admin.ban.title": "Ban {username}",
+  "admin.ban.body": "Signs {username} out and blocks sign-in until the ban is lifted. The reason is emailed to the user and shown to staff. It is not written to the audit log.",
+  "admin.ban.reason": "Reason",
+  "admin.ban.busy": "Banning…",
+  "admin.ban.confirm": "Ban {username}",
+
   // Admin comment moderation list (AdminCommentsView): automatic tags.
   "admin.comments.autoTag.label": "Filter by automatic tag",
   "admin.comments.autoTag.placeholder": "Automatic tag, e.g. external-link",

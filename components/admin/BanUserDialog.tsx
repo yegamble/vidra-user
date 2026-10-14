@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { useT } from "@/components/I18nProvider";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Textarea } from "@/components/ui/Textarea";
@@ -25,10 +26,11 @@ export function BanUserDialog({
   onConfirm: (reason: string) => void;
   onClose: () => void;
 }) {
+  const t = useT();
   const [reason, setReason] = useState("");
   const trimmed = reason.trim();
   return (
-    <Modal title={`Ban ${username}`} onClose={onClose}>
+    <Modal title={t("admin.ban.title", { username })} onClose={onClose}>
       <form
         className="flex flex-col gap-4"
         onSubmit={(e) => {
@@ -37,11 +39,10 @@ export function BanUserDialog({
         }}
       >
         <p className="text-[13px] leading-relaxed text-fg-muted">
-          Signs {username} out and blocks sign-in until the ban is lifted. The reason is emailed to
-          the user and shown to staff. It is not written to the audit log.
+          {t("admin.ban.body", { username })}
         </p>
         <Textarea
-          label="Reason"
+          label={t("admin.ban.reason")}
           rows={4}
           maxLength={MAX_BAN_REASON}
           hint={`${trimmed.length}/${MAX_BAN_REASON}`}
@@ -50,10 +51,10 @@ export function BanUserDialog({
         />
         <div className="flex items-center gap-2">
           <Button type="submit" variant="danger" disabled={busy || trimmed === ""}>
-            {busy ? "Banning…" : `Ban ${username}`}
+            {busy ? t("admin.ban.busy") : t("admin.ban.confirm", { username })}
           </Button>
           <Button type="button" variant="secondary" onClick={onClose}>
-            Cancel
+            {t("common.cancel")}
           </Button>
         </div>
       </form>

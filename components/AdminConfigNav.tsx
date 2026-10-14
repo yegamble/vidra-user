@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { useT } from "@/components/I18nProvider";
 import { useSession } from "@/components/auth/AuthProvider";
 import { CONFIG_PAGES } from "@/lib/admin-config-ia";
 import { cn } from "@/lib/cn";
@@ -15,13 +16,14 @@ import { cn } from "@/lib/cn";
 // Self-hides for non-admins so it never appears above the "Administrators
 // only" gate.
 export function AdminConfigNav() {
+  const t = useT();
   const pathname = usePathname();
   const { user } = useSession();
 
   if (user?.role !== "admin") return null;
 
   return (
-    <nav aria-label="Configuration pages" className="lg:w-44 lg:shrink-0">
+    <nav aria-label={t("admin.configNav.label")} className="lg:w-44 lg:shrink-0">
       {/* Mobile: horizontal pills. Desktop: sticky vertical rail. */}
       <ul className="-mx-4 flex gap-1 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0 lg:sticky lg:top-24 lg:mx-0 lg:flex-col lg:gap-0.5 lg:overflow-visible lg:px-0 lg:pb-0">
         {CONFIG_PAGES.map((page) => {

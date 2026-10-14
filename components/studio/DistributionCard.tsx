@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { useT } from "@/components/I18nProvider";
 import { ChevronRightIcon } from "@/components/icons";
 import { Badge } from "@/components/ui/Badge";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -39,6 +40,7 @@ export function DistributionCard({
   href?: string;
   onChange?: (channel: Channel) => void;
 }) {
+  const t = useT();
   const [atproto, setAtproto] = useState<AtProto>("loading");
   const [busy, setBusy] = useState<Field | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -71,7 +73,7 @@ export function DistributionCard({
       const updated = await api.updateChannel(channel.handle, { [field]: next });
       onChange?.(updated);
     } catch (err) {
-      setError(errorMessage(err, "Could not update distribution settings."));
+      setError(errorMessage(err, t("studio.dist.updateError")));
     } finally {
       setBusy(null);
     }
@@ -84,14 +86,14 @@ export function DistributionCard({
     >
       <div className="flex items-center justify-between gap-3">
         <h2 id="distribution-heading" className="text-[15px] font-bold tracking-tight">
-          Distribution
+          {t("studio.dist.heading")}
         </h2>
         {href ? (
           <Link
             href={href}
             className="focus-ring inline-flex items-center gap-0.5 rounded-full text-[13px] font-semibold text-accent-text hover:underline"
           >
-            Manage
+            {t("studio.dist.manage")}
             <ChevronRightIcon size={15} aria-hidden="true" />
           </Link>
         ) : null}
@@ -106,20 +108,20 @@ export function DistributionCard({
             </Badge>
             <span className="text-[12.5px] text-fg-muted">
               {channel.activitypub_enabled
-                ? "Your public videos federate to other ActivityPub servers."
-                : "Federation is off — this channel's videos stay on this instance."}
+                ? t("studio.dist.apOn")
+                : t("studio.dist.apOff")}
             </span>
           </div>
           {canManage ? (
             <Toggle
-              label="Federate this channel over ActivityPub"
+              label={t("studio.dist.apToggle")}
               checked={channel.activitypub_enabled === true}
               disabled={busy !== null}
               onChange={(next) => void toggle("activitypub_enabled", next)}
             />
           ) : (
             <Badge variant={channel.activitypub_enabled ? "success" : "neutral"} status>
-              {channel.activitypub_enabled ? "Active" : "Off"}
+              {channel.activitypub_enabled ? t("studio.dist.active") : t("studio.dist.off")}
             </Badge>
           )}
         </li>
@@ -132,7 +134,7 @@ export function DistributionCard({
                 ATProto
               </Badge>
               <span className="truncate text-[12.5px] text-fg-muted">
-                Cross-post new public videos to the Bluesky network.
+                {t("studio.dist.atDesc")}
               </span>
             </div>
             {atproto === "loading" ? (
@@ -142,18 +144,18 @@ export function DistributionCard({
                 href="/settings/connections"
                 className="focus-ring shrink-0 rounded-full text-[13px] font-semibold text-accent-text hover:underline"
               >
-                Link your Bluesky account
+                {t("studio.dist.atLink")}
               </Link>
             ) : canManage ? (
               <Toggle
-                label="Cross-post this channel to Bluesky"
+                label={t("studio.dist.atToggle")}
                 checked={channel.atproto_enabled === true}
                 disabled={busy !== null}
                 onChange={(next) => void toggle("atproto_enabled", next)}
               />
             ) : (
               <Badge variant={channel.atproto_active ? "success" : "neutral"} status>
-                {channel.atproto_active ? "Active" : "Off"}
+                {channel.atproto_active ? t("studio.dist.active") : t("studio.dist.off")}
               </Badge>
             )}
           </li>

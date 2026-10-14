@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { useT } from "@/components/I18nProvider";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
@@ -29,6 +30,7 @@ export function TransferOwnershipDialog({
   videoTitle: string;
   onClose: () => void;
 }) {
+  const t = useT();
   const [step, setStep] = useState<Step>("form");
   const [username, setUsername] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -49,8 +51,8 @@ export function TransferOwnershipDialog({
       setPendingConflict(isPendingConflict(err));
       setError(
         err instanceof ApiError && err.status === 404 && /user/i.test(err.message)
-          ? `No one on this instance can receive videos as @${name}. Check the username.`
-          : errorMessage(err, "Could not send the transfer request."),
+          ? t("studio.transfer.noUser", { name })
+          : errorMessage(err, t("studio.transfer.sendError")),
       );
       setStep("confirm");
     }
@@ -65,19 +67,17 @@ export function TransferOwnershipDialog({
       await api.cancelVideoOwnership(videoId);
       setPendingConflict(false);
       if (after === "form")
-        setNotice(
-          "The pending offer was withdrawn. You can offer the video to someone else now, or to the same person again after a day.",
-        );
+        setNotice(t("studio.transfer.withdrawnNotice"));
       setStep(after);
     } catch (err) {
-      setError(errorMessage(err, "Could not withdraw the offer."));
+      setError(errorMessage(err, t("studio.transfer.withdrawError")));
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <Modal title="Transfer ownership" onClose={onClose}>
+    <Modal title={t("studio.transfer.title")} onClose={onClose}>
       {step === "form" ? (
         <form
           className="flex flex-col gap-4"
@@ -95,18 +95,18 @@ export function TransferOwnershipDialog({
             </p>
           ) : null}
           <Input
-            label="Recipient's username"
+            label={t("studio.transfer.recipient")}
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             autoComplete="off"
-            hint="They need an account on this instance. They choose which of their channels it goes to."
+            hint={t("studio.transfer.hint")}
           />
           <div className="flex justify-end gap-2">
             <Button variant="secondary" size="sm" onClick={onClose}>
-              Cancel
+              {t("studio.transfer.cancel")}
             </Button>
             <Button type="submit" size="sm" disabled={name === ""}>
-              Continue
+              {t("studio.transfer.continue")}
             </Button>
           </div>
         </form>
@@ -114,8 +114,8 @@ export function TransferOwnershipDialog({
         <div className="flex flex-col gap-4">
           <p role="status" className="text-sm text-fg">
             {step === "sent"
-              ? `Request sent. @${name} can accept or refuse it from their Studio; until then the video stays in your channel, and you can withdraw the offer.`
-              : "Offer withdrawn. The video stays in your channel."}
+              ? t("studio.transfer.sent", { name })
+              : t("studio.transfer.withdrawn")}
           </p>
           {error ? (
             <p role="alert" className="text-sm text-danger">
@@ -125,24 +125,20 @@ export function TransferOwnershipDialog({
           <div className="flex justify-end gap-2">
             {step === "sent" ? (
               <Button variant="secondary" size="sm" disabled={busy} onClick={() => void withdraw("withdrawn")}>
-                Withdraw offer
+                {t("studio.transfer.withdraw")}
               </Button>
             ) : null}
             <Button size="sm" disabled={busy} onClick={onClose}>
-              Done
+              {t("studio.transfer.done")}
             </Button>
           </div>
         </div>
       ) : (
         <div className="flex flex-col gap-4">
           <p className="text-sm font-semibold text-fg">
-            Offer “{videoTitle}” to @{name}?
+            {t("studio.transfer.offer", { title: videoTitle, name })}
           </p>
-          <p className="text-sm text-fg-muted">
-            Nothing changes until they accept, and you can withdraw the offer while it is pending.
-            Once they accept, the video moves to one of their channels, with its views and comments,
-            and you can no longer edit or delete it.
-          </p>
+          <p className="text-sm text-fg-muted">{t("studio.transfer.confirmBody")}</p>
           {error ? (
             <p role="alert" className="text-sm text-danger">
               {error}
@@ -151,7 +147,7 @@ export function TransferOwnershipDialog({
           <div className="flex flex-wrap justify-end gap-2">
             {pendingConflict ? (
               <Button variant="secondary" size="sm" disabled={busy} onClick={() => void withdraw("form")}>
-                Withdraw the pending offer
+                {t("studio.transfer.withdrawPending")}
               </Button>
             ) : null}
             <Button
@@ -164,10 +160,10 @@ export function TransferOwnershipDialog({
                 setStep("form");
               }}
             >
-              Back
+              {t("studio.transfer.back")}
             </Button>
             <Button size="sm" disabled={step === "sending" || busy} onClick={() => void send()}>
-              Send request
+              {t("studio.transfer.send")}
             </Button>
           </div>
         </div>

@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 
+import { useT } from "@/components/I18nProvider";
 import { useSession } from "@/components/auth/AuthProvider";
 import { Select } from "@/components/ui/Select";
 import {
@@ -40,6 +41,7 @@ function options(items: readonly AdminNavItem[]) {
 }
 
 export function AdminTabs() {
+  const t = useT();
   const { user } = useSession();
   const pathname = usePathname();
   const router = useRouter();
@@ -47,15 +49,15 @@ export function AdminTabs() {
   if (user?.role !== "admin") return null;
 
   return (
-    <nav aria-label="Admin sections" className="mb-6 lg:hidden">
+    <nav aria-label={t("admin.tabs.label")} className="mb-6 lg:hidden">
       <Select
-        label="Admin section"
+        label={t("admin.tabs.select")}
         value={adminNavCurrentHref(pathname)}
         onChange={(e) => router.push(e.target.value)}
       >
-        <optgroup label="Console">{options(CONSOLE_GROUP)}</optgroup>
-        <optgroup label="More">{options(ADMIN_NAV_MORE)}</optgroup>
-        <optgroup label="Moderation">{options(MODERATION_GROUP)}</optgroup>
+        <optgroup label={t("admin.tabs.group.console")}>{options(CONSOLE_GROUP)}</optgroup>
+        <optgroup label={t("admin.tabs.group.more")}>{options(ADMIN_NAV_MORE)}</optgroup>
+        <optgroup label={t("admin.tabs.group.moderation")}>{options(MODERATION_GROUP)}</optgroup>
       </Select>
     </nav>
   );
