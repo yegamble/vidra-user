@@ -9,6 +9,7 @@ import { useSession } from "@/components/auth/AuthProvider";
 import { BlueskyVisibilityToggle } from "@/components/auth/BlueskyVisibilityToggle";
 import { ConnectedLogins } from "@/components/auth/ConnectedLogins";
 import { ReadReceiptsToggle } from "@/components/auth/ReadReceiptsToggle";
+import { useT } from "@/components/I18nProvider";
 import { ChevronRightIcon } from "@/components/icons";
 import { ProfileImageManager } from "@/components/ProfileImageManager";
 import { SETTINGS_GROUPS, type SettingsSection } from "@/components/settings/sections";
@@ -47,6 +48,7 @@ function SettingsGroup({ label, children }: { label: string; children: ReactNode
 // against the visible sub-line. Both this row and the desktop SettingsRail are
 // fed by the shared section catalog, so their route/name never diverge.
 function SettingsNavRow({ href, action, title, desc, Icon }: SettingsSection) {
+  const t = useT();
   return (
     <li>
       <Link
@@ -55,10 +57,10 @@ function SettingsNavRow({ href, action, title, desc, Icon }: SettingsSection) {
       >
         <Icon size={18} strokeWidth={1.9} className="shrink-0 text-fg-muted" />
         <span className="min-w-0 flex-1">
-          <span className="block text-[15px] font-semibold text-fg">{title}</span>
-          <span className="mt-0.5 block text-[13px] text-fg-muted">{desc}</span>
+          <span className="block text-[15px] font-semibold text-fg">{t(title)}</span>
+          <span className="mt-0.5 block text-[13px] text-fg-muted">{t(desc)}</span>
         </span>
-        <span className="sr-only">{action}</span>
+        <span className="sr-only">{t(action)}</span>
         <ChevronRightIcon size={18} className="shrink-0 text-fg-subtle" />
       </Link>
     </li>
@@ -70,6 +72,7 @@ function SettingsNavRow({ href, action, title, desc, Icon }: SettingsSection) {
 // the httpOnly refresh cookie — show a loading state until that settles; only
 // a settled signed-out state gets the sign-in prompt.
 export function SettingsView() {
+  const t = useT();
   const { status, user, updateProfile, deactivate, deleteAccount, reloadUser, logout } =
     useSession();
   // Flipped after a successful permanent delete: the session is gone, so this
@@ -153,7 +156,7 @@ export function SettingsView() {
           section nav, so these collapse to avoid a duplicate nav. */}
       <div className="flex flex-col gap-6 lg:hidden">
         {SETTINGS_GROUPS.map((group) => (
-          <SettingsGroup key={group.label} label={group.label}>
+          <SettingsGroup key={group.label} label={t(group.label)}>
             {group.items.map((item) => (
               <SettingsNavRow key={item.href} {...item} />
             ))}
