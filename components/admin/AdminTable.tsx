@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 
+import { useT } from "@/components/I18nProvider";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
@@ -96,10 +97,11 @@ export function AdminTable<Row>({
   footer,
   className,
 }: AdminTableProps<Row>) {
+  const t = useT();
   if (status === "loading") {
     return (
       <div className="flex justify-center py-24">
-        <Spinner label={`Loading ${label}`} />
+        <Spinner label={t("admin.list.loading", { label })} />
       </div>
     );
   }
@@ -111,7 +113,7 @@ export function AdminTable<Row>({
   return (
     <div className={cn("flex flex-col gap-4", className)}>
       {rows.length === 0 ? (
-        empty ?? <EmptyState title={`No ${label.toLowerCase()}`} />
+        empty ?? <EmptyState title={t("admin.list.empty", { label: label.toLowerCase() })} />
       ) : (
         // `relative` makes this the containing block for anything positioned
         // inside the table: without it a positioned descendant escapes the

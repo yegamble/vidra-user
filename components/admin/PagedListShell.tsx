@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 
+import { useT } from "@/components/I18nProvider";
 import { AdminPagination } from "@/components/admin/AdminControls";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -62,6 +63,7 @@ export function PagedListShell<T>({
   emptyMessage,
   children,
 }: PagedListShellProps<T>) {
+  const t = useT();
   const plural = pluralize(2, noun);
   return (
     <div className="flex flex-col gap-4">
@@ -84,7 +86,7 @@ export function PagedListShell<T>({
 
       {list.status === "loading" ? (
         <div className="flex justify-center py-24">
-          <Spinner label={`Loading ${plural}`} />
+          <Spinner label={t("admin.list.loading", { label: plural })} />
         </div>
       ) : list.status === "error" ? (
         <ErrorState message={errorMessage} onRetry={list.reload} />
