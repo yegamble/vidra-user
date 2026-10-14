@@ -72,6 +72,8 @@ function CommentsList() {
             label={t("admin.comments.autoTag.label")}
             placeholder={t("admin.comments.autoTag.placeholder")}
             value={list.filters.auto_tag ?? ""}
+            submitLabel={t("admin.comments.autoTag.submit")}
+            clearLabel={t("admin.comments.autoTag.clear")}
             onSubmit={(next) => list.setFilter("auto_tag", next)}
           />
           {notice ? (

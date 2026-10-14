@@ -73,6 +73,14 @@ describe("AdminCommentsView automatic tags", () => {
     expect(screen.getAllByRole("list", { name: "Automatic tags" })).toHaveLength(1);
   });
 
+  it("keeps the body search's Search button unique beside the tag filter", async () => {
+    mocks.getAdminComments.mockResolvedValue(page([]));
+    render(<AdminCommentsView />);
+    await screen.findByLabelText("Filter by automatic tag");
+    expect(screen.getAllByRole("button", { name: "Search" })).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Filter by tag" })).toBeTruthy();
+  });
+
   it("filters by automatic tag, sends auto_tag, and resets pagination", async () => {
     navigation.reset("/admin/comments", "offset=10");
     mocks.getAdminComments.mockResolvedValue(page([row("c1", ["external-link"])]));
