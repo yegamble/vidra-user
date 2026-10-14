@@ -27,4 +27,8 @@ export const watch = {
   "watch.comments.error": "Could not load comments.",
   "watch.comments.empty": "No comments yet. Be the first to comment.",
   "watch.comments.moreError": "Could not load more comments.",
+  // Like/dislike control.
+  "watch.rating.federationOff": "Federation is turned off on this instance, so federated videos cannot be rated.",
+  "watch.rating.rateLimited": "You are rating too quickly. Try again in a minute.",
+  "watch.remote.note": "This is a federated video from {domain}. Saving lives on the origin instance. Likes and dislikes are sent on to {domain}, which keeps the counts. You can reply here: your comment is hosted on this instance and sent on to {domain}. The \u201cComments from the origin\u201d below are a copy of the origin\u2019s own thread, sent here. Reports go to the moderators of this instance.",
 } as const;

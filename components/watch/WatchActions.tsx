@@ -12,7 +12,7 @@ export function WatchActions({ video, getCurrentTime, playbackToken, onDeleted }
 }) {
   const t = useT();
   return <div role="group" aria-label={t("watch.actions.label")} className="@container/watch-actions flex min-w-0 flex-wrap items-center gap-1">
-    <RatingControls videoId={video.id} />
+    <RatingControls key={video.id} videoId={video.id} />
     <ShareButton videoId={video.id} shortCode={video.short_code} title={video.title} getCurrentTime={getCurrentTime} />
     <SaveButton videoId={video.id} />
     <VideoActionsMenu video={video} watchPage playbackToken={playbackToken} onDeleted={onDeleted} />

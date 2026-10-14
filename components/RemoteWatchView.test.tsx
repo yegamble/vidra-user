@@ -60,6 +60,10 @@ vi.mock("next/link", () => ({
 vi.mock("@/components/auth/AuthProvider", () => ({
   useSession: () => mocks.useSession(),
 }));
+vi.mock("@/components/RatingControls", () => ({
+  RatingControls: () => <div data-testid="rating-controls" />,
+  remoteRatingAdapter: {},
+}));
 
 import { RemoteWatchView } from "./RemoteWatchView";
 

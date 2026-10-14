@@ -43,6 +43,18 @@ describe("api endpoints", () => {
     return (fetchMock.mock.calls[0] as [string])[0];
   }
 
+  it("remote-video rating endpoints use the remote-videos path with PUT/DELETE verbs", async () => {
+    fetchMock.mockImplementation(async () => okJson());
+    await api.setRemoteVideoRating("r1", "dislike");
+    const [url, put] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/remote-videos/r1/rating");
+    expect(put.method).toBe("PUT");
+    expect(put.body).toBe(JSON.stringify({ rating: "dislike" }));
+    fetchMock.mockClear();
+    await api.clearRemoteVideoRating("r1");
+    expect((fetchMock.mock.calls[0] as [string, RequestInit])[1].method).toBe("DELETE");
+  });
+
   it("getFeed targets the feed with sort + pagination", async () => {
     await api.getFeed({ sort: "trending", limit: 10 });
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/videos?sort=trending&limit=10");
