@@ -3,9 +3,9 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { useFormat, useT } from "@/components/I18nProvider";
 import { api } from "@/lib/api";
 import type { LiveStreamUpcomingCard } from "@/lib/api";
-import { formatDateTime } from "@/lib/format";
 
 // ChannelUpcomingBadge announces a channel's next scheduled live on its public
 // page. Unlike ChannelLiveBadge (owner-only, because the per-channel live list
@@ -15,6 +15,8 @@ import { formatDateTime } from "@/lib/format";
 // on a public channel page — and this is announcement only: it says nothing
 // about whether the stream will actually start.
 export function ChannelUpcomingBadge({ handle }: { handle: string }) {
+  const t = useT();
+  const { formatDateTime } = useFormat();
   const [next, setNext] = useState<LiveStreamUpcomingCard | null>(null);
 
   useEffect(() => {
@@ -35,9 +37,9 @@ export function ChannelUpcomingBadge({ handle }: { handle: string }) {
       href={`/live/${encodeURIComponent(next.id)}`}
       className="focus-ring inline-flex items-center gap-1.5 rounded-full border border-border px-3.5 py-1.5 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted"
     >
-      Upcoming
+      {t("live.upcoming.label")}
       <span className="font-normal text-fg-muted">{formatDateTime(next.scheduled_start_at)}</span>
-      <span className="sr-only">: {next.title}</span>
+      <span className="sr-only">{t("live.upcoming.streamTitle", { title: next.title })}</span>
     </Link>
   );
 }

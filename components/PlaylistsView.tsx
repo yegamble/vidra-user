@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { useT } from "@/components/I18nProvider";
 import { PlaylistIcon } from "@/components/icons";
 import { PlaylistCard } from "@/components/PlaylistCard";
 import { PlaylistChannelSelect } from "@/components/PlaylistChannelSelect";
@@ -20,12 +21,13 @@ import { SignInGate } from "@/components/SignInGate";
 // PlaylistsView lists the signed-in user's playlists and offers an inline create
 // form. The session lives in memory, so a hard reload lands here signed out.
 export function PlaylistsView() {
+  const t = useT();
   const { status } = useSession();
 
   if (status !== "authed") {
     return (
-      <SignInGate icon={<PlaylistIcon size={24} />} title="Sign in to see your playlists">
-        to create playlists and organise videos.
+      <SignInGate icon={<PlaylistIcon size={24} />} title={t("playlists.signIn.title")}>
+        {t("playlists.signIn.body")}
       </SignInGate>
     );
   }
@@ -34,6 +36,7 @@ export function PlaylistsView() {
 }
 
 function Playlists() {
+  const t = useT();
   const autoLoad = useBrowseAutoLoad();
   // Paged from the server: the list used to stop at the first 20 playlists.
   const list = useAppendingList<Playlist>({
@@ -52,18 +55,18 @@ function Playlists() {
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
-    const t = title.trim();
-    if (creating || t === "") return;
+    const name = title.trim();
+    if (creating || name === "") return;
     setCreating(true);
     setCreateError(null);
     try {
-      const pl = await api.createPlaylist({ title: t, visibility, ...(channelId ? { channel_id: channelId } : {}) });
+      const pl = await api.createPlaylist({ title: name, visibility, ...(channelId ? { channel_id: channelId } : {}) });
       list.prepend(pl);
       setTitle("");
       setVisibility("private");
       setChannelId("");
     } catch {
-      setCreateError("Could not create the playlist.");
+      setCreateError(t("playlists.create.error"));
     } finally {
       setCreating(false);
     }
@@ -72,12 +75,12 @@ function Playlists() {
   if (status === "loading") {
     return (
       <div className="flex justify-center py-24">
-        <Spinner label="Loading your playlists" />
+        <Spinner label={t("playlists.list.loading")} />
       </div>
     );
   }
   if (status === "error") {
-    return <ErrorState message="Could not load your playlists." onRetry={list.reload} />;
+    return <ErrorState message={t("playlists.list.error")} onRetry={list.reload} />;
   }
 
   return (
@@ -88,27 +91,27 @@ function Playlists() {
       >
         <div className="flex-1">
           <Input
-            label="New playlist"
+            label={t("playlists.create.label")}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="Playlist title"
-            aria-label="Playlist title"
+            placeholder={t("playlists.create.placeholder")}
+            aria-label={t("playlists.create.ariaTitle")}
             maxLength={200}
           />
         </div>
         <Select
-          label="Visibility"
+          label={t("playlists.create.visibility")}
           value={visibility}
           onChange={(e) => setVisibility(e.target.value as PlaylistVisibility)}
-          aria-label="Visibility"
+          aria-label={t("playlists.create.visibility")}
         >
-          <option value="private">Private</option>
-          <option value="unlisted">Unlisted</option>
-          <option value="public">Public</option>
+          <option value="private">{t("playlists.create.private")}</option>
+          <option value="unlisted">{t("playlists.create.unlisted")}</option>
+          <option value="public">{t("playlists.create.public")}</option>
         </Select>
         <PlaylistChannelSelect value={channelId} onChange={setChannelId} />
         <Button type="submit" disabled={creating || title.trim() === ""}>
-          Create
+          {t("playlists.create.submit")}
         </Button>
       </form>
       {createError ? <p className="text-sm text-danger">{createError}</p> : null}
@@ -116,8 +119,8 @@ function Playlists() {
       {playlists.length === 0 ? (
         <EmptyState
           icon={<PlaylistIcon size={24} />}
-          title="No playlists yet"
-          message="Create a playlist above, then add videos to it from any watch page."
+          title={t("playlists.list.empty.title")}
+          message={t("playlists.list.empty.message")}
         />
       ) : (
         <ul className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -132,7 +135,7 @@ function Playlists() {
         hasMore={list.hasMore}
         autoLoad={autoLoad}
         busy={list.moreStatus === "loading"}
-        error={list.moreStatus === "error" ? "Could not load more playlists." : null}
+        error={list.moreStatus === "error" ? t("playlists.list.moreError") : null}
         onLoadMore={list.loadMore}
       />
     </div>

@@ -6,6 +6,7 @@ import { useState } from "react";
 import { ListTail } from "@/components/ui/ListTail";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { useT } from "@/components/I18nProvider";
 import { CheckIcon, PlusIcon } from "@/components/icons";
 import { api } from "@/lib/api";
 import type { Playlist } from "@/lib/api";
@@ -15,6 +16,7 @@ import { useAppendingList } from "@/lib/use-appending-list";
 // their playlists (or a new one) from the watch page. The playlist list loads
 // the first time the menu opens.
 export function AddToPlaylistButton({ videoId }: { videoId: string }) {
+  const t = useT();
   const { status } = useSession();
   const [open, setOpen] = useState(false);
   const [added, setAdded] = useState<Set<string>>(new Set());
@@ -25,7 +27,7 @@ export function AddToPlaylistButton({ videoId }: { videoId: string }) {
         href="/login"
         className="focus-ring inline-flex shrink-0 items-center whitespace-nowrap rounded-[10px] bg-surface-muted px-4 py-2 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-strong"
       >
-        Sign in to save to a playlist
+        {t("playlists.menu.signIn")}
       </Link>
     );
   }
@@ -43,7 +45,7 @@ export function AddToPlaylistButton({ videoId }: { videoId: string }) {
         className="focus-ring flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[10px] bg-surface-muted px-4 py-2 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-strong"
       >
         <PlusIcon size={16} />
-        <span>Save to playlist</span>
+        <span>{t("playlists.menu.trigger")}</span>
       </button>
       {open ? (
         <PlaylistMenu videoId={videoId} added={added} markAdded={markAdded} />
@@ -63,6 +65,7 @@ function PlaylistMenu({
   added: Set<string>;
   markAdded: (plId: string) => void;
 }) {
+  const t = useT();
   const [busy, setBusy] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState("");
   const [creating, setCreating] = useState(false);
@@ -90,11 +93,11 @@ function PlaylistMenu({
 
   async function createAndAdd(e: React.FormEvent) {
     e.preventDefault();
-    const t = newTitle.trim();
-    if (creating || t === "") return;
+    const name = newTitle.trim();
+    if (creating || name === "") return;
     setCreating(true);
     try {
-      const pl = await api.createPlaylist({ title: t });
+      const pl = await api.createPlaylist({ title: name });
       await api.addToPlaylist(pl.id, videoId);
       list.prepend(pl);
       markAdded(pl.id);
@@ -109,9 +112,9 @@ function PlaylistMenu({
   return (
         <div className="absolute left-0 z-20 mt-2 w-64 rounded-xl border border-border-subtle bg-surface-raised p-2 shadow-soft-strong">
           {playlists === null ? (
-            <p className="px-2 py-1.5 text-sm text-fg-muted">Loading…</p>
+            <p className="px-2 py-1.5 text-sm text-fg-muted">{t("playlists.menu.loading")}</p>
           ) : playlists.length === 0 ? (
-            <p className="px-2 py-1.5 text-sm text-fg-muted">No playlists yet — create one below.</p>
+            <p className="px-2 py-1.5 text-sm text-fg-muted">{t("playlists.menu.empty")}</p>
           ) : (
             <ul className="max-h-56 overflow-auto">
               {playlists.map((pl) => (
@@ -136,7 +139,7 @@ function PlaylistMenu({
             hasMore={list.hasMore}
             autoLoad={false}
             busy={list.moreStatus === "loading"}
-            error={list.moreStatus === "error" ? "Could not load more playlists." : null}
+            error={list.moreStatus === "error" ? t("playlists.list.moreError") : null}
             onLoadMore={list.loadMore}
           />
           <form
@@ -146,8 +149,8 @@ function PlaylistMenu({
             <input
               value={newTitle}
               onChange={(e) => setNewTitle(e.target.value)}
-              placeholder="New playlist"
-              aria-label="New playlist name"
+              placeholder={t("playlists.menu.newPlaceholder")}
+              aria-label={t("playlists.menu.newAria")}
               maxLength={200}
               className="focus-ring min-w-0 flex-1 rounded-xl border border-border bg-surface px-2.5 py-1.5 text-sm text-fg placeholder:text-fg-muted"
             />
@@ -156,7 +159,7 @@ function PlaylistMenu({
               disabled={creating || newTitle.trim() === ""}
               className="focus-ring shrink-0 rounded-[10px] bg-accent px-3 py-1.5 text-[13px] font-semibold text-accent-fg transition-colors hover:bg-accent/90 disabled:opacity-50"
             >
-              Create
+              {t("playlists.menu.create")}
             </button>
           </form>
         </div>
