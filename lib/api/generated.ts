@@ -1413,6 +1413,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/import/peertube": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import the metadata of a PeerTube user-export archive
+         * @description Accepts a PeerTube (>= 6.1) user-export zip as multipart field `archive` and imports its METADATA into the caller's own account: channels (created when the handle is free and valid here; a handle the caller already owns counts as existing, another owner's is skipped), regular playlists (matched by title, so a re-import never duplicates; items are not resolved and are counted in playlist_items_skipped), and the autoplay-next setting. Videos, likes, dislikes, comments, watch history, blocklists, followers and following are NOT imported yet and are counted under skipped_sections. Synchronous: the work is bounded and touches no network or media. The zip is parsed in memory, never extracted, and refused whole on traversal, symlink, encrypted, duplicate or oversize entries; the body is bounded by the HTTP body limit (default 8 MB), so an export that bundles video files must be trimmed to its peertube/*.json entries first. 403 feature_disabled when user_import_enabled is off. At most 3 imports per user per hour. At most 50 channels may be owned after an import, existing ones included. If the import stops part-way on a server error, the answer is the standard error envelope with an added `summary` (PeerTubeImportSummary) of what was done first; rows already created are kept and re-uploading the same archive is safe.
+         */
+        post: operations["importPeerTubeArchive"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/quota": {
         parameters: {
             query?: never;
@@ -4394,6 +4414,115 @@ export interface paths {
          * @description Removes a remote instance from the blocklist. Requires the admin or moderator role. Idempotent. Audited. An invalid domain is 422.
          */
         delete: operations["unblockInstance"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/instances/blocklist-subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List blocklist subscriptions (admin)
+         * @description Shared fediverse denylists this instance syncs into its instance blocklist. Admin only. Paginated via limit (1–100, default 20) and offset.
+         */
+        get: operations["listBlocklistSubscriptions"];
+        put?: never;
+        /**
+         * Subscribe to a blocklist (admin)
+         * @description Adds a list URL (Mastodon CSV, plain domain list, or JSON). The server fetches it through the SSRF guard (public http/https only, redirects re-checked, 8 MiB cap) on the periodic sync or "sync now". Entries with severity suspend (or none) become instance blocks owned by this subscription; silence/limit entries are ignored. Admin only. Audited.
+         */
+        post: operations["createBlocklistSubscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/instances/blocklist-subscriptions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a blocklist subscription (admin)
+         * @description Removes the subscription AND exactly the instance blocks it created. Manual blocks, and blocks owned by other subscriptions, are never touched. Audited.
+         */
+        delete: operations["deleteBlocklistSubscription"];
+        options?: never;
+        head?: never;
+        /**
+         * Edit a blocklist subscription (admin)
+         * @description Changes the label and/or enabled flag. Disabling stops future syncs; the blocks already applied stay until the subscription is deleted.
+         */
+        patch: operations["updateBlocklistSubscription"];
+        trace?: never;
+    };
+    "/api/v1/admin/instances/blocklist-subscriptions/{id}/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sync a blocklist subscription now (admin)
+         * @description Fetches the list and applies it: adds blocks for new entries, removes only blocks this subscription created that the list no longer names. A fetch/parse failure is a 200 with status "error" (the last good state is kept); a list with no usable entries removes nothing. A sync that would remove more than 25 blocks and more than half of the ones the subscription owns is held: status "needs_confirmation", nothing changed; repeat with {"confirm": true} to apply it. Entries naming this instance or a parent domain of it are skipped. Rate limited per admin (6 per minute). Audited with added/removed counts.
+         */
+        post: operations["syncBlocklistSubscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/instances/blocklist-allowlist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List domains exempt from blocklist subscriptions (admin) */
+        get: operations["listBlocklistAllowlist"];
+        put?: never;
+        /**
+         * Exempt a domain from blocklist subscriptions (admin)
+         * @description The allowlist wins over every subscription: the domain is not blocked by a sync, and a block a subscription already created for it is lifted now. A manual block is untouched. Idempotent. Audited.
+         */
+        post: operations["addBlocklistAllow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/instances/blocklist-allowlist/{domain}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Lift a blocklist-subscription exemption (admin)
+         * @description Idempotent. The next sync re-applies lists to the domain. Audited.
+         */
+        delete: operations["removeBlocklistAllow"];
         options?: never;
         head?: never;
         patch?: never;
@@ -7991,9 +8120,83 @@ export interface components {
             blocked_by?: string;
             /** Format: date-time */
             blocked_at: string;
+            /** @description Who owns the block: "manual", or "subscription:<id>" when a blocklist subscription created it. */
+            source: string;
         };
         BlockedInstanceListResponse: components["schemas"]["PageMeta"] & {
             instances: components["schemas"]["BlockedInstance"][];
+        };
+        BlocklistSubscription: {
+            /** Format: uuid */
+            id: string;
+            url: string;
+            label: string;
+            /** @enum {string} */
+            format: "mastodon_csv" | "domain_list" | "json";
+            enabled: boolean;
+            /**
+             * @description Outcome of the last attempt. A failed attempt keeps the last good counts.
+             * @enum {string}
+             */
+            last_status: "never" | "ok" | "not_modified" | "error" | "needs_confirmation";
+            /** @description A short class message (e.g. "HTTP 500", "address not allowed"), never a raw error. */
+            last_error?: string;
+            /** Format: date-time */
+            last_synced_at?: string;
+            /** Format: date-time */
+            last_attempt_at?: string;
+            last_added: number;
+            last_removed: number;
+            /** @description Usable domains in the last applied list. */
+            entry_count: number;
+            /**
+             * Format: int64
+             * @description Instance blocks this subscription currently owns.
+             */
+            block_count: number;
+            /** Format: date-time */
+            created_at: string;
+        };
+        BlocklistSubscriptionListResponse: components["schemas"]["PageMeta"] & {
+            subscriptions: components["schemas"]["BlocklistSubscription"][];
+        };
+        CreateBlocklistSubscriptionRequest: {
+            url: string;
+            /** @enum {string} */
+            format: "mastodon_csv" | "domain_list" | "json";
+            label?: string;
+            /** @description Defaults to true. */
+            enabled?: boolean;
+        };
+        UpdateBlocklistSubscriptionRequest: {
+            label?: string;
+            enabled?: boolean;
+        };
+        BlocklistSyncResult: {
+            /** @enum {string} */
+            status: "ok" | "not_modified" | "error" | "needs_confirmation";
+            error?: string;
+            /** @description Entries skipped because they name this instance or a parent domain. */
+            protected: number;
+            /** @description With needs_confirmation, how many blocks a confirmed sync would remove. */
+            pending_removals?: number;
+            added: number;
+            removed: number;
+            entries: number;
+            /** @description Rows skipped because vidra has no equivalent of silence/limit. */
+            ignored_severity: number;
+            /** @description Rows skipped as malformed (wildcard, obfuscated, IP, ...). */
+            invalid: number;
+        };
+        BlocklistAllowRequest: {
+            domain: string;
+        };
+        BlocklistAllowlistResponse: components["schemas"]["PageMeta"] & {
+            domains: {
+                domain: string;
+                /** Format: date-time */
+                added_at: string;
+            }[];
         };
         RemoteVideo: {
             /** Format: uuid */
@@ -9036,6 +9239,8 @@ export interface components {
             created_at: string;
             /** @description True for a tombstoned comment (its author's account was permanently deleted); body renders as "[deleted]". */
             deleted: boolean;
+            /** @description Tags computed from the body when it was posted or last edited: `external-link` (it contains a URL) and the NAME of each instance watched-word list it matches. Never the matched words. Empty for an untagged comment, and for one that predates the feature until it is edited. Tags are a snapshot of list names at post/edit time: renaming or deleting a list, or adding words, does not retag old comments. */
+            automatic_tags: string[];
         };
         AdminCommentListResponse: components["schemas"]["PageMeta"] & {
             comments: components["schemas"]["AdminComment"][];
@@ -9535,6 +9740,21 @@ export interface components {
                 /** Format: date-time */
                 watched_at?: string;
             }[];
+        };
+        /** @description What POST /api/v1/me/import/peertube created and skipped. */
+        PeerTubeImportSummary: {
+            channels_created: number;
+            channels_existing: number;
+            /** @description Invalid handle, reserved, owned by someone else, or over the channel limit. */
+            channels_skipped: number;
+            playlists_created: number;
+            playlists_existing: number;
+            playlists_skipped: number;
+            playlist_items_skipped: number;
+            settings_applied: number;
+            skipped_sections: {
+                [key: string]: number;
+            };
         };
         /** @description What POST /api/v1/me/import re-created (safe subsets only) and what it skipped. */
         AccountImportSummary: {
@@ -15365,6 +15585,78 @@ export interface operations {
             };
             /** @description Not a valid vidra account archive. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    importPeerTubeArchive: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    archive: string;
+                };
+            };
+        };
+        responses: {
+            /** @description What was imported and what was skipped. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PeerTubeImportSummary"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Archive imports are disabled (code feature_disabled). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The archive exceeds the request body limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, not a zip, or not a valid PeerTube export. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many imports in the window (3 per user per hour). */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -23370,6 +23662,8 @@ export interface operations {
             query?: {
                 /** @description Case-insensitive body substring filter. */
                 q?: string;
+                /** @description Keep only comments carrying this automatic tag (`external-link`, or an instance watched-word list name); case-insensitive exact match. */
+                auto_tag?: string;
                 /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
                 limit?: components["parameters"]["PageLimit"];
                 /** @description Rows to skip. Negative values are clamped to 0. */
@@ -24483,6 +24777,439 @@ export interface operations {
                 };
             };
             /** @description Invalid instance domain. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listBlocklistSubscriptions: {
+        parameters: {
+            query?: {
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of subscriptions (possibly empty). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlocklistSubscriptionListResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createBlocklistSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateBlocklistSubscriptionRequest"];
+            };
+        };
+        responses: {
+            /** @description The subscription (never synced yet). */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlocklistSubscription"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Already subscribed to that URL. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Invalid URL (not a public http/https URL) or format. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteBlocklistSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Subscription and the blocks it owned are removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Malformed subscription id. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such subscription. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateBlocklistSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateBlocklistSubscriptionRequest"];
+            };
+        };
+        responses: {
+            /** @description The updated subscription. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlocklistSubscription"];
+                };
+            };
+            /** @description Malformed subscription id. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such subscription. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    syncBlocklistSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    confirm?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description The outcome of this sync. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlocklistSyncResult"];
+                };
+            };
+            /** @description Malformed subscription id. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such subscription. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sync budget exhausted; Retry-After is set. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listBlocklistAllowlist: {
+        parameters: {
+            query?: {
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of allowlisted domains (possibly empty). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlocklistAllowlistResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    addBlocklistAllow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BlocklistAllowRequest"];
+            };
+        };
+        responses: {
+            /** @description The domain is exempt. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or invalid domain. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    removeBlocklistAllow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                domain: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The domain is no longer exempt. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Invalid domain. */
             422: {
                 headers: {
                     [name: string]: unknown;

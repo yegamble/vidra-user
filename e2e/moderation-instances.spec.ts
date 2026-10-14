@@ -124,6 +124,7 @@ test("an admin sees the existing blocklist and a 422 surfaces inline", async ({ 
             domain: "old.example",
             reason: "long gone",
             blocked_at: new Date().toISOString(),
+            source: "manual",
           },
         ],
         limit: 100,

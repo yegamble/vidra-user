@@ -564,6 +564,13 @@ export type MutedInstanceListResponse = Schemas["MutedInstanceListResponse"];
 export type BlockInstanceRequest = Schemas["BlockInstanceRequest"];
 export type BlockedInstance = Schemas["BlockedInstance"];
 export type BlockedInstanceListResponse = Schemas["BlockedInstanceListResponse"];
+export type BlocklistSubscription = Schemas["BlocklistSubscription"];
+export type BlocklistSubscriptionListResponse = Schemas["BlocklistSubscriptionListResponse"];
+export type CreateBlocklistSubscriptionRequest = Schemas["CreateBlocklistSubscriptionRequest"];
+export type UpdateBlocklistSubscriptionRequest = Schemas["UpdateBlocklistSubscriptionRequest"];
+export type BlocklistSyncResult = Schemas["BlocklistSyncResult"];
+export type BlocklistAllowRequest = Schemas["BlocklistAllowRequest"];
+export type BlocklistAllowlistResponse = Schemas["BlocklistAllowlistResponse"];
 
 // --- Federation / remote content --------------------------------------------
 export type RemoteVideo = Schemas["RemoteVideo"];

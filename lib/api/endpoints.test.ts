@@ -2020,6 +2020,35 @@ describe("api endpoints", () => {
     expect(init.method).toBe("DELETE");
   });
 
+  it("blocklist subscription calls hit the admin routes with ids and domains encoded", async () => {
+    const base = "http://localhost:8080/api/v1/admin/instances/blocklist-subscriptions";
+    fetchMock.mockImplementation(async () => okJson()); // one Response per call: a body is read once
+    await api.getBlocklistSubscriptions({ limit: 10 });
+    expect(calledUrl()).toBe(`${base}?limit=10`);
+    await api.createBlocklistSubscription({ url: "https://l.example/a.csv", format: "mastodon_csv" });
+    let [url, init] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect([url, init.method]).toEqual([base, "POST"]);
+    expect(JSON.parse(init.body as string)).toEqual({ url: "https://l.example/a.csv", format: "mastodon_csv" });
+    await api.updateBlocklistSubscription("abc", { enabled: false });
+    [url, init] = fetchMock.mock.calls[2] as [string, RequestInit];
+    expect([url, init.method]).toEqual([`${base}/abc`, "PATCH"]);
+    await api.syncBlocklistSubscription("abc");
+    [url, init] = fetchMock.mock.calls[3] as [string, RequestInit];
+    expect([url, init.method]).toEqual([`${base}/abc/sync`, "POST"]);
+    await api.deleteBlocklistSubscription("abc");
+    [url, init] = fetchMock.mock.calls[4] as [string, RequestInit];
+    expect([url, init.method]).toEqual([`${base}/abc`, "DELETE"]);
+    await api.removeBlocklistAllow("spam.example:8443");
+    [url, init] = fetchMock.mock.calls[5] as [string, RequestInit];
+    expect([url, init.method]).toEqual([
+      "http://localhost:8080/api/v1/admin/instances/blocklist-allowlist/spam.example%3A8443",
+      "DELETE",
+    ]);
+    await api.addBlocklistAllow({ domain: "ok.example" });
+    [url, init] = fetchMock.mock.calls[6] as [string, RequestInit];
+    expect([url, init.method]).toEqual(["http://localhost:8080/api/v1/admin/instances/blocklist-allowlist", "POST"]);
+  });
+
   it("getBlockedRemoteActors targets the instance-wide actor blocklist", async () => {
     await api.getBlockedRemoteActors({ limit: 10, offset: 20 });
     expect(calledUrl()).toBe(
