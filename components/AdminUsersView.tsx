@@ -1249,18 +1249,18 @@ function UserRow({
             <RolePill role={user.role} />
             {user.is_active ? null : (
               <span className="inline-flex items-center rounded-full bg-danger-surface px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-[0.04em] text-danger">
-                {deleted ? "deleted" : "deactivated"}
+                {deleted ? t("admin.users.badge.deleted") : t("admin.users.badge.deactivated")}
               </span>
             )}
           </div>
           <div className="mt-1 text-[12.5px] text-fg-muted">
             <span className="break-all">{user.email}</span>
             <span aria-hidden> · </span>
-            <span>joined {relativeTime(user.created_at)}</span>
+            <span>{t("admin.users.joinedOn", { when: relativeTime(user.created_at) })}</span>
             <span aria-hidden> · </span>
             <span className="tabular-nums">{formatBytes(used)}</span>
             <span aria-hidden> · </span>
-            <span>{user.email_verified ? "verified" : "unverified"}</span>
+            <span>{user.email_verified ? t("admin.users.verified") : t("admin.users.unverified")}</span>
           </div>
           <BanNote user={user} />
         </div>
@@ -1269,13 +1269,13 @@ function UserRow({
       {/* Role — the design's three-way segmented switch. Self is display-only
           (the backend forbids self-demote), so the own row shows a static pill. */}
       <div className="mt-3.5 flex items-center justify-between gap-3">
-        <span className="text-[13px] font-semibold text-fg">Role</span>
+        <span className="text-[13px] font-semibold text-fg">{t("admin.users.col.role")}</span>
         {!viewerIsAdmin || !guard.allowed || deleted ? (
           <RolePill role={user.role} />
         ) : (
           <SegmentedControl
             size="sm"
-            label={`Role for ${user.username}`}
+            label={t("admin.users.roleFor", { name: user.username })}
             options={roleOptions(t)}
             value={user.role}
             disabled={saving}
@@ -1314,23 +1314,25 @@ function UserRow({
             <Button
               variant="tonal"
               size="sm"
-              aria-label={`${user.is_active ? "Deactivate" : "Reactivate"} ${user.username}`}
+              aria-label={t(user.is_active ? "admin.users.deactivateAria" : "admin.users.reactivateAria", {
+                name: user.username,
+              })}
               disabled={!canBan || saving}
               onClick={() =>
                 user.is_active ? setBanOpen(true) : void save({ is_active: true })
               }
             >
-              {user.is_active ? "Deactivate" : "Reactivate"}
+              {user.is_active ? t("admin.users.deactivate") : t("admin.users.reactivate")}
             </Button>
             {viewerIsAdmin && !deleteArmed ? (
               <Button
                 variant="danger-outline"
                 size="sm"
-                aria-label={`Delete ${user.username} permanently`}
+                aria-label={t("admin.users.deleteAria", { name: user.username })}
                 disabled={!guard.allowed || saving}
                 onClick={() => setDeleteArmed(true)}
               >
-                Delete permanently
+                {t("admin.users.deletePermanently")}
               </Button>
             ) : null}
             {guard.allowed ? null : (
@@ -1343,18 +1345,17 @@ function UserRow({
       {viewerIsAdmin && deleteArmed ? (
         <div className="mt-3 flex flex-col gap-2 rounded-2xl border border-danger-border p-3">
           <p className="text-sm text-fg-muted">
-            This permanently deletes{" "}
-            <span className="font-semibold text-fg">{user.username}</span>
-            &apos;s account: their channels and videos are removed for good,
-            their comments become &ldquo;[deleted]&rdquo; tombstones, and this
-            cannot be undone. Deactivate is the reversible alternative.
+            {withSlot(
+              t("admin.users.deleteWarningMobile", { name: SLOT }),
+              <span className="font-semibold text-fg">{user.username}</span>,
+            )}
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <input
               type="text"
               autoComplete="off"
-              aria-label={`Type ${user.username} to confirm deletion`}
-              placeholder={`Type ${user.username} to confirm`}
+              aria-label={t("admin.users.typeAria", { name: user.username })}
+              placeholder={t("admin.users.typePlaceholder", { name: user.username })}
               value={deleteConfirmName}
               onChange={(e) => setDeleteConfirmName(e.target.value)}
               className="focus-ring rounded-xl border border-border bg-surface px-3.5 py-1.5 text-sm text-fg placeholder:text-fg-muted"
@@ -1362,11 +1363,11 @@ function UserRow({
             <Button
               variant="danger"
               size="sm"
-              aria-label={`Confirm permanent deletion of ${user.username}`}
+              aria-label={t("admin.users.confirmDeleteAria", { name: user.username })}
               disabled={saving || deleteConfirmName !== user.username}
               onClick={() => void doDelete()}
             >
-              {saving ? "Deleting…" : "Confirm permanent delete"}
+              {saving ? t("admin.queue.deleting") : t("admin.users.confirmDelete")}
             </Button>
             <Button
               variant="secondary"
@@ -1378,7 +1379,7 @@ function UserRow({
                 setError(null);
               }}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
           </div>
         </div>
@@ -1427,10 +1428,10 @@ function QuotaCard({
   boxed?: boolean;
   kind?: "storage" | "daily";
 }) {
+  const t = useT();
   const daily = kind === "daily";
   const field = daily ? "daily_quota_bytes" : "storage_quota_bytes";
-  const noun = daily ? "daily upload quota" : "storage quota";
-  const title = daily ? "Daily upload quota" : "Storage quota";
+  const title = daily ? t("admin.users.quota.dailyTitle") : t("admin.users.quota.storageTitle");
   const [editing, setEditing] = useState(false);
   const [gb, setGb] = useState("");
 
@@ -1440,10 +1441,10 @@ function QuotaCard({
   const pct = finite ? Math.min(100, Math.round((used / quota) * 100)) : 0;
 
   const rightLabel = !overridden
-    ? `${formatBytes(used)} · instance default`
+    ? t("admin.users.quota.usedDefault", { used: formatBytes(used) })
     : unlimited
-      ? `${formatBytes(used)} · unlimited`
-      : `${formatBytes(used)} of ${formatBytes(quota)}`;
+      ? t("admin.users.quota.usedUnlimited", { used: formatBytes(used) })
+      : t("admin.users.quota.usedOf", { used: formatBytes(used), quota: formatBytes(quota) });
 
   const submit = useCallback(async () => {
     const value = Number(gb);
@@ -1466,7 +1467,7 @@ function QuotaCard({
         <span className="tabular-nums text-fg-muted">
           {rightLabel}
           {overridden ? (
-            <span className="text-fg-muted"> · override</span>
+            <span className="text-fg-muted">{t("admin.users.quota.override")}</span>
           ) : null}
         </span>
       </div>
@@ -1486,21 +1487,25 @@ function QuotaCard({
               min={0}
               step="0.1"
               inputMode="decimal"
-              aria-label={`${daily ? "Daily upload quota" : "Storage quota"} in GB for ${user.username}`}
+              aria-label={t(daily ? "admin.users.quota.gbAriaDaily" : "admin.users.quota.gbAriaStorage", {
+                name: user.username,
+              })}
               value={gb}
               onChange={(e) => setGb(e.target.value)}
               className="focus-ring w-24 rounded-lg border border-border bg-surface px-2.5 py-1 text-sm tabular-nums text-fg"
             />
-            GB
+            {t("admin.users.quota.unit")}
           </label>
           <Button
             variant="primary"
             size="sm"
-            aria-label={`Save ${noun} for ${user.username}`}
+            aria-label={t(daily ? "admin.users.quota.saveAriaDaily" : "admin.users.quota.saveAriaStorage", {
+              name: user.username,
+            })}
             disabled={saving || gb.trim() === ""}
             onClick={() => void submit()}
           >
-            {saving ? "Saving…" : "Save"}
+            {saving ? t("admin.users.quota.saving") : t("admin.users.quota.save")}
           </Button>
           <Button
             variant="secondary"
@@ -1511,7 +1516,7 @@ function QuotaCard({
               setGb("");
             }}
           >
-            Cancel
+            {t("common.cancel")}
           </Button>
         </div>
       ) : (
@@ -1519,24 +1524,28 @@ function QuotaCard({
           <Button
             variant="tonal"
             size="sm"
-            aria-label={`Change ${noun} for ${user.username}`}
+            aria-label={t(daily ? "admin.users.quota.changeAriaDaily" : "admin.users.quota.changeAriaStorage", {
+              name: user.username,
+            })}
             disabled={saving}
             onClick={() => {
               setEditing(true);
               setGb(finite ? String(Math.round((quota / GIB) * 10) / 10) : "");
             }}
           >
-            {daily ? "Change daily quota" : "Change quota"}
+            {daily ? t("admin.users.quota.changeDaily") : t("admin.users.quota.change")}
           </Button>
           {overridden ? (
             <Button
               variant="secondary"
               size="sm"
-              aria-label={`Reset ${user.username} to the instance default${daily ? " daily upload" : ""} quota`}
+              aria-label={t(daily ? "admin.users.quota.resetAriaDaily" : "admin.users.quota.resetAriaStorage", {
+                name: user.username,
+              })}
               disabled={saving}
               onClick={() => void onSave({ [field]: null })}
             >
-              Reset to default
+              {t("admin.users.quota.reset")}
             </Button>
           ) : null}
         </div>
