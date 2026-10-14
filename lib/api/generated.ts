@@ -1424,7 +1424,7 @@ export interface paths {
         put?: never;
         /**
          * Import the metadata of a PeerTube user-export archive
-         * @description Accepts a PeerTube (>= 6.1) user-export zip as multipart field `archive` and imports its METADATA into the caller's own account: channels (created when the handle is free and valid here; a handle the caller already owns counts as existing, another owner's is skipped), regular playlists (matched by title, so a re-import never duplicates; items are not resolved and are counted in playlist_items_skipped), and the autoplay-next setting. Videos, likes, dislikes, comments, watch history, blocklists, followers and following are NOT imported yet and are counted under skipped_sections. Synchronous: the work is bounded and touches no network or media. The zip is parsed in memory, never extracted, and refused whole on traversal, symlink, encrypted, duplicate or oversize entries; the body is bounded by the HTTP body limit (default 8 MB), so an export that bundles video files must be trimmed to its peertube/*.json entries first. 403 feature_disabled when user_import_enabled is off. At most 3 imports per user per hour. At most 50 channels may be owned after an import, existing ones included. If the import stops part-way on a server error, the answer is the standard error envelope with an added `summary` (PeerTubeImportSummary) of what was done first; rows already created are kept and re-uploading the same archive is safe.
+         * @description Accepts a PeerTube (>= 6.1) user-export zip as multipart field `archive` and imports its METADATA into the caller's own account: channels (created when the handle is free and valid here; a handle the caller already owns counts as existing, another owner's is skipped), regular playlists (matched by title, so a re-import never duplicates; items are not resolved and are counted in playlist_items_skipped), and the autoplay-next setting. Videos, likes, dislikes, comments, watch history, blocklists, followers and following are NOT imported yet and are counted under skipped_sections. Synchronous: the work is bounded and touches no network or media. The body cap for this route is PEERTUBE_IMPORT_MAX_SIZE, which defaults to the global HTTP body limit (8 MB), enough for an export trimmed to its peertube/*.json entries; an instance that raises it also accepts the full export including its video files. A Content-Length is required (411 without one). The upload is streamed to a temporary file that is always removed, and only the peertube/*.json entries are ever read; media entries are never opened. The archive is refused whole on traversal, symlink, encrypted, duplicate or oversize JSON entries, or an oversized or ambiguous central directory (more than 20000 entries or 4 MiB). An upload that stops sending for 60 s is abandoned with 408. 403 feature_disabled when user_import_enabled is off. At most 3 imports per user per hour. At most 50 channels may be owned after an import, existing ones included. If the import stops part-way on a server error, the answer is the standard error envelope with an added `summary` (PeerTubeImportSummary) of what was done first; rows already created are kept and re-uploading the same archive is safe.
          */
         post: operations["importPeerTubeArchive"];
         delete?: never;
@@ -4543,6 +4543,34 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/remote-videos/{id}/rating": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Your own rating of a federated video
+         * @description Returns the caller's like/dislike of a remote video, or null. The counts belong to the origin instance and are not reported here.
+         */
+        get: operations["getRemoteVideoRating"];
+        /**
+         * Like or dislike a federated video
+         * @description Records the caller's like/dislike and federates it to the video's origin as an ActivityPub Like or Dislike signed by the caller's account actor; changing a rating also sends an Undo of the previous one. Repeating the same rating sends nothing.
+         */
+        put: operations["setRemoteVideoRating"];
+        post?: never;
+        /**
+         * Clear your rating of a federated video
+         * @description Removes the caller's rating (idempotent) and federates an Undo of it to the origin.
+         */
+        delete: operations["deleteRemoteVideoRating"];
         options?: never;
         head?: never;
         patch?: never;
@@ -8470,6 +8498,13 @@ export interface components {
         };
         BlockedUserListResponse: components["schemas"]["PageMeta"] & {
             users: components["schemas"]["BlockedUser"][];
+        };
+        RemoteVideoRating: {
+            /**
+             * @description The caller's own rating of the remote video, or null.
+             * @enum {string|null}
+             */
+            my_rating: "like" | "dislike" | null;
         };
         VideoRating: {
             /** Format: int64 */
@@ -15637,7 +15672,25 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description The archive exceeds the request body limit. */
+            /** @description The upload stopped sending for 60 seconds and was abandoned. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The request has no Content-Length. */
+            411: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The request body exceeds PEERTUBE_IMPORT_MAX_SIZE (default: the global HTTP body limit), declared or actually streamed. */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -15657,6 +15710,15 @@ export interface operations {
             };
             /** @description Too many imports in the window (3 per user per hour). */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The server is already receiving the maximum number of archives, or has too little free temporary space for this one (also when space runs short mid-upload); retry after the Retry-After seconds. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -25242,6 +25304,187 @@ export interface operations {
             };
             /** @description No such remote video (or its origin instance is blocked). */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getRemoteVideoRating: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's rating. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemoteVideoRating"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such remote video, or it (or its origin) is blocked here. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    setRemoteVideoRating: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    rating: "like" | "dislike";
+                };
+            };
+        };
+        responses: {
+            /** @description The caller's rating. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemoteVideoRating"];
+                };
+            };
+            /** @description Malformed JSON body. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such remote video, or it (or its origin) is blocked here. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The rating is not `like` or `dislike`. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many rating changes by this user; retry after a minute. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Federation is disabled on this instance. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteRemoteVideoRating: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The rating is cleared (my_rating null). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemoteVideoRating"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such remote video, or it (or its origin) is blocked here. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many rating changes by this user; retry after a minute. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Federation is disabled on this instance. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

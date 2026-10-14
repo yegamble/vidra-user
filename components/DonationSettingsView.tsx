@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { useT } from "@/components/I18nProvider";
 import { DonationBadge } from "@/components/DonationBadge";
 import { HeartIcon, PlusIcon } from "@/components/icons";
 import { Alert } from "@/components/ui/Alert";
@@ -11,6 +12,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, api, errorMessage } from "@/lib/api";
 import type { Channel, DonationAddress, DonationNetwork } from "@/lib/api";
+import type { Translate } from "@/lib/i18n";
 import { DONATION_NETWORKS, NETWORK_META, validateDonationAddress } from "@/lib/donation-address";
 import { SignInGate } from "@/components/SignInGate";
 
@@ -29,15 +31,16 @@ type Status = "loading" | "error" | "ready";
 // it, and delete. NON-CUSTODIAL and display-only — Vidra never holds funds,
 // balances, or keys (P13 prohibition). Session-gated like the other settings.
 export function DonationSettingsView() {
+  const t = useT();
   const { status } = useSession();
 
   if (status !== "authed") {
     return (
       <SignInGate
-        title="Sign in to manage donation addresses"
-        restoringLabel="Loading your account"
+        title={t("settings.donations.gate.title")}
+        restoringLabel={t("settings.donations.gate.restoring")}
       >
-        to add the crypto addresses shown on your profile and channels.
+        {t("settings.donations.gate.body")}
       </SignInGate>
     );
   }
@@ -46,6 +49,7 @@ export function DonationSettingsView() {
 }
 
 function Donations() {
+  const t = useT();
   const [status, setStatus] = useState<Status>("loading");
   const [addresses, setAddresses] = useState<DonationAddress[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -72,14 +76,14 @@ function Donations() {
   if (status === "loading") {
     return (
       <div className="flex justify-center py-16">
-        <Spinner label="Loading donation addresses" />
+        <Spinner label={t("settings.donations.loading")} />
       </div>
     );
   }
   if (status === "error") {
     return (
       <ErrorState
-        message="Could not load your donation addresses."
+        message={t("settings.donations.loadError")}
         onRetry={() => {
           setStatus("loading");
           setReloadKey((k) => k + 1);
@@ -94,8 +98,8 @@ function Donations() {
         <EmptyState
           icon={<HeartIcon size={24} />}
           tint="pink"
-          title="No donation addresses yet"
-          message="Add an address below to display it on your profile or a channel."
+          title={t("settings.donations.empty.title")}
+          message={t("settings.donations.empty.message")}
         />
       ) : (
         <ul className="flex flex-col gap-3">
@@ -134,6 +138,7 @@ function AddAddress({
   channels: Channel[];
   onAdded: (created: DonationAddress) => void;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
 
   if (!open) {
@@ -144,7 +149,7 @@ function AddAddress({
         className="focus-ring flex w-full items-center justify-center gap-1.5 rounded-[10px] bg-surface-muted py-3 text-sm font-semibold text-fg transition-colors hover:bg-surface-strong"
       >
         <PlusIcon size={17} strokeWidth={2.2} />
-        Add address
+        {t("settings.donations.add")}
       </button>
     );
   }
@@ -170,6 +175,7 @@ function AddAddressForm({
   onAdded: (created: DonationAddress) => void;
   onCancel: () => void;
 }) {
+  const t = useT();
   const [network, setNetwork] = useState<DonationNetwork>("bitcoin");
   const [address, setAddress] = useState("");
   const [label, setLabel] = useState("");
@@ -204,7 +210,7 @@ function AddAddressForm({
         if (addrField) setAddressError(addrField.message);
         else setFormError(err.fields[0].message);
       } else if (err instanceof ApiError && err.status === 409) {
-        setFormError("You have already added that address for this profile or channel.");
+        setFormError(t("settings.donations.duplicate"));
       } else if (err instanceof ApiError && err.status === 422) {
         setAddressError(err.message);
       } else {
@@ -223,9 +229,9 @@ function AddAddressForm({
         void submit();
       }}
       className="flex flex-col gap-4 rounded-2xl bg-surface-muted p-4"
-      aria-label="Add a donation address"
+      aria-label={t("settings.donations.form.label")}
     >
-      <h2 className="text-base font-semibold tracking-tight text-fg">Add an address</h2>
+      <h2 className="text-base font-semibold tracking-tight text-fg">{t("settings.donations.form.title")}</h2>
 
       {formError ? (
         <Alert>
@@ -235,7 +241,7 @@ function AddAddressForm({
 
       <div className="flex flex-col gap-1">
         <label htmlFor="donation-network" className="text-sm font-medium text-fg">
-          Network
+          {t("settings.donations.network")}
         </label>
         <select
           id="donation-network"
@@ -256,7 +262,7 @@ function AddAddressForm({
 
       <div className="flex flex-col gap-1">
         <label htmlFor="donation-address" className="text-sm font-medium text-fg">
-          Wallet address
+          {t("settings.donations.address")}
         </label>
         <input
           id="donation-address"
@@ -283,14 +289,15 @@ function AddAddressForm({
 
       <div className="flex flex-col gap-1">
         <label htmlFor="donation-label" className="text-sm font-medium text-fg">
-          Label <span className="font-normal text-fg-muted">(optional)</span>
+          {t("settings.donations.label")}{" "}
+          <span className="font-normal text-fg-muted">{t("settings.donations.label.optional")}</span>
         </label>
         <input
           id="donation-label"
           type="text"
           maxLength={60}
           value={label}
-          placeholder="e.g. Tips"
+          placeholder={t("settings.donations.label.placeholder")}
           onChange={(e) => setLabel(e.target.value)}
           className={INPUT}
         />
@@ -298,7 +305,7 @@ function AddAddressForm({
 
       <div className="flex flex-col gap-1">
         <label htmlFor="donation-scope" className="text-sm font-medium text-fg">
-          Show on
+          {t("settings.donations.scope")}
         </label>
         <select
           id="donation-scope"
@@ -306,10 +313,10 @@ function AddAddressForm({
           onChange={(e) => setChannelId(e.target.value)}
           className={INPUT}
         >
-          <option value="">Your profile (account-level)</option>
+          <option value="">{t("settings.donations.scope.profile")}</option>
           {channels.map((c) => (
             <option key={c.id} value={c.id}>
-              Channel: {c.display_name || c.handle} (@{c.handle})
+              {t("settings.donations.scope.channelOption", { name: c.display_name || c.handle, handle: c.handle })}
             </option>
           ))}
         </select>
@@ -317,20 +324,20 @@ function AddAddressForm({
 
       <div className="flex flex-wrap gap-2">
         <button type="submit" disabled={submitting} className={PRIMARY_BTN}>
-          {submitting ? "Adding…" : "Save address"}
+          {submitting ? t("settings.donations.adding") : t("settings.donations.save")}
         </button>
         <button type="button" onClick={onCancel} disabled={submitting} className={SECONDARY_BTN}>
-          Cancel
+          {t("common.cancel")}
         </button>
       </div>
     </form>
   );
 }
 
-function scopeLabel(address: DonationAddress, channels: Channel[]): string {
-  if (!address.channel_id) return "Profile";
+function scopeLabel(address: DonationAddress, channels: Channel[], t: Translate): string {
+  if (!address.channel_id) return t("settings.donations.scope.profileShort");
   const channel = channels.find((c) => c.id === address.channel_id);
-  return channel ? `Channel @${channel.handle}` : "Channel";
+  return channel ? t("settings.donations.scope.channelNamed", { handle: channel.handle }) : t("settings.donations.scope.channel");
 }
 
 function AddressRow({
@@ -344,6 +351,7 @@ function AddressRow({
   onDeleted: (id: string) => void;
   onVerified: (updated: DonationAddress) => void;
 }) {
+  const t = useT();
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const meta = NETWORK_META[address.network];
@@ -356,7 +364,7 @@ function AddressRow({
       await api.deleteDonationAddress(address.id);
       onDeleted(address.id);
     } catch (err) {
-      setError(errorMessage(err, "Could not delete this address."));
+      setError(errorMessage(err, t("settings.donations.deleteError")));
       setDeleting(false);
     }
   }
@@ -370,7 +378,7 @@ function AddressRow({
           <span className="text-xs text-fg-muted">· {address.label}</span>
         ) : null}
         <span className="ml-auto shrink-0 text-xs text-fg-muted">
-          {scopeLabel(address, channels)}
+          {scopeLabel(address, channels, t)}
         </span>
       </div>
 
@@ -379,7 +387,7 @@ function AddressRow({
       </p>
 
       {address.verified ? (
-        <p className="text-xs font-medium text-success">Ownership proven by a signed message</p>
+        <p className="text-xs font-medium text-success">{t("settings.donations.proven")}</p>
       ) : (
         <VerifyArea address={address} onVerified={onVerified} />
       )}
@@ -391,10 +399,10 @@ function AddressRow({
           type="button"
           disabled={deleting}
           onClick={() => void remove()}
-          aria-label={`Delete ${meta.label} address`}
+          aria-label={t("settings.donations.deleteLabel", { network: meta.label })}
           className="focus-ring self-start rounded-full border border-danger/45 bg-transparent px-3.5 py-1.5 text-[13px] font-semibold text-danger transition-colors hover:bg-danger/10 disabled:opacity-60"
         >
-          {deleting ? "Deleting…" : "Delete"}
+          {deleting ? t("settings.donations.deleting") : t("settings.donations.delete")}
         </button>
       </div>
     </div>
@@ -411,13 +419,13 @@ function VerifyArea({
   address: DonationAddress;
   onVerified: (updated: DonationAddress) => void;
 }) {
+  const t = useT();
   const meta = NETWORK_META[address.network];
 
   if (!meta.verificationSupported) {
     return (
       <p className="text-xs leading-relaxed text-fg-muted">
-        Signature verification is not available for {meta.label} yet — it will show as unverified.
-        That is normal; only some networks support message signing.
+        {t("settings.donations.noVerify", { network: meta.label })}
       </p>
     );
   }
@@ -432,6 +440,7 @@ function VerifyFlow({
   address: DonationAddress;
   onVerified: (updated: DonationAddress) => void;
 }) {
+  const t = useT();
   const meta = NETWORK_META[address.network];
   const [step, setStep] = useState<"idle" | "signing">("idle");
   const [message, setMessage] = useState("");
@@ -450,9 +459,9 @@ function VerifyFlow({
       setStep("signing");
     } catch (err) {
       if (err instanceof ApiError && err.status === 501) {
-        setError("This network does not support ownership verification.");
+        setError(t("settings.donations.noSupport"));
       } else {
-        setError(errorMessage(err, "Could not start verification."));
+        setError(errorMessage(err, t("settings.donations.startError")));
       }
     } finally {
       setBusy(false);
@@ -461,7 +470,7 @@ function VerifyFlow({
 
   async function submitSignature() {
     if (signature.trim() === "") {
-      setError("Paste the signature from your wallet.");
+      setError(t("settings.donations.pasteSignature"));
       return;
     }
     setBusy(true);
@@ -471,15 +480,15 @@ function VerifyFlow({
       onVerified(updated);
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
-        setError("That challenge expired. Request a new one and sign it again.");
+        setError(t("settings.donations.expired"));
         setStep("idle");
       } else if (err instanceof ApiError && err.status === 422) {
-        setError("That signature did not verify. Check you signed the exact message.");
+        setError(t("settings.donations.badSignature"));
       } else if (err instanceof ApiError && err.status === 501) {
-        setError("This network does not support ownership verification.");
+        setError(t("settings.donations.noSupport"));
         setStep("idle");
       } else {
-        setError(errorMessage(err, "Could not verify the signature."));
+        setError(errorMessage(err, t("settings.donations.verifyError")));
       }
     } finally {
       setBusy(false);
@@ -505,7 +514,7 @@ function VerifyFlow({
           onClick={() => void requestChallenge()}
           className={`self-start ${SECONDARY_BTN}`}
         >
-          {busy ? "Preparing…" : "Verify ownership"}
+          {busy ? t("settings.donations.preparing") : t("settings.donations.verifyOwnership")}
         </button>
       </div>
     );
@@ -518,7 +527,7 @@ function VerifyFlow({
     <div className="flex flex-col gap-3 rounded-xl border border-border-subtle bg-surface p-3">
       <div className="flex flex-col gap-1">
         <label htmlFor={messageId} className="text-xs font-medium text-fg">
-          1. Sign this exact message with your {meta.label} wallet
+          {t("settings.donations.step1", { network: meta.label })}
         </label>
         <div className="flex items-start gap-2">
           <textarea
@@ -532,10 +541,10 @@ function VerifyFlow({
           <button
             type="button"
             onClick={() => void copyMessage()}
-            aria-label="Copy the message to sign"
+            aria-label={t("settings.donations.copyLabel")}
             className={`shrink-0 ${SECONDARY_BTN}`}
           >
-            {copied ? "Copied" : "Copy"}
+            {copied ? t("settings.donations.copied") : t("settings.donations.copy")}
           </button>
         </div>
         {meta.signingInstructions ? (
@@ -548,7 +557,7 @@ function VerifyFlow({
           htmlFor={signatureId}
           className="text-xs font-medium text-fg"
         >
-          2. Paste the signature
+          {t("settings.donations.step2")}
         </label>
         <textarea
           id={signatureId}
@@ -577,7 +586,7 @@ function VerifyFlow({
           onClick={() => void submitSignature()}
           className={PRIMARY_BTN}
         >
-          {busy ? "Verifying…" : "Verify"}
+          {busy ? t("settings.donations.verifying") : t("settings.donations.verify")}
         </button>
         <button
           type="button"
@@ -589,7 +598,7 @@ function VerifyFlow({
           }}
           className={SECONDARY_BTN}
         >
-          Cancel
+          {t("common.cancel")}
         </button>
       </div>
     </div>

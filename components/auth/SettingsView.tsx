@@ -83,13 +83,12 @@ export function SettingsView() {
   if (deleted) {
     return (
       <EmptyState
-        title="Your account has been deleted"
+        title={t("settings.account.deleted.title")}
         message={
           <>
-            Your channels and videos were permanently removed, and your comments were replaced
-            with anonymous tombstones. This cannot be undone.{" "}
+            {t("settings.account.deleted.message")}{" "}
             <Link href="/" className="focus-ring rounded-sm font-semibold text-fg underline underline-offset-2">
-              Go home
+              {t("settings.account.deleted.home")}
             </Link>
           </>
         }
@@ -100,11 +99,11 @@ export function SettingsView() {
   if (status === "anon" || !user) {
     return (
       <SignInGate
-        title="Sign in to manage your account"
-        lead="Your session has ended."
-        restoringLabel="Loading your account"
+        title={t("settings.account.gate.title")}
+        lead={t("settings.account.gate.lead")}
+        restoringLabel={t("settings.account.gate.restoring")}
       >
-        to edit your profile.
+        {t("settings.account.gate.body")}
       </SignInGate>
     );
   }
@@ -115,7 +114,7 @@ export function SettingsView() {
           (real image, else initial fallback) beside the display name and the
           "@handle · email · verified" identity line (verified in success). */}
       <header className="flex flex-col gap-4 border-b border-border-subtle pb-5">
-        <h1 className="text-title sm:text-large-title">Account settings</h1>
+        <h1 className="text-title sm:text-large-title">{t("settings.account.title")}</h1>
         <div className="flex items-center gap-3.5">
           <Avatar
             src={userAvatarUrl(user.id)}
@@ -129,7 +128,7 @@ export function SettingsView() {
             <p className="truncate text-[13px] text-fg-muted">
               @{user.username} · {user.email}
               {user.email_verified ? (
-                <span className="font-medium text-success"> · verified</span>
+                <span className="font-medium text-success">{t("settings.account.verifiedSuffix")}</span>
               ) : null}
             </p>
           </div>
@@ -178,13 +177,13 @@ export function SettingsView() {
         }}
         className="focus-ring w-full rounded-[10px] border border-border bg-transparent py-3 text-sm font-semibold text-fg transition-colors hover:bg-surface-muted"
       >
-        Sign out<span className="sr-only"> of this device</span>
+        {t("settings.account.signOut")}<span className="sr-only">{t("settings.account.signOut.device")}</span>
       </button>
       {/* Danger zone — the reversible + irreversible account destructions
           grouped under one header for a consistent, hard-to-mistake block. */}
       <section className="flex flex-col gap-3">
         <h2 className="px-1 text-xs font-bold uppercase tracking-[0.06em] text-danger">
-          Danger zone
+          {t("settings.account.danger")}
         </h2>
         <DeactivateSection deactivate={deactivate} />
         <DeleteAccountSection
@@ -208,13 +207,14 @@ function ProfileImagesSection({
   user: User;
   onChanged: () => void;
 }) {
+  const t = useT();
   const name = user.display_name || user.username;
   return (
     <div className="flex max-w-xl flex-col gap-3">
-      <h2 className="text-base font-semibold tracking-tight text-fg">Profile images</h2>
+      <h2 className="text-base font-semibold tracking-tight text-fg">{t("settings.images.title")}</h2>
       <ProfileImageManager
         kind="avatar"
-        label="Avatar"
+        label={t("settings.images.avatar")}
         name={name}
         has={user.has_avatar ?? false}
         src={userAvatarUrl(user.id)}
@@ -224,7 +224,7 @@ function ProfileImagesSection({
       />
       <ProfileImageManager
         kind="banner"
-        label="Banner"
+        label={t("settings.images.banner")}
         name={name}
         has={user.has_banner ?? false}
         src={userBannerUrl(user.id)}
@@ -237,6 +237,7 @@ function ProfileImagesSection({
 }
 
 function EmailVerificationSection({ email }: { email: string }) {
+  const t = useT();
   const [state, setState] = useState<"idle" | "sending" | "sent">("idle");
   const [error, setError] = useState<string | null>(null);
 
@@ -256,11 +257,12 @@ function EmailVerificationSection({ email }: { email: string }) {
     <section className="flex max-w-xl flex-col gap-3 rounded-2xl border border-warning-solid/25 bg-warning-solid/12 p-4">
       <div className="flex flex-col gap-1">
         <h2 className="text-base font-semibold tracking-tight text-warning">
-          Verify your email
+          {t("settings.verify.title")}
         </h2>
         <p className="text-sm text-fg-muted">
-          Your email <span className="font-medium text-fg">{email}</span> is not verified yet. Check your
-          inbox for the verification link, or resend it below.
+          {t("settings.verify.before")}
+          <span className="font-medium text-fg">{email}</span>
+          {t("settings.verify.after")}
         </p>
       </div>
       {error ? (
@@ -270,7 +272,7 @@ function EmailVerificationSection({ email }: { email: string }) {
       ) : null}
       {state === "sent" ? (
         <Alert variant="success">
-          Verification email sent. Check your inbox.
+          {t("settings.verify.sent")}
         </Alert>
       ) : (
         <button
@@ -279,7 +281,7 @@ function EmailVerificationSection({ email }: { email: string }) {
           disabled={state === "sending"}
           className="focus-ring self-start rounded-[10px] border border-warning-solid/40 bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-warning transition-colors hover:bg-warning-solid/12 disabled:opacity-60"
         >
-          {state === "sending" ? "Sending…" : "Resend verification email"}
+          {state === "sending" ? t("settings.verify.sending") : t("settings.verify.resend")}
         </button>
       )}
     </section>
@@ -287,6 +289,7 @@ function EmailVerificationSection({ email }: { email: string }) {
 }
 
 function DeactivateSection({ deactivate }: { deactivate: (password: string) => Promise<void> }) {
+  const t = useT();
   const router = useRouter();
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -302,8 +305,8 @@ function DeactivateSection({ deactivate }: { deactivate: (password: string) => P
     } catch (err) {
       setSubmitting(false);
       setError(
-        errorMessage(err, "Something went wrong. Please try again.", {
-          "403": "Incorrect password.",
+        errorMessage(err, t("settings.deactivate.error"), {
+          "403": t("settings.deactivate.wrongPassword"),
         }),
       );
     }
@@ -312,10 +315,9 @@ function DeactivateSection({ deactivate }: { deactivate: (password: string) => P
   return (
     <section className="flex max-w-xl flex-col gap-3 rounded-2xl border border-danger-border p-4">
       <div className="flex flex-col gap-1">
-        <h2 className="text-base font-semibold tracking-tight text-danger">Deactivate account</h2>
+        <h2 className="text-base font-semibold tracking-tight text-danger">{t("settings.deactivate.title")}</h2>
         <p className="text-sm text-fg-muted">
-          This disables your account and signs you out everywhere. You will not be able to sign in
-          again. Confirm your password to continue.
+          {t("settings.deactivate.intro")}
         </p>
       </div>
       <form
@@ -333,7 +335,7 @@ function DeactivateSection({ deactivate }: { deactivate: (password: string) => P
         ) : null}
         <div className="flex flex-col gap-1">
           <label htmlFor="deactivate-password" className="text-sm font-medium text-fg">
-            Current password
+            {t("settings.deactivate.password")}
           </label>
           <input
             id="deactivate-password"
@@ -354,7 +356,7 @@ function DeactivateSection({ deactivate }: { deactivate: (password: string) => P
           disabled={submitting || password === ""}
           className="focus-ring self-start rounded-[10px] border border-danger/45 px-4 py-2 text-sm font-semibold text-danger transition-colors hover:bg-danger/10 disabled:opacity-60"
         >
-          {submitting ? "Deactivating…" : "Deactivate account"}
+          {submitting ? t("settings.deactivate.submitting") : t("settings.deactivate.title")}
         </button>
       </form>
     </section>
@@ -374,6 +376,7 @@ function DeleteAccountSection({
   deleteAccount: (password: string) => Promise<void>;
   onDeleted: () => void;
 }) {
+  const t = useT();
   const [armed, setArmed] = useState(false);
   const [password, setPassword] = useState("");
   const [confirmName, setConfirmName] = useState("");
@@ -389,8 +392,8 @@ function DeleteAccountSection({
     } catch (err) {
       setSubmitting(false);
       setError(
-        errorMessage(err, "Something went wrong. Please try again.", {
-          "403": "Incorrect password.",
+        errorMessage(err, t("settings.deactivate.error"), {
+          "403": t("settings.deactivate.wrongPassword"),
         }),
       );
     }
@@ -400,13 +403,10 @@ function DeleteAccountSection({
     <section className="flex max-w-xl flex-col gap-3 rounded-2xl border border-danger-border p-4">
       <div className="flex flex-col gap-1">
         <h2 className="text-base font-semibold tracking-tight text-danger">
-          Delete account permanently
+          {t("settings.delete.title")}
         </h2>
         <p className="text-sm text-fg-muted">
-          This permanently deletes your account. Your channels and videos are removed for good,
-          your comments are replaced with anonymous &ldquo;[deleted]&rdquo; tombstones (replies to
-          them are kept), and your playlists, follows, history, and settings are erased. This
-          cannot be undone — if you might come back, use Deactivate above instead.
+          {t("settings.delete.intro")}
         </p>
       </div>
       {!armed ? (
@@ -415,7 +415,7 @@ function DeleteAccountSection({
           onClick={() => setArmed(true)}
           className="focus-ring self-start rounded-[10px] bg-danger-solid px-4 py-2 text-sm font-semibold text-danger-fg transition-colors hover:bg-danger-solid/90"
         >
-          Delete account permanently
+          {t("settings.delete.title")}
         </button>
       ) : (
         <form
@@ -433,7 +433,7 @@ function DeleteAccountSection({
           ) : null}
           <div className="flex flex-col gap-1">
             <label htmlFor="delete-password" className="text-sm font-medium text-fg">
-              Password
+              {t("settings.delete.password")}
             </label>
             <input
               id="delete-password"
@@ -448,7 +448,7 @@ function DeleteAccountSection({
           </div>
           <div className="flex flex-col gap-1">
             <label htmlFor="delete-confirm-username" className="text-sm font-medium text-fg">
-              Confirm your username
+              {t("settings.delete.confirmName")}
             </label>
             <input
               id="delete-confirm-username"
@@ -465,8 +465,9 @@ function DeleteAccountSection({
               id="delete-confirm-username-help"
               className="text-xs text-fg-muted"
             >
-              Type <span className="font-mono font-medium text-fg">{username}</span> exactly to enable
-              deletion.
+              {t("settings.delete.typeBefore")}
+              <span className="font-mono font-medium text-fg">{username}</span>
+              {t("settings.delete.typeAfter")}
             </span>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -475,7 +476,7 @@ function DeleteAccountSection({
               disabled={submitting || password === "" || confirmName !== username}
               className="focus-ring rounded-[10px] bg-danger-solid px-4 py-2 text-sm font-semibold text-danger-fg transition-colors hover:bg-danger-solid/90 disabled:opacity-60"
             >
-              {submitting ? "Deleting…" : "Permanently delete my account"}
+              {submitting ? t("settings.delete.submitting") : t("settings.delete.submit")}
             </button>
             <button
               type="button"
@@ -488,7 +489,7 @@ function DeleteAccountSection({
               }}
               className="focus-ring rounded-[10px] border border-border bg-surface px-4 py-2 text-sm font-semibold text-fg transition-colors hover:bg-surface-muted disabled:opacity-60"
             >
-              Cancel
+              {t("common.cancel")}
             </button>
           </div>
         </form>
@@ -512,6 +513,7 @@ function ProfileForm({
   initialProfilePublic: boolean;
   updateProfile: (input: UpdateProfileRequest) => Promise<void>;
 }) {
+  const t = useT();
   const [displayName, setDisplayName] = useState(initialDisplayName);
   const [bio, setBio] = useState(initialBio);
   const [unlisted, setUnlisted] = useState(initialUnlisted);
@@ -569,13 +571,13 @@ function ProfileForm({
       ) : null}
       {state === "saved" ? (
         <Alert variant="success">
-          Profile saved.
+          {t("settings.profile.saved")}
         </Alert>
       ) : null}
 
       <div className="flex flex-col gap-1">
         <label htmlFor="settings-display-name" className="text-sm font-medium text-fg">
-          Display name
+          {t("settings.profile.displayName")}
         </label>
         <input
           id="settings-display-name"
@@ -597,7 +599,7 @@ function ProfileForm({
 
       <div className="flex flex-col gap-1">
         <label htmlFor="settings-bio" className="text-sm font-medium text-fg">
-          Bio
+          {t("settings.profile.bio")}
         </label>
         <textarea
           id="settings-bio"
@@ -632,11 +634,10 @@ function ProfileForm({
         />
         <div className="flex flex-col">
           <label htmlFor="settings-profile-public" className="text-sm font-medium text-fg">
-            Make my profile public
+            {t("settings.profile.public.label")}
           </label>
           <span id="settings-profile-public-help" className="text-xs text-fg-muted">
-            Your profile introduces you and links your publishing channels. When off, visitors get
-            a 404; you can still preview it while signed in.
+            {t("settings.profile.public.help")}
           </span>
         </div>
       </div>
@@ -656,11 +657,10 @@ function ProfileForm({
         />
         <div className="flex flex-col">
           <label htmlFor="settings-unlisted" className="text-sm font-medium text-fg">
-            Hide my account from discovery
+            {t("settings.profile.unlisted.label")}
           </label>
           <span id="settings-unlisted-help" className="text-xs text-fg-muted">
-            Your channels and videos stay reachable by direct link but no longer appear in the
-            public feed or search on this instance.
+            {t("settings.profile.unlisted.help")}
           </span>
         </div>
       </div>
@@ -680,11 +680,10 @@ function ProfileForm({
         />
         <div className="flex flex-col">
           <label htmlFor="settings-history-enabled" className="text-sm font-medium text-fg">
-            Keep my watch history
+            {t("settings.profile.history.label")}
           </label>
           <span id="settings-history-enabled-help" className="text-xs text-fg-muted">
-            While off, videos you watch are not recorded and resume positions are not saved.
-            Entries already in your history are kept — clear them from the History page.
+            {t("settings.profile.history.help")}
           </span>
         </div>
       </div>
@@ -694,7 +693,7 @@ function ProfileForm({
         disabled={state === "saving"}
         className="focus-ring self-start rounded-[10px] bg-accent px-4 py-2 text-sm font-semibold text-accent-fg transition-colors hover:bg-accent/90 disabled:opacity-60"
       >
-        {state === "saving" ? "Saving…" : "Save"}
+        {state === "saving" ? t("settings.profile.saving") : t("settings.profile.save")}
       </button>
     </form>
   );
