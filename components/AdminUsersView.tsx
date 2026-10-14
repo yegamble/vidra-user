@@ -2,6 +2,8 @@
 
 import { useCallback, useMemo, useState } from "react";
 
+import { useT } from "@/components/I18nProvider";
+import { slot, withSlots } from "@/components/admin/messageSlot";
 import { AdminPagination, RolePill } from "@/components/admin/AdminControls";
 import { BanUserDialog } from "@/components/admin/BanUserDialog";
 import { CreateUserDialog } from "@/components/admin/CreateUserDialog";
@@ -23,6 +25,7 @@ import { api, errorMessage } from "@/lib/api";
 import type { AdminUser, UserRole } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { formatBytes, formatMonthYear, relativeTime } from "@/lib/format";
+import type { PlainMessageKey, Translate } from "@/lib/i18n";
 import { usePagedList } from "@/lib/use-paged-list";
 
 // Accounts per request come from the shared list default (lib/use-list-query),
@@ -32,11 +35,13 @@ import { usePagedList } from "@/lib/use-paged-list";
 // rows-per-page picker can ask for, so the server's echo is our own number back.
 
 // The design's role control is a three-way segmented switch (was a <select>).
-const ROLE_OPTIONS: readonly { value: UserRole; label: string }[] = [
-  { value: "user", label: "User" },
-  { value: "moderator", label: "Moderator" },
-  { value: "admin", label: "Admin" },
+const ROLE_OPTIONS: readonly { value: UserRole; labelKey: PlainMessageKey }[] = [
+  { value: "user", labelKey: "admin.role.user" },
+  { value: "moderator", labelKey: "admin.role.moderator" },
+  { value: "admin", labelKey: "admin.role.admin" },
 ];
+
+const roleOptions = (t: Translate) => ROLE_OPTIONS.map((o) => ({ value: o.value, label: t(o.labelKey) }));
 
 // One GiB in bytes — the quota override is entered in GB (base-2, matching
 // formatBytes' "GB" unit) and stored as an exact byte count.
@@ -70,16 +75,13 @@ type UserPatch = {
  * out. The server refuses regardless of what this file renders; disabling the
  * control is how an admin learns the rule before being rejected by it.
  */
-type Gate = { allowed: true } | { allowed: false; reason: string };
+type Gate = { allowed: true } | { allowed: false; reason: PlainMessageKey };
 
 const GATE_OPEN: Gate = { allowed: true };
 
-const SELF_REASON =
-  "You can't change your own role or status, or delete your own account.";
-const OWNER_REASON =
-  "This is the instance owner's account — the account that completed first-run setup. Another administrator can't change its role, deactivate it or delete it.";
-const LAST_ADMIN_REASON =
-  "This is the last active administrator on this site. Promote another admin first, or nobody would be able to reach this console.";
+const SELF_REASON = "admin.users.guard.self";
+const OWNER_REASON = "admin.users.guard.owner";
+const LAST_ADMIN_REASON = "admin.users.guard.lastAdmin";
 
 /**
  * Whether the loaded rows are the WHOLE instance. The accounts endpoint filters
@@ -122,6 +124,7 @@ function useUserActions(
   onUpdated: (updated: AdminUser) => void,
   onDeleted: (id: string) => void,
 ) {
+  const t = useT();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -132,12 +135,12 @@ function useUserActions(
       try {
         onUpdated(await api.updateAdminUser(user.id, patch));
       } catch (err) {
-        setError(errorMessage(err, "Could not update this user."));
+        setError(errorMessage(err, t("admin.users.updateError")));
       } finally {
         setSaving(false);
       }
     },
-    [user.id, onUpdated],
+    [user.id, onUpdated, t],
   );
 
   const doDelete = useCallback(async () => {
@@ -148,10 +151,10 @@ function useUserActions(
       onDeleted(user.id);
       // Success unmounts the row/detail — leave `saving` set so nothing flashes.
     } catch (err) {
-      setError(errorMessage(err, "Could not delete this user."));
+      setError(errorMessage(err, t("admin.users.deleteError")));
       setSaving(false);
     }
-  }, [user.id, onDeleted]);
+  }, [user.id, onDeleted, t]);
 
   return { saving, error, setError, save, doDelete };
 }
@@ -188,6 +191,7 @@ function UsersList({
   viewerIsAdmin: boolean;
   viewerIsOwner: boolean;
 }) {
+  const t = useT();
   // Desktop console (DR12): the users table is a master → detail. `selectedId`
   // is only ever set from the desktop table; mobile keeps its inline-control
   // cards, so it stays null there.
@@ -262,9 +266,7 @@ function UsersList({
 
   // A facet that empties a page has not proved the instance has no such
   // accounts — only that this page has none.
-  const facetEmptyMessage = paged
-    ? "No accounts on this page match this filter. Try another page, or another facet."
-    : "No accounts match this filter. Try another facet.";
+  const facetEmptyMessage = paged ? t("admin.users.facetEmptyPaged") : t("admin.users.facetEmpty");
 
   const visible = useMemo(() => {
     if (filter === "staff") return users.filter((u) => u.role !== "user");
@@ -311,13 +313,13 @@ function UsersList({
         <div className="flex items-center justify-between gap-3">
           {viewerIsAdmin ? (
             <Button size="sm" onClick={() => setCreating(true)}>
-              Create user
+              {t("admin.users.create")}
             </Button>
           ) : null}
         </div>
         <ListSearch
-          label="Search users"
-          placeholder="Search by username or email"
+          label={t("admin.users.searchLabel")}
+          placeholder={t("admin.users.searchPlaceholder")}
           value={query}
           // A new query is a new result set, so it starts at the first page —
           // page 40 of the old one is not a meaningful position in the new one.
@@ -331,15 +333,15 @@ function UsersList({
             // The name says "this page" whether or not there IS a second page:
             // the counts are page-scoped by construction, and a label that only
             // admits it sometimes teaches the wrong reading the rest of the time.
-            label="Filter this page of users"
+            label={t("admin.users.filterLabel")}
             value={filter}
             onChange={setFilter}
             options={[
-              { value: "all", label: "All", count: counts.all },
-              { value: "staff", label: "Staff", count: counts.staff },
+              { value: "all", label: t("admin.users.filter.all"), count: counts.all },
+              { value: "staff", label: t("admin.users.filter.staff"), count: counts.staff },
               {
                 value: "deactivated",
-                label: "Deactivated",
+                label: t("admin.users.filter.deactivated"),
                 count: counts.deactivated,
               },
             ]}
@@ -348,11 +350,13 @@ function UsersList({
               that fits on one, the page IS the instance and the counts are totals. */}
           {paged ? (
             <p className="px-1 text-[11.5px] leading-relaxed text-fg-muted">
-              These counts cover the{" "}
-              <span className="tabular-nums">{counts.all}</span> accounts on
-              this page, not all <span className="tabular-nums">{total}</span>.
-              The accounts endpoint filters by search text only, so role and
-              status narrow one page at a time.
+              {withSlots(
+                t("admin.users.pageScoped", { accounts: slot("accounts"), total: slot("total") }),
+                {
+                  accounts: <span className="tabular-nums">{counts.all}</span>,
+                  total: <span className="tabular-nums">{total}</span>,
+                },
+              )}
             </p>
           ) : null}
         </div>
@@ -360,10 +364,10 @@ function UsersList({
 
       {list.status === "loading" ? (
         <div className="flex justify-center py-24">
-          <Spinner label="Loading users" />
+          <Spinner label={t("admin.list.loading", { label: "users" })} />
         </div>
       ) : list.status === "error" ? (
-        <ErrorState message="Could not load users." onRetry={list.reload} />
+        <ErrorState message={t("admin.users.loadError")} onRetry={list.reload} />
       ) : users.length === 0 ? (
         // An empty page past the first one is not an empty instance — deleting
         // the last account on the last page lands here — so it keeps the pager,
@@ -372,17 +376,17 @@ function UsersList({
           <EmptyState
             title={
               pageOffset > 0
-                ? "Nothing on this page"
+                ? t("admin.users.empty.offset.title")
                 : query
-                  ? "No matching users"
-                  : "No users yet"
+                  ? t("admin.users.empty.search.title")
+                  : t("admin.users.empty.none.title")
             }
             message={
               pageOffset > 0
-                ? "No accounts sit at this offset any more. Step back a page."
+                ? t("admin.users.empty.offset.message")
                 : query
-                  ? "Try a different search term."
-                  : "Accounts will appear here as people sign up."
+                  ? t("admin.users.empty.search.message")
+                  : t("admin.users.empty.none.message")
             }
           />
           {pager}
@@ -394,7 +398,7 @@ function UsersList({
             {visible.length === 0 ? (
               <li>
                 <EmptyState
-                  title="No users in this view"
+                  title={t("admin.users.emptyView")}
                   message={facetEmptyMessage}
                 />
               </li>
@@ -430,7 +434,7 @@ function UsersList({
               />
             ) : visible.length === 0 ? (
               <EmptyState
-                title="No users in this view"
+                title={t("admin.users.emptyView")}
                 message={facetEmptyMessage}
               />
             ) : (
@@ -464,11 +468,10 @@ function isTombstone(user: AdminUser) {
 // The copy that replaces the actions on a tombstone, so the absence reads as a
 // rule rather than a missing control.
 function TombstoneNotice() {
+  const t = useT();
   return (
     <p className="text-[11.5px] leading-relaxed text-fg-muted">
-      This account was permanently deleted. Its username, address and profile
-      are gone and cannot be restored, so it can be neither reactivated nor
-      deleted again — the row is kept only as a record.
+      {t("admin.users.tombstone")}
     </p>
   );
 }
@@ -486,40 +489,39 @@ function FlagToggles({
   saving: boolean;
   onSave: (patch: UserPatch) => Promise<void>;
 }) {
+  const t = useT();
   if (isTombstone(user)) return null;
   return (
     <div className="mt-3.5 flex flex-col gap-3 rounded-2xl bg-surface-muted p-4">
       <div className="flex items-start justify-between gap-3">
         <span className="min-w-0">
           <span className="block text-[13px] font-semibold text-fg">
-            Email verified
+            {t("admin.users.flags.verified")}
           </span>
           <span className="block text-[11.5px] leading-relaxed text-fg-muted">
-            Marks the address confirmed without the token round-trip. Turning it
-            off revokes the confirmation.
+            {t("admin.users.flags.verifiedHint")}
           </span>
         </span>
         <Toggle
           checked={user.email_verified}
           disabled={saving}
-          label={`Email verified for ${user.username}`}
+          label={t("admin.users.flags.verifiedAria", { name: user.username })}
           onChange={(next) => void onSave({ email_verified: next })}
         />
       </div>
       <div className="flex items-start justify-between gap-3">
         <span className="min-w-0">
           <span className="block text-[13px] font-semibold text-fg">
-            Skip upload review
+            {t("admin.users.flags.skipReview")}
           </span>
           <span className="block text-[11.5px] leading-relaxed text-fg-muted">
-            Exempts this account from new-upload quarantine, so its uploads
-            publish directly. No effect while quarantine is off instance-wide.
+            {t("admin.users.flags.skipReviewHint")}
           </span>
         </span>
         <Toggle
           checked={user.bypass_quarantine}
           disabled={saving}
-          label={`Exempt ${user.username} from new-upload quarantine`}
+          label={t("admin.users.flags.skipReviewAria", { name: user.username })}
           onChange={(next) => void onSave({ bypass_quarantine: next })}
         />
       </div>
@@ -530,19 +532,21 @@ function FlagToggles({
 // BanNote — why a banned account is banned (core 0154), for the staff who
 // banned it and any colleague who meets the row later.
 function BanNote({ user }: { user: AdminUser }) {
+  const t = useT();
   if (user.is_active || !user.ban_reason) return null;
   return (
     <p className="mt-1 text-[12px] leading-relaxed text-fg-muted">
-      <span className="font-semibold text-fg">Ban reason:</span> {user.ban_reason}
+      <span className="font-semibold text-fg">{t("admin.users.banReason")}</span> {user.ban_reason}
       {user.banned_at ? <> ({formatMonthYear(user.banned_at)})</> : null}
     </p>
   );
 }
 
 function SelfPill() {
+  const t = useT();
   return (
     <span className="inline-flex items-center rounded-full bg-accent px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-[0.04em] text-accent-fg">
-      you
+      {t("admin.users.you")}
     </span>
   );
 }
@@ -552,12 +556,13 @@ function SelfPill() {
 // indistinguishable from any admin it later promoted — which is exactly how it
 // came to be demotable.
 function OwnerPill() {
+  const t = useT();
   return (
     <span
-      title="The account that completed first-run setup"
+      title={t("admin.users.ownerTitle")}
       className="inline-flex items-center rounded-full bg-surface-muted px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-[0.04em] text-fg-muted ring-1 ring-inset ring-border"
     >
-      owner
+      {t("admin.users.owner")}
     </span>
   );
 }
@@ -587,6 +592,7 @@ function UsersTable({
   currentUserId: string;
   onOpen: (id: string) => void;
 }) {
+  const t = useT();
   return (
     <div>
       <div
@@ -595,12 +601,12 @@ function UsersTable({
           TABLE_GRID,
         )}
       >
-        <span>User</span>
-        <span>Email</span>
-        <span>Role</span>
-        <span>Storage</span>
-        <span>Joined</span>
-        <span>Status</span>
+        <span>{t("admin.users.col.user")}</span>
+        <span>{t("admin.users.col.email")}</span>
+        <span>{t("admin.users.col.role")}</span>
+        <span>{t("admin.users.col.storage")}</span>
+        <span>{t("admin.users.col.joined")}</span>
+        <span>{t("admin.users.col.status")}</span>
       </div>
       <ul>
         {users.map((u) => {
@@ -610,7 +616,7 @@ function UsersTable({
               <button
                 type="button"
                 onClick={() => onOpen(u.id)}
-                aria-label={`Open ${u.username}`}
+                aria-label={t("admin.users.open", { name: u.username })}
                 className={cn(
                   "focus-ring grid w-full items-center gap-3 border-b border-border-subtle px-3.5 py-3 text-left transition-colors hover:bg-surface-muted",
                   TABLE_GRID,
@@ -663,10 +669,10 @@ function UsersTable({
                   )}
                 >
                   {isTombstone(u)
-                    ? "Deleted"
+                    ? t("admin.users.status.deleted")
                     : u.is_active
-                      ? "Active"
-                      : "Deactivated"}
+                      ? t("admin.users.status.active")
+                      : t("admin.users.status.deactivated")}
                 </span>
               </button>
             </li>
@@ -691,25 +697,13 @@ function UsersTable({
  */
 function transferGate(user: AdminUser): Gate {
   if (isTombstone(user)) {
-    return {
-      allowed: false,
-      reason:
-        "This account is deleted, so it can never sign in to own anything.",
-    };
+    return { allowed: false, reason: "admin.users.transfer.deleted" };
   }
   if (user.role !== "admin") {
-    return {
-      allowed: false,
-      reason:
-        "Ownership can only go to another administrator. Change this account's role first.",
-    };
+    return { allowed: false, reason: "admin.users.transfer.notAdmin" };
   }
   if (!user.is_active) {
-    return {
-      allowed: false,
-      reason:
-        "Ownership can only go to an active account — a deactivated one cannot reach the console it would own.",
-    };
+    return { allowed: false, reason: "admin.users.transfer.inactive" };
   }
   return GATE_OPEN;
 }
@@ -836,6 +830,7 @@ function TransferOwnershipCard({
   user: AdminUser;
   onTransferred: () => void;
 }) {
+  const t = useT();
   const { reloadUser } = useSession();
   const gate = transferGate(user);
   const [password, setPassword] = useState("");
@@ -902,7 +897,7 @@ function TransferOwnershipCard({
           <Button variant="danger-outline" size="sm" disabled>
             Transfer ownership
           </Button>
-          <span className="text-[11.5px] text-fg-muted">{gate.reason}</span>
+          <span className="text-[11.5px] text-fg-muted">{t(gate.reason)}</span>
         </div>
       )}
       {error ? <p className="mt-2 text-sm text-danger">{error}</p> : null}
@@ -938,6 +933,7 @@ function UserDetail({
   onDeleted: (id: string) => void;
   onTransferred: () => void;
 }) {
+  const t = useT();
   const { saving, error, setError, save, doDelete } = useUserActions(
     user,
     onUpdated,
@@ -1034,7 +1030,7 @@ function UserDetail({
                 <SegmentedControl
                   size="sm"
                   label={`Role for ${user.username}`}
-                  options={ROLE_OPTIONS}
+                  options={roleOptions(t)}
                   value={user.role}
                   disabled={saving}
                   onChange={(role) => void save({ role })}
@@ -1070,7 +1066,7 @@ function UserDetail({
           <p className="px-1 text-[11.5px] leading-relaxed text-fg-muted">
             {guard.allowed
               ? "Deletion is permanent and audited. Deactivating is the reversible alternative — it revokes the account's sessions and hides its content without destroying it."
-              : guard.reason}
+              : t(guard.reason)}
           </p>
 
           {viewerIsAdmin && !deleted ? (
@@ -1222,6 +1218,7 @@ function UserRow({
   onUpdated: (updated: AdminUser) => void;
   onDeleted: (id: string) => void;
 }) {
+  const t = useT();
   const { saving, error, setError, save, doDelete } = useUserActions(
     user,
     onUpdated,
@@ -1282,7 +1279,7 @@ function UserRow({
           <SegmentedControl
             size="sm"
             label={`Role for ${user.username}`}
-            options={ROLE_OPTIONS}
+            options={roleOptions(t)}
             value={user.role}
             disabled={saving}
             onChange={(role) => void save({ role })}
@@ -1340,7 +1337,7 @@ function UserRow({
               </Button>
             ) : null}
             {guard.allowed ? null : (
-              <span className="text-xs text-fg-muted">{guard.reason}</span>
+              <span className="text-xs text-fg-muted">{t(guard.reason)}</span>
             )}
           </>
         )}
