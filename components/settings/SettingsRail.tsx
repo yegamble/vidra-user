@@ -6,7 +6,9 @@ import type { ReactElement } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
 import type { IconProps } from "@/components/icons";
+import { useT } from "@/components/I18nProvider";
 import { cn } from "@/lib/cn";
+import type { PlainMessageKey } from "@/lib/i18n";
 
 import {
   SETTINGS_GROUPS,
@@ -26,16 +28,17 @@ import {
 // access) — mirrors the mobile rows, which live inside the signed-in branch of
 // SettingsView.
 export function SettingsRail() {
+  const t = useT();
   const pathname = usePathname();
   const { user } = useSession();
   if (!user) return null;
 
   return (
     <nav
-      aria-label="Settings"
+      aria-label={t("settings.title")}
       className="sticky top-14 hidden h-[calc(100vh-3.5rem)] w-[240px] shrink-0 flex-col self-start overflow-y-auto px-3 py-8 lg:flex"
     >
-      <h2 className="mb-3 px-2 text-title2">Settings</h2>
+      <h2 className="mb-3 px-2 text-title2">{t("settings.title")}</h2>
       <ul className="flex flex-col gap-0.5">
         <li>
           <RailLink
@@ -49,7 +52,7 @@ export function SettingsRail() {
       {SETTINGS_GROUPS.map((group) => (
         <div key={group.label} className="mt-5">
           <h3 className="px-2 pb-1.5 text-caption font-bold uppercase tracking-[0.06em] text-fg-muted">
-            {group.label}
+            {t(group.label)}
           </h3>
           <ul className="flex flex-col gap-0.5">
             {group.items.map((item) => (
@@ -79,11 +82,12 @@ function RailLink({
 }: {
   href: string;
   Icon: (props: IconProps) => ReactElement;
-  label: string;
+  label: PlainMessageKey;
   /** sr-only "Manage …" name so the rail carries the pinned e2e link name. */
-  action?: string;
+  action?: PlainMessageKey;
   active: boolean;
 }) {
+  const t = useT();
   return (
     <Link
       href={href}
@@ -105,8 +109,8 @@ function RailLink({
         strokeWidth={1.9}
         className={cn("shrink-0", active ? "text-accent-text" : "text-fg-muted")}
       />
-      <span className="truncate">{label}</span>
-      {action ? <span className="sr-only">{action}</span> : null}
+      <span className="truncate">{t(label)}</span>
+      {action ? <span className="sr-only">{t(action)}</span> : null}
     </Link>
   );
 }
