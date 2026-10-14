@@ -34,4 +34,16 @@ describe("AdminInstancesView source", () => {
     await screen.findByText("listed.example");
     expect(screen.getAllByText(/Added by a blocklist subscription/)).toHaveLength(1);
   });
+
+  it("treats a row with no source (older core / mocked fixture) as manual instead of crashing", async () => {
+    mocks.getBlockedInstances.mockResolvedValue({
+      instances: [{ domain: "old.example", reason: "long gone", blocked_at: "2026-10-01T12:00:00Z" }],
+      total: 1,
+      limit: 10,
+      offset: 0,
+    });
+    render(<AdminInstancesView />);
+    await screen.findByText("old.example");
+    expect(screen.queryByText(/Added by a blocklist subscription/)).toBeNull();
+  });
 });

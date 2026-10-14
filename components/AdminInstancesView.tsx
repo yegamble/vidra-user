@@ -187,7 +187,7 @@ function BlockedInstanceRow({
         {instance.reason ? (
           <p className="mt-1 text-[13px] text-fg-muted">{instance.reason}</p>
         ) : null}
-        {instance.source.startsWith("subscription:") ? (
+        {instance.source?.startsWith("subscription:") ? (
           <p className="mt-1 text-[13px] text-fg-muted">
             Added by a blocklist subscription. Unblocking it here lasts only until the next sync;
             exempt the domain on the Blocklists page to keep it unblocked.

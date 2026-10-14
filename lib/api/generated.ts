@@ -9219,6 +9219,8 @@ export interface components {
             created_at: string;
             /** @description True for a tombstoned comment (its author's account was permanently deleted); body renders as "[deleted]". */
             deleted: boolean;
+            /** @description Tags computed from the body when it was posted or last edited: `external-link` (it contains a URL) and the NAME of each instance watched-word list it matches. Never the matched words. Empty for an untagged comment, and for one that predates the feature until it is edited. Tags are a snapshot of list names at post/edit time: renaming or deleting a list, or adding words, does not retag old comments. */
+            automatic_tags: string[];
         };
         AdminCommentListResponse: components["schemas"]["PageMeta"] & {
             comments: components["schemas"]["AdminComment"][];
@@ -23553,6 +23555,8 @@ export interface operations {
             query?: {
                 /** @description Case-insensitive body substring filter. */
                 q?: string;
+                /** @description Keep only comments carrying this automatic tag (`external-link`, or an instance watched-word list name); case-insensitive exact match. */
+                auto_tag?: string;
                 /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
                 limit?: components["parameters"]["PageLimit"];
                 /** @description Rows to skip. Negative values are clamped to 0. */
