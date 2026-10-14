@@ -335,7 +335,7 @@ export interface paths {
         put?: never;
         /**
          * Log in
-         * @description Verifies credentials and returns an access token. The account is identified by EXACTLY ONE of `identifier` (an email address or a username) or the legacy `email` field. When an `identifier` matches both one account's email and another account's username, the EMAIL always wins — the owner of an address is the only account that string can reach, so a lookalike username can never shadow someone else's sign-in. Unknown account and wrong password are reported identically (401) to prevent account enumeration. Browser cookie mode also sets `vidra_video_access`, an HttpOnly, SameSite=Lax access-token cookie scoped to `/api/v1/videos/`, Secure on HTTPS, with the access-token TTL. It authorizes only private or unpublished video GET/HEAD reads, never mutations; public playback ignores it. Refresh renews it; logout, logout-all and invalid-cookie refresh clear it. With `cookie_mode: true` (or an existing `vidra_refresh` cookie) the refresh token is delivered as an httpOnly `vidra_refresh` cookie (Path=/api/v1/auth, SameSite=Lax, Secure on https instances) instead of in the response body. When the account has two-factor authentication enabled, valid credentials return `{mfa_required: true, mfa_token}` with NO session tokens — complete the login at POST /api/v1/auth/mfa/challenge within 5 minutes.
+         * @description Verifies credentials and returns an access token. The account is identified by EXACTLY ONE of `identifier` (an email address or a username) or the legacy `email` field. When an `identifier` matches both one account's email and another account's username, the EMAIL always wins — the owner of an address is the only account that string can reach, so a lookalike username can never shadow someone else's sign-in. Unknown account and wrong password are reported identically (401) to prevent account enumeration. So is a temporarily LOCKED account: after repeated failures from one network prefix (IPv4 /24, IPv6 /48), or a larger number across all networks, sign-in is refused with the same 401 body, the same status and no Retry-After — even with the right password — until the backoff expires or an administrator clears it. Browser cookie mode also sets `vidra_video_access`, an HttpOnly, SameSite=Lax access-token cookie scoped to `/api/v1/videos/`, Secure on HTTPS, with the access-token TTL. It authorizes only private or unpublished video GET/HEAD reads, never mutations; public playback ignores it. Refresh renews it; logout, logout-all and invalid-cookie refresh clear it. With `cookie_mode: true` (or an existing `vidra_refresh` cookie) the refresh token is delivered as an httpOnly `vidra_refresh` cookie (Path=/api/v1/auth, SameSite=Lax, Secure on https instances) instead of in the response body. When the account has two-factor authentication enabled, valid credentials return `{mfa_required: true, mfa_token}` with NO session tokens — complete the login at POST /api/v1/auth/mfa/challenge within 5 minutes.
          */
         post: operations["login"];
         delete?: never;
@@ -694,6 +694,66 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List recognised devices
+         * @description The browsers and devices the account has signed in from, most recent first, and whether the new-device sign-in email is on. A device is a long-lived random `vidra_device` cookie (httpOnly, Path=/api/v1/auth) bound to the browser family and OS; only a hash and a coarse label such as "Chrome on macOS" are stored, never an IP address. `current` marks the device making this request.
+         */
+        get: operations["listRecognisedDevices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/devices/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Forget a recognised device
+         * @description Removes the record, so the next sign-in from that device is treated as new (and mails the account, unless that is turned off). It does NOT end sessions: sessions carry no device link, so use sign out of all devices for that. Audited as `auth.device.forget`.
+         */
+        delete: operations["forgetRecognisedDevice"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/security-prefs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Turn the new-device sign-in email on or off
+         * @description The email is on by default. At most one such email is sent to an account per hour, and an account with no recognised device yet never gets one (its first sign-in just records).
+         */
+        patch: operations["updateSecurityPrefs"];
         trace?: never;
     };
     "/api/v1/auth/mfa": {
@@ -1347,6 +1407,26 @@ export interface paths {
          * @description Accepts the JSON archive produced by the account export and re-creates the SAFE subsets for the caller: profile fields (display name, bio), playlists (each item matched by video id and added only when that video exists locally), follows of local channels (matched by handle), and notification preferences. Everything else in the archive — channels, videos, comments, saved videos, watch history — is NOT re-created in v1 and is reported per section in the returned summary's skipped_sections. The import is additive: it never deletes existing data, follows are idempotent, and re-importing creates duplicate playlists. The request body is bounded by the instance's HTTP body limit (default 8 MB). 403 feature_disabled when the operator has turned archive imports off (user_import_enabled).
          */
         post: operations["importAccountArchive"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/import/peertube": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import the metadata of a PeerTube user-export archive
+         * @description Accepts a PeerTube (>= 6.1) user-export zip as multipart field `archive` and imports its METADATA into the caller's own account: channels (created when the handle is free and valid here; a handle the caller already owns counts as existing, another owner's is skipped), regular playlists (matched by title, so a re-import never duplicates; items are not resolved and are counted in playlist_items_skipped), and the autoplay-next setting. Videos, likes, dislikes, comments, watch history, blocklists, followers and following are NOT imported yet and are counted under skipped_sections. Synchronous: the work is bounded and touches no network or media. The body cap for this route is PEERTUBE_IMPORT_MAX_SIZE, which defaults to the global HTTP body limit (8 MB), enough for an export trimmed to its peertube/*.json entries; an instance that raises it also accepts the full export including its video files. A Content-Length is required (411 without one). The upload is streamed to a temporary file that is always removed, and only the peertube/*.json entries are ever read; media entries are never opened. The archive is refused whole on traversal, symlink, encrypted, duplicate or oversize JSON entries, or an oversized or ambiguous central directory (more than 20000 entries or 4 MiB). An upload that stops sending for 60 s is abandoned with 408. 403 feature_disabled when user_import_enabled is off. At most 3 imports per user per hour. At most 50 channels may be owned after an import, existing ones included. If the import stops part-way on a server error, the answer is the standard error envelope with an added `summary` (PeerTubeImportSummary) of what was done first; rows already created are kept and re-uploading the same archive is safe.
+         */
+        post: operations["importPeerTubeArchive"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4339,6 +4419,115 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/instances/blocklist-subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List blocklist subscriptions (admin)
+         * @description Shared fediverse denylists this instance syncs into its instance blocklist. Admin only. Paginated via limit (1–100, default 20) and offset.
+         */
+        get: operations["listBlocklistSubscriptions"];
+        put?: never;
+        /**
+         * Subscribe to a blocklist (admin)
+         * @description Adds a list URL (Mastodon CSV, plain domain list, or JSON). The server fetches it through the SSRF guard (public http/https only, redirects re-checked, 8 MiB cap) on the periodic sync or "sync now". Entries with severity suspend (or none) become instance blocks owned by this subscription; silence/limit entries are ignored. Admin only. Audited.
+         */
+        post: operations["createBlocklistSubscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/instances/blocklist-subscriptions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a blocklist subscription (admin)
+         * @description Removes the subscription AND exactly the instance blocks it created. Manual blocks, and blocks owned by other subscriptions, are never touched. Audited.
+         */
+        delete: operations["deleteBlocklistSubscription"];
+        options?: never;
+        head?: never;
+        /**
+         * Edit a blocklist subscription (admin)
+         * @description Changes the label and/or enabled flag. Disabling stops future syncs; the blocks already applied stay until the subscription is deleted.
+         */
+        patch: operations["updateBlocklistSubscription"];
+        trace?: never;
+    };
+    "/api/v1/admin/instances/blocklist-subscriptions/{id}/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sync a blocklist subscription now (admin)
+         * @description Fetches the list and applies it: adds blocks for new entries, removes only blocks this subscription created that the list no longer names. A fetch/parse failure is a 200 with status "error" (the last good state is kept); a list with no usable entries removes nothing. A sync that would remove more than 25 blocks and more than half of the ones the subscription owns is held: status "needs_confirmation", nothing changed; repeat with {"confirm": true} to apply it. Entries naming this instance or a parent domain of it are skipped. Rate limited per admin (6 per minute). Audited with added/removed counts.
+         */
+        post: operations["syncBlocklistSubscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/instances/blocklist-allowlist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List domains exempt from blocklist subscriptions (admin) */
+        get: operations["listBlocklistAllowlist"];
+        put?: never;
+        /**
+         * Exempt a domain from blocklist subscriptions (admin)
+         * @description The allowlist wins over every subscription: the domain is not blocked by a sync, and a block a subscription already created for it is lifted now. A manual block is untouched. Idempotent. Audited.
+         */
+        post: operations["addBlocklistAllow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/instances/blocklist-allowlist/{domain}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Lift a blocklist-subscription exemption (admin)
+         * @description Idempotent. The next sync re-applies lists to the domain. Audited.
+         */
+        delete: operations["removeBlocklistAllow"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/remote-videos/{id}": {
         parameters: {
             query?: never;
@@ -4354,6 +4543,34 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/remote-videos/{id}/rating": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Your own rating of a federated video
+         * @description Returns the caller's like/dislike of a remote video, or null. The counts belong to the origin instance and are not reported here.
+         */
+        get: operations["getRemoteVideoRating"];
+        /**
+         * Like or dislike a federated video
+         * @description Records the caller's like/dislike and federates it to the video's origin as an ActivityPub Like or Dislike signed by the caller's account actor; changing a rating also sends an Undo of the previous one. Repeating the same rating sends nothing.
+         */
+        put: operations["setRemoteVideoRating"];
+        post?: never;
+        /**
+         * Clear your rating of a federated video
+         * @description Removes the caller's rating (idempotent) and federates an Undo of it to the origin.
+         */
+        delete: operations["deleteRemoteVideoRating"];
         options?: never;
         head?: never;
         patch?: never;
@@ -5799,6 +6016,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/ipfs/repin-playback-only": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Progress of the bulk re-pin to the playback-only set (admin)
+         * @description The current or last run: phase (idle, running, paused, completed, cancelled), counts of rows done, skipped (already playback-only), blocked (the admission policy would not re-admit them), failed and in flight, the pinned HLS rows not yet examined (an upper bound on the work left) and an estimate of the pinned bytes saved. Bytes are returned to the disk only after the node's GC.
+         */
+        get: operations["getIPFSRepin"];
+        put?: never;
+        /**
+         * Start the bulk re-pin to the playback-only set (admin)
+         * @description Re-pins every already-pinned HLS tree whose pinned root still includes files the HLS routes do not serve (download MP4s, vp9.webm), so it matches what a new pin adds (Tier A F6). Runs in the leader's mirror worker through the ordinary pin path - admission, reservation and the capacity ceilings all apply - in small batches, and pauses while the node is at its budget. The superseded root is unpinned only when no other row shares it; its blocks are freed by the node's garbage collection. Resumable and safe to repeat. Returns 202 with the run status. Restricted to admins; audited.
+         */
+        post: operations["startIPFSRepin"];
+        /**
+         * Cancel the bulk re-pin to the playback-only set (admin)
+         * @description Stops the run from arming further rows. Rows already re-armed finish through the ordinary pin path; nothing is rolled back. Works while running or paused. Returns the run status. Restricted to admins; audited.
+         */
+        delete: operations["cancelIPFSRepin"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/ipfs/reconcile": {
         parameters: {
             query?: never;
@@ -6353,6 +6598,26 @@ export interface paths {
          * @description Updates a user's role, active flag, and/or storage quota (partial). Restricted to admins. An admin cannot demote or deactivate their own account (422), and a hard-deleted account cannot be reactivated (422: the tombstone is anonymised in place, so re-enabling it would republish a profile without restoring anything). An unknown id is 404. Deactivating revokes the user's sessions. A role change takes effect on the target's EXISTING sessions immediately — the role is re-read from the account on every authenticated request, not taken from the access token — so a demoted staff member loses the staff routes at once while keeping their ordinary session. storage_quota_bytes is tri-state — omitted: unchanged; null: reset to the instance default; a non-negative integer: per-user override (0 = unlimited); daily_quota_bytes is the same tri-state for the per-user rolling-24h upload quota. Moderators share ONLY ban and unban (`is_active`, with a required `ban_reason` when banning) and only for accounts whose role is `user`: any other field, a staff or owner target, or themselves is 403. Banning stores the reason, time and actor, and emails the user the reason (best-effort); unbanning clears them and emails a reinstatement. The audit row records the reason's length, never its text.
          */
         patch: operations["updateUser"];
+        trace?: never;
+    };
+    "/api/v1/admin/users/{id}/login-lockout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Clear an account's failed-login lockout (admin)
+         * @description Drops every failed-login counter and lock for the account, so the holder can sign in again immediately. Admin-only; audited as `admin.user.login_lockout_clear` with the target named. Idempotent: 204 whether or not a lockout existed. No password step-up — it only removes a brake.
+         */
+        delete: operations["adminClearLoginLockout"];
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/admin/users/{id}/mfa": {
@@ -7883,9 +8148,83 @@ export interface components {
             blocked_by?: string;
             /** Format: date-time */
             blocked_at: string;
+            /** @description Who owns the block: "manual", or "subscription:<id>" when a blocklist subscription created it. */
+            source: string;
         };
         BlockedInstanceListResponse: components["schemas"]["PageMeta"] & {
             instances: components["schemas"]["BlockedInstance"][];
+        };
+        BlocklistSubscription: {
+            /** Format: uuid */
+            id: string;
+            url: string;
+            label: string;
+            /** @enum {string} */
+            format: "mastodon_csv" | "domain_list" | "json";
+            enabled: boolean;
+            /**
+             * @description Outcome of the last attempt. A failed attempt keeps the last good counts.
+             * @enum {string}
+             */
+            last_status: "never" | "ok" | "not_modified" | "error" | "needs_confirmation";
+            /** @description A short class message (e.g. "HTTP 500", "address not allowed"), never a raw error. */
+            last_error?: string;
+            /** Format: date-time */
+            last_synced_at?: string;
+            /** Format: date-time */
+            last_attempt_at?: string;
+            last_added: number;
+            last_removed: number;
+            /** @description Usable domains in the last applied list. */
+            entry_count: number;
+            /**
+             * Format: int64
+             * @description Instance blocks this subscription currently owns.
+             */
+            block_count: number;
+            /** Format: date-time */
+            created_at: string;
+        };
+        BlocklistSubscriptionListResponse: components["schemas"]["PageMeta"] & {
+            subscriptions: components["schemas"]["BlocklistSubscription"][];
+        };
+        CreateBlocklistSubscriptionRequest: {
+            url: string;
+            /** @enum {string} */
+            format: "mastodon_csv" | "domain_list" | "json";
+            label?: string;
+            /** @description Defaults to true. */
+            enabled?: boolean;
+        };
+        UpdateBlocklistSubscriptionRequest: {
+            label?: string;
+            enabled?: boolean;
+        };
+        BlocklistSyncResult: {
+            /** @enum {string} */
+            status: "ok" | "not_modified" | "error" | "needs_confirmation";
+            error?: string;
+            /** @description Entries skipped because they name this instance or a parent domain. */
+            protected: number;
+            /** @description With needs_confirmation, how many blocks a confirmed sync would remove. */
+            pending_removals?: number;
+            added: number;
+            removed: number;
+            entries: number;
+            /** @description Rows skipped because vidra has no equivalent of silence/limit. */
+            ignored_severity: number;
+            /** @description Rows skipped as malformed (wildcard, obfuscated, IP, ...). */
+            invalid: number;
+        };
+        BlocklistAllowRequest: {
+            domain: string;
+        };
+        BlocklistAllowlistResponse: components["schemas"]["PageMeta"] & {
+            domains: {
+                domain: string;
+                /** Format: date-time */
+                added_at: string;
+            }[];
         };
         RemoteVideo: {
             /** Format: uuid */
@@ -8159,6 +8498,13 @@ export interface components {
         };
         BlockedUserListResponse: components["schemas"]["PageMeta"] & {
             users: components["schemas"]["BlockedUser"][];
+        };
+        RemoteVideoRating: {
+            /**
+             * @description The caller's own rating of the remote video, or null.
+             * @enum {string|null}
+             */
+            my_rating: "like" | "dislike" | null;
         };
         VideoRating: {
             /** Format: int64 */
@@ -8928,6 +9274,8 @@ export interface components {
             created_at: string;
             /** @description True for a tombstoned comment (its author's account was permanently deleted); body renders as "[deleted]". */
             deleted: boolean;
+            /** @description Tags computed from the body when it was posted or last edited: `external-link` (it contains a URL) and the NAME of each instance watched-word list it matches. Never the matched words. Empty for an untagged comment, and for one that predates the feature until it is edited. Tags are a snapshot of list names at post/edit time: renaming or deleting a list, or adding words, does not retag old comments. */
+            automatic_tags: string[];
         };
         AdminCommentListResponse: components["schemas"]["PageMeta"] & {
             comments: components["schemas"]["AdminComment"][];
@@ -9427,6 +9775,21 @@ export interface components {
                 /** Format: date-time */
                 watched_at?: string;
             }[];
+        };
+        /** @description What POST /api/v1/me/import/peertube created and skipped. */
+        PeerTubeImportSummary: {
+            channels_created: number;
+            channels_existing: number;
+            /** @description Invalid handle, reserved, owned by someone else, or over the channel limit. */
+            channels_skipped: number;
+            playlists_created: number;
+            playlists_existing: number;
+            playlists_skipped: number;
+            playlist_items_skipped: number;
+            settings_applied: number;
+            skipped_sections: {
+                [key: string]: number;
+            };
         };
         /** @description What POST /api/v1/me/import re-created (safe subsets only) and what it skipped. */
         AccountImportSummary: {
@@ -11068,6 +11431,52 @@ export interface components {
             /** Format: int64 */
             unpinned: number;
         };
+        /** @description Progress of the bulk re-pin of pinned HLS trees to the playback-only set. */
+        IPFSRepinStatus: {
+            /** @enum {string} */
+            phase: "idle" | "running" | "paused" | "completed" | "cancelled";
+            /** Format: date-time */
+            started_at: string | null;
+            /** Format: date-time */
+            finished_at: string | null;
+            /** @description Why the run is paused (e.g. budget_exhausted); empty otherwise. */
+            pause_reason: string;
+            /** Format: int64 */
+            scanned: number;
+            /**
+             * Format: int64
+             * @description Rows moved back to pending for a playback-only re-add.
+             */
+            queued: number;
+            /**
+             * Format: int64
+             * @description Queued rows now pinned to a new root.
+             */
+            done: number;
+            /**
+             * Format: int64
+             * @description Rows already playback-only, or that changed under the run.
+             */
+            skipped: number;
+            /**
+             * Format: int64
+             * @description Rows the admission policy would not re-admit (e.g. backfill off).
+             */
+            blocked: number;
+            /** Format: int64 */
+            failed: number;
+            in_flight: number;
+            /**
+             * Format: int64
+             * @description Pinned HLS rows not examined yet; an upper bound on the work left.
+             */
+            remaining: number;
+            /**
+             * Format: int64
+             * @description Pinned bytes no longer held by the ledger; freed on disk only after GC.
+             */
+            bytes_saved_estimate: number;
+        };
         /** @description Result of an IPFS reconciliation scan: how many pin intents were enqueued, overall and per media class. Idempotent — a second run enqueues zero. */
         IPFSReconcileResult: {
             /**
@@ -11565,6 +11974,26 @@ export interface components {
             mfa_required: true;
             /** @description Short-lived (5 min) single-purpose token. Not an access token — it is only accepted by the MFA challenge endpoint. */
             mfa_token: string;
+        };
+        RecognisedDevice: {
+            /** Format: uuid */
+            id: string;
+            /** @example Chrome on macOS */
+            label: string;
+            /** Format: date-time */
+            first_seen_at: string;
+            /** Format: date-time */
+            last_seen_at: string;
+            /** @description True for the device making this request. */
+            current: boolean;
+        };
+        RecognisedDevicesResponse: {
+            devices: components["schemas"]["RecognisedDevice"][];
+            /** @description Whether the new-device sign-in email is on (default true). */
+            new_device_email: boolean;
+        };
+        SecurityPrefsRequest: {
+            new_device_email: boolean;
         };
         MFAStatusResponse: {
             /** @description Whether TOTP two-factor authentication is enabled. */
@@ -13239,6 +13668,115 @@ export interface operations {
                 };
             };
             /** @description Validation failed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listRecognisedDevices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The account's recognised devices. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecognisedDevicesResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    forgetRecognisedDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The device was forgotten. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such device on this account. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateSecurityPrefs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SecurityPrefsRequest"];
+            };
+        };
+        responses: {
+            /** @description The stored preference. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecurityPrefsRequest"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation failed (new_device_email is required). */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -15082,6 +15620,105 @@ export interface operations {
             };
             /** @description Not a valid vidra account archive. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    importPeerTubeArchive: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    archive: string;
+                };
+            };
+        };
+        responses: {
+            /** @description What was imported and what was skipped. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PeerTubeImportSummary"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Archive imports are disabled (code feature_disabled). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The upload stopped sending for 60 seconds and was abandoned. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The request has no Content-Length. */
+            411: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The request body exceeds PEERTUBE_IMPORT_MAX_SIZE (default: the global HTTP body limit), declared or actually streamed. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, not a zip, or not a valid PeerTube export. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many imports in the window (3 per user per hour). */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The server is already receiving the maximum number of archives, or has too little free temporary space for this one (also when space runs short mid-upload); retry after the Retry-After seconds. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -23087,6 +23724,8 @@ export interface operations {
             query?: {
                 /** @description Case-insensitive body substring filter. */
                 q?: string;
+                /** @description Keep only comments carrying this automatic tag (`external-link`, or an instance watched-word list name); case-insensitive exact match. */
+                auto_tag?: string;
                 /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
                 limit?: components["parameters"]["PageLimit"];
                 /** @description Rows to skip. Negative values are clamped to 0. */
@@ -24210,6 +24849,439 @@ export interface operations {
             };
         };
     };
+    listBlocklistSubscriptions: {
+        parameters: {
+            query?: {
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of subscriptions (possibly empty). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlocklistSubscriptionListResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createBlocklistSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateBlocklistSubscriptionRequest"];
+            };
+        };
+        responses: {
+            /** @description The subscription (never synced yet). */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlocklistSubscription"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Already subscribed to that URL. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Invalid URL (not a public http/https URL) or format. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteBlocklistSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Subscription and the blocks it owned are removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Malformed subscription id. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such subscription. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateBlocklistSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateBlocklistSubscriptionRequest"];
+            };
+        };
+        responses: {
+            /** @description The updated subscription. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlocklistSubscription"];
+                };
+            };
+            /** @description Malformed subscription id. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such subscription. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    syncBlocklistSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    confirm?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description The outcome of this sync. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlocklistSyncResult"];
+                };
+            };
+            /** @description Malformed subscription id. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such subscription. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sync budget exhausted; Retry-After is set. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listBlocklistAllowlist: {
+        parameters: {
+            query?: {
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of allowlisted domains (possibly empty). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlocklistAllowlistResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    addBlocklistAllow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BlocklistAllowRequest"];
+            };
+        };
+        responses: {
+            /** @description The domain is exempt. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or invalid domain. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    removeBlocklistAllow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                domain: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The domain is no longer exempt. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Invalid domain. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     getRemoteVideo: {
         parameters: {
             query?: never;
@@ -24232,6 +25304,187 @@ export interface operations {
             };
             /** @description No such remote video (or its origin instance is blocked). */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getRemoteVideoRating: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's rating. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemoteVideoRating"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such remote video, or it (or its origin) is blocked here. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    setRemoteVideoRating: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    rating: "like" | "dislike";
+                };
+            };
+        };
+        responses: {
+            /** @description The caller's rating. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemoteVideoRating"];
+                };
+            };
+            /** @description Malformed JSON body. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such remote video, or it (or its origin) is blocked here. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The rating is not `like` or `dislike`. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many rating changes by this user; retry after a minute. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Federation is disabled on this instance. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteRemoteVideoRating: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The rating is cleared (my_rating null). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemoteVideoRating"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such remote video, or it (or its origin) is blocked here. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many rating changes by this user; retry after a minute. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Federation is disabled on this instance. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -28769,6 +30022,192 @@ export interface operations {
             };
         };
     };
+    getIPFSRepin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The run status. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IPFSRepinStatus"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description This build or storage backend cannot recompute the playback-only set. */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description IPFS mirroring is not enabled on this instance (ipfs_disabled). */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    startIPFSRepin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The run was recorded; the worker advances it. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IPFSRepinStatus"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description A re-pin is already running. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description This build or storage backend cannot recompute the playback-only set. */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description IPFS mirroring is not enabled on this instance (ipfs_disabled). */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    cancelIPFSRepin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The run was cancelled. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IPFSRepinStatus"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No re-pin is running. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description This build or storage backend cannot recompute the playback-only set. */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description IPFS mirroring is not enabled on this instance (ipfs_disabled). */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     reconcileIPFS: {
         parameters: {
             query?: {
@@ -30487,6 +31926,53 @@ export interface operations {
             };
             /** @description Validation failed, or an attempt to self-demote/deactivate. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    adminClearLoginLockout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Any lockout on the account was cleared. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such user. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

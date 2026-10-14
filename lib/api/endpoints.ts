@@ -34,6 +34,7 @@ import type {
   JobRunsResponse,
   JobRunState,
   IPFSReconcileResult,
+  IPFSRepinStatus,
   IPFSStatus,
   IPFSConfigDocument,
   IPFSConfigUpdate,
@@ -114,6 +115,13 @@ import type {
   VideoOwnershipChangeListResponse,
   BlockInstanceRequest,
   BlockedInstanceListResponse,
+  BlocklistAllowRequest,
+  BlocklistAllowlistResponse,
+  BlocklistSubscription,
+  BlocklistSubscriptionListResponse,
+  BlocklistSyncResult,
+  CreateBlocklistSubscriptionRequest,
+  UpdateBlocklistSubscriptionRequest,
   CreateRemoteFollowRequest,
   RemoteFollow,
   RemoteFollowListResponse,
@@ -124,6 +132,7 @@ import type {
   AdminRemoteBlockRequest,
   RemoteVideo,
   RemoteVideoCommentListResponse,
+  RemoteVideoRating,
   AuthoredRemoteComment,
   FeedScope,
   CreateChannelRequest,
@@ -1721,6 +1730,23 @@ export const api = {
       method: "DELETE",
     }),
 
+  /** GET /api/v1/remote-videos/{id}/rating — the caller's own vote (auth). */
+  getRemoteVideoRating: (id: string, signal?: AbortSignal) =>
+    apiRequest<RemoteVideoRating>(`/api/v1/remote-videos/${encodeURIComponent(id)}/rating`, { signal }),
+
+  /** PUT /api/v1/remote-videos/{id}/rating — like/dislike a federated video (auth). */
+  setRemoteVideoRating: (id: string, rating: RatingValue) =>
+    apiRequest<RemoteVideoRating>(`/api/v1/remote-videos/${encodeURIComponent(id)}/rating`, {
+      method: "PUT",
+      body: { rating },
+    }),
+
+  /** DELETE /api/v1/remote-videos/{id}/rating — clear your vote (auth). */
+  clearRemoteVideoRating: (id: string) =>
+    apiRequest<RemoteVideoRating>(`/api/v1/remote-videos/${encodeURIComponent(id)}/rating`, {
+      method: "DELETE",
+    }),
+
   /**
    * POST /api/v1/remote-videos/{id}/report — file an abuse report against a
    * federated remote video (auth; target_type remote_video; idempotent per
@@ -1838,6 +1864,57 @@ export const api = {
   /** DELETE /api/v1/admin/instances/blocked/{domain} — unblock an instance (admin/moderator; idempotent 204). */
   unblockInstance: (domain: string) =>
     apiRequest<void>(`/api/v1/admin/instances/blocked/${encodeURIComponent(domain)}`, {
+      method: "DELETE",
+    }),
+
+  /** GET /api/v1/admin/instances/blocklist-subscriptions — shared denylists synced into the blocklist (admin). */
+  getBlocklistSubscriptions: (params: PageParams = {}, signal?: AbortSignal) =>
+    apiRequest<BlocklistSubscriptionListResponse>("/api/v1/admin/instances/blocklist-subscriptions", {
+      query: pageQuery(params),
+      signal,
+    }),
+
+  /** POST /api/v1/admin/instances/blocklist-subscriptions — subscribe to a list (admin; 409 duplicate URL, 422 bad URL/format). */
+  createBlocklistSubscription: (body: CreateBlocklistSubscriptionRequest) =>
+    apiRequest<BlocklistSubscription>("/api/v1/admin/instances/blocklist-subscriptions", {
+      method: "POST",
+      body,
+    }),
+
+  /** PATCH /api/v1/admin/instances/blocklist-subscriptions/{id} — label / enabled (admin). */
+  updateBlocklistSubscription: (id: string, body: UpdateBlocklistSubscriptionRequest) =>
+    apiRequest<BlocklistSubscription>(
+      `/api/v1/admin/instances/blocklist-subscriptions/${encodeURIComponent(id)}`,
+      { method: "PATCH", body },
+    ),
+
+  /** DELETE /api/v1/admin/instances/blocklist-subscriptions/{id} — remove it AND only the blocks it created (admin; 204). */
+  deleteBlocklistSubscription: (id: string) =>
+    apiRequest<void>(`/api/v1/admin/instances/blocklist-subscriptions/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
+
+  /** POST /api/v1/admin/instances/blocklist-subscriptions/{id}/sync — sync now (admin; 429 when over 6/min). */
+  syncBlocklistSubscription: (id: string, confirm = false) =>
+    apiRequest<BlocklistSyncResult>(
+      `/api/v1/admin/instances/blocklist-subscriptions/${encodeURIComponent(id)}/sync`,
+      { method: "POST", ...(confirm ? { body: { confirm: true } } : {}) },
+    ),
+
+  /** GET /api/v1/admin/instances/blocklist-allowlist — domains exempt from every subscription (admin). */
+  getBlocklistAllowlist: (params: PageParams = {}, signal?: AbortSignal) =>
+    apiRequest<BlocklistAllowlistResponse>("/api/v1/admin/instances/blocklist-allowlist", {
+      query: pageQuery(params),
+      signal,
+    }),
+
+  /** POST /api/v1/admin/instances/blocklist-allowlist — exempt a domain (admin; idempotent 204; 422 bad domain). */
+  addBlocklistAllow: (body: BlocklistAllowRequest) =>
+    apiRequest<void>("/api/v1/admin/instances/blocklist-allowlist", { method: "POST", body }),
+
+  /** DELETE /api/v1/admin/instances/blocklist-allowlist/{domain} — lift an exemption (admin; idempotent 204). */
+  removeBlocklistAllow: (domain: string) =>
+    apiRequest<void>(`/api/v1/admin/instances/blocklist-allowlist/${encodeURIComponent(domain)}`, {
       method: "DELETE",
     }),
 
@@ -2924,6 +3001,21 @@ export const api = {
     }),
 
   /**
+   * POST /api/v1/admin/ipfs/repin-playback-only — start the bulk re-pin of pinned
+   * HLS trees to the playback-only set (409 if one is already running).
+   */
+  startIPFSRepin: () =>
+    apiRequest<IPFSRepinStatus>("/api/v1/admin/ipfs/repin-playback-only", { method: "POST" }),
+
+  /** DELETE /api/v1/admin/ipfs/repin-playback-only — stop arming rows; armed rows finish (409 if none runs). */
+  cancelIPFSRepin: () =>
+    apiRequest<IPFSRepinStatus>("/api/v1/admin/ipfs/repin-playback-only", { method: "DELETE" }),
+
+  /** GET /api/v1/admin/ipfs/repin-playback-only — progress of the current or last run. */
+  getIPFSRepin: (signal?: AbortSignal) =>
+    apiRequest<IPFSRepinStatus>("/api/v1/admin/ipfs/repin-playback-only", { signal }),
+
+  /**
    * GET /api/v1/admin/stats — instance-wide overview counts for the admin
    * dashboard's stat cards (admin only). Every field is a live COUNT/SUM; the
    * contract carries no period-over-period deltas.
@@ -3041,14 +3133,15 @@ export const api = {
 
   /**
    * GET /api/v1/admin/comments — all comments newest first, each with its author
-   * and the video it's on (moderator/admin). Optional `q` filters by body.
+   * and the video it's on (moderator/admin). Optional `q` filters by body;
+   * `auto_tag` keeps comments carrying that automatic tag (case-insensitive).
    */
   getAdminComments: (
-    params: PageParams & { q?: string } = {},
+    params: PageParams & { q?: string; auto_tag?: string } = {},
     signal?: AbortSignal,
   ) =>
     apiRequest<AdminCommentListResponse>("/api/v1/admin/comments", {
-      query: { q: params.q, ...pageQuery(params) },
+      query: { q: params.q, auto_tag: params.auto_tag, ...pageQuery(params) },
       signal,
     }),
 

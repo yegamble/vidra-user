@@ -238,13 +238,14 @@ test("the remote watch page plays the origin stream and always links the origin 
   await expect(originLink).toHaveAttribute("target", "_blank");
   await expect(originLink).toHaveAttribute("rel", "noopener noreferrer");
 
-  // Honest copy: ratings/saving still live at the origin (no local Like/Save
-  // UI), but replying is now LOCAL — a signed-in viewer's comment is hosted on
+  // Honest copy: saving still lives at the origin (no local Save UI), likes
+  // and dislikes are sent on to it, and replying is LOCAL — a signed-in viewer's comment is hosted on
   // this instance and federated to the origin (migration 0147). The copy says
   // exactly that, alongside the mirrored origin thread it shows below.
-  await expect(page.getByText(/Ratings and saving live on the origin instance/)).toBeVisible();
+  await expect(page.getByText(/Saving lives on the origin instance/)).toBeVisible();
   await expect(page.getByText(/You can reply here/)).toBeVisible();
-  await expect(page.getByRole("button", { name: "Like" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Like", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Dislike", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Save" })).toHaveCount(0);
   // Anonymous viewer: no composer textbox, but a prompt to sign in and author.
   await expect(page.getByRole("textbox")).toHaveCount(0);

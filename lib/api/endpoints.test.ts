@@ -43,6 +43,18 @@ describe("api endpoints", () => {
     return (fetchMock.mock.calls[0] as [string])[0];
   }
 
+  it("remote-video rating endpoints use the remote-videos path with PUT/DELETE verbs", async () => {
+    fetchMock.mockImplementation(async () => okJson());
+    await api.setRemoteVideoRating("r1", "dislike");
+    const [url, put] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/remote-videos/r1/rating");
+    expect(put.method).toBe("PUT");
+    expect(put.body).toBe(JSON.stringify({ rating: "dislike" }));
+    fetchMock.mockClear();
+    await api.clearRemoteVideoRating("r1");
+    expect((fetchMock.mock.calls[0] as [string, RequestInit])[1].method).toBe("DELETE");
+  });
+
   it("getFeed targets the feed with sort + pagination", async () => {
     await api.getFeed({ sort: "trending", limit: 10 });
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/videos?sort=trending&limit=10");
@@ -1611,6 +1623,11 @@ describe("api endpoints", () => {
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/comments?q=spam&limit=100");
   });
 
+  it("getAdminComments forwards the auto_tag filter", async () => {
+    await api.getAdminComments({ auto_tag: "external-link", limit: 10 });
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/comments?auto_tag=external-link&limit=10");
+  });
+
   it("bulkRemoveAdminComments POSTs the account to the bulk-remove endpoint", async () => {
     await api.bulkRemoveAdminComments("spammer");
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
@@ -2020,6 +2037,35 @@ describe("api endpoints", () => {
     expect(init.method).toBe("DELETE");
   });
 
+  it("blocklist subscription calls hit the admin routes with ids and domains encoded", async () => {
+    const base = "http://localhost:8080/api/v1/admin/instances/blocklist-subscriptions";
+    fetchMock.mockImplementation(async () => okJson()); // one Response per call: a body is read once
+    await api.getBlocklistSubscriptions({ limit: 10 });
+    expect(calledUrl()).toBe(`${base}?limit=10`);
+    await api.createBlocklistSubscription({ url: "https://l.example/a.csv", format: "mastodon_csv" });
+    let [url, init] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect([url, init.method]).toEqual([base, "POST"]);
+    expect(JSON.parse(init.body as string)).toEqual({ url: "https://l.example/a.csv", format: "mastodon_csv" });
+    await api.updateBlocklistSubscription("abc", { enabled: false });
+    [url, init] = fetchMock.mock.calls[2] as [string, RequestInit];
+    expect([url, init.method]).toEqual([`${base}/abc`, "PATCH"]);
+    await api.syncBlocklistSubscription("abc");
+    [url, init] = fetchMock.mock.calls[3] as [string, RequestInit];
+    expect([url, init.method]).toEqual([`${base}/abc/sync`, "POST"]);
+    await api.deleteBlocklistSubscription("abc");
+    [url, init] = fetchMock.mock.calls[4] as [string, RequestInit];
+    expect([url, init.method]).toEqual([`${base}/abc`, "DELETE"]);
+    await api.removeBlocklistAllow("spam.example:8443");
+    [url, init] = fetchMock.mock.calls[5] as [string, RequestInit];
+    expect([url, init.method]).toEqual([
+      "http://localhost:8080/api/v1/admin/instances/blocklist-allowlist/spam.example%3A8443",
+      "DELETE",
+    ]);
+    await api.addBlocklistAllow({ domain: "ok.example" });
+    [url, init] = fetchMock.mock.calls[6] as [string, RequestInit];
+    expect([url, init.method]).toEqual(["http://localhost:8080/api/v1/admin/instances/blocklist-allowlist", "POST"]);
+  });
+
   it("getBlockedRemoteActors targets the instance-wide actor blocklist", async () => {
     await api.getBlockedRemoteActors({ limit: 10, offset: 20 });
     expect(calledUrl()).toBe(
@@ -2138,6 +2184,20 @@ describe("api endpoints", () => {
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("http://localhost:8080/api/v1/admin/ipfs/reconcile?network=private");
     expect(init.method).toBe("POST");
+  });
+
+  it("starts and polls the playback-only re-pin", async () => {
+    fetchMock.mockImplementation(async () => okJson());
+    await api.startIPFSRepin();
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/admin/ipfs/repin-playback-only");
+    expect(init.method).toBe("POST");
+    fetchMock.mockClear();
+    await api.getIPFSRepin();
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/ipfs/repin-playback-only");
+    fetchMock.mockClear();
+    await api.cancelIPFSRepin();
+    expect((fetchMock.mock.calls[0] as [string, RequestInit])[1].method).toBe("DELETE");
   });
 
   it("reads and atomically saves IPFS configuration with its expected revision", async () => {

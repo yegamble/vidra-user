@@ -289,6 +289,7 @@ export type IPFSNetworkStatus = Schemas["IPFSNetworkStatus"];
 export type IPFSPinCounts = Schemas["IPFSPinCounts"];
 export type IPFSClassPinCounts = Schemas["IPFSClassPinCounts"];
 export type IPFSReconcileResult = Schemas["IPFSReconcileResult"];
+export type IPFSRepinStatus = Schemas["IPFSRepinStatus"];
 
 // --- Admin: playback quality (phase-4 delivery item 4) ----------------------
 // GET /admin/qoe/playback-health. Two projections in one payload: `sources` is
@@ -378,6 +379,9 @@ export type AccountImportSummary = Schemas["AccountImportSummary"];
 export type DeleteAccountRequest = Schemas["DeleteAccountRequest"];
 export type MFARequiredResponse = Schemas["MFARequiredResponse"];
 export type MFAStatusResponse = Schemas["MFAStatusResponse"];
+export type RecognisedDevice = Schemas["RecognisedDevice"];
+export type RecognisedDevicesResponse = Schemas["RecognisedDevicesResponse"];
+export type SecurityPrefsRequest = Schemas["SecurityPrefsRequest"];
 export type TOTPEnrollmentResponse = Schemas["TOTPEnrollmentResponse"];
 export type RecoveryCodesResponse = Schemas["RecoveryCodesResponse"];
 export type MFAChallengeRequest = Schemas["MFAChallengeRequest"];
@@ -560,6 +564,13 @@ export type MutedInstanceListResponse = Schemas["MutedInstanceListResponse"];
 export type BlockInstanceRequest = Schemas["BlockInstanceRequest"];
 export type BlockedInstance = Schemas["BlockedInstance"];
 export type BlockedInstanceListResponse = Schemas["BlockedInstanceListResponse"];
+export type BlocklistSubscription = Schemas["BlocklistSubscription"];
+export type BlocklistSubscriptionListResponse = Schemas["BlocklistSubscriptionListResponse"];
+export type CreateBlocklistSubscriptionRequest = Schemas["CreateBlocklistSubscriptionRequest"];
+export type UpdateBlocklistSubscriptionRequest = Schemas["UpdateBlocklistSubscriptionRequest"];
+export type BlocklistSyncResult = Schemas["BlocklistSyncResult"];
+export type BlocklistAllowRequest = Schemas["BlocklistAllowRequest"];
+export type BlocklistAllowlistResponse = Schemas["BlocklistAllowlistResponse"];
 
 // --- Federation / remote content --------------------------------------------
 export type RemoteVideo = Schemas["RemoteVideo"];
@@ -632,6 +643,7 @@ export type EncryptedMessageListResponse = Schemas["EncryptedMessageListResponse
 // --- Ratings / watch progress / history -------------------------------------
 export type RatingValue = NonNullable<Schemas["VideoRating"]["my_rating"]>;
 export type VideoRating = Schemas["VideoRating"];
+export type RemoteVideoRating = Schemas["RemoteVideoRating"];
 export type WatchProgress = Schemas["WatchProgress"];
 export type HistoryItem = Schemas["HistoryItem"];
 export type WatchHistoryResponse = Schemas["WatchHistoryResponse"];

@@ -22,15 +22,21 @@ vi.mock("@/components/auth/AuthProvider", () => ({ useSession: () => session }))
 const getVideoRating = vi.fn();
 const setVideoRating = vi.fn();
 const clearVideoRating = vi.fn();
+const getRemoteVideoRating = vi.fn();
+const setRemoteVideoRating = vi.fn();
+const clearRemoteVideoRating = vi.fn();
 vi.mock("@/lib/api", () => ({
   api: {
     getVideoRating: (...args: unknown[]) => getVideoRating(...args),
     setVideoRating: (...args: unknown[]) => setVideoRating(...args),
     clearVideoRating: (...args: unknown[]) => clearVideoRating(...args),
+    getRemoteVideoRating: (...args: unknown[]) => getRemoteVideoRating(...args),
+    setRemoteVideoRating: (...args: unknown[]) => setRemoteVideoRating(...args),
+    clearRemoteVideoRating: (...args: unknown[]) => clearRemoteVideoRating(...args),
   },
 }));
 
-import { RatingControls } from "./RatingControls";
+import { RatingControls, remoteRatingAdapter } from "./RatingControls";
 
 function rating(over: Partial<VideoRating> = {}): VideoRating {
   return { like_count: 0, dislike_count: 0, my_rating: null, ...over } as VideoRating;
@@ -41,6 +47,9 @@ beforeEach(() => {
   getVideoRating.mockReset();
   setVideoRating.mockReset();
   clearVideoRating.mockReset();
+  getRemoteVideoRating.mockReset();
+  setRemoteVideoRating.mockReset();
+  clearRemoteVideoRating.mockReset();
 });
 
 afterEach(cleanup);
@@ -131,5 +140,64 @@ describe("RatingControls", () => {
 
     await screen.findByLabelText("Like");
     expect(getVideoRating).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("RatingControls on a federated video", () => {
+  const ui = () => <RatingControls videoId="r1" adapter={remoteRatingAdapter} />;
+
+  it("reads the caller's own vote, shows no counts, and toggles it", async () => {
+    getRemoteVideoRating.mockResolvedValue({ my_rating: "like" });
+    clearRemoteVideoRating.mockResolvedValue({ my_rating: null });
+    render(ui());
+
+    const like = await screen.findByLabelText("Like");
+    expect(like.getAttribute("aria-pressed")).toBe("true");
+    expect(like.textContent).toBe("");
+    expect(getVideoRating).not.toHaveBeenCalled();
+
+    fireEvent.click(like);
+    await waitFor(() => expect(like.getAttribute("aria-pressed")).toBe("false"));
+    expect(clearRemoteVideoRating).toHaveBeenCalledWith("r1");
+  });
+
+  it("switches to dislike through the remote endpoint", async () => {
+    getRemoteVideoRating.mockResolvedValue({ my_rating: "like" });
+    setRemoteVideoRating.mockResolvedValue({ my_rating: "dislike" });
+    render(ui());
+    fireEvent.click(await screen.findByLabelText("Dislike"));
+    await waitFor(() =>
+      expect(screen.getByLabelText("Dislike").getAttribute("aria-pressed")).toBe("true"),
+    );
+    expect(setRemoteVideoRating).toHaveBeenCalledWith("r1", "dislike");
+  });
+
+  it("does not read for an anonymous viewer (own-vote read is auth-only) and offers sign-in", async () => {
+    session = { status: "anon" };
+    render(ui());
+    expect(await screen.findByLabelText("Like")).toBeTruthy();
+    expect(getRemoteVideoRating).not.toHaveBeenCalled();
+    expect(screen.getByText("Sign in to rate")).toBeTruthy();
+  });
+
+  it("disables the control with an explanation when federation is off (503)", async () => {
+    getRemoteVideoRating.mockResolvedValue({ my_rating: null });
+    setRemoteVideoRating.mockRejectedValue({ status: 503 });
+    render(ui());
+    fireEvent.click(await screen.findByLabelText("Like"));
+    expect(await screen.findByText(/Federation is turned off/)).toBeTruthy();
+    const like = screen.getByLabelText("Like") as HTMLButtonElement;
+    expect(like.disabled).toBe(true);
+    expect(like.title).toMatch(/Federation is turned off/);
+  });
+
+  it("shows a transient message on a rate limit (429) and keeps the control usable", async () => {
+    getRemoteVideoRating.mockResolvedValue({ my_rating: null });
+    setRemoteVideoRating.mockRejectedValue({ status: 429 });
+    render(ui());
+    fireEvent.click(await screen.findByLabelText("Like"));
+    expect((await screen.findByRole("alert")).textContent).toMatch(/too quickly/);
+    expect((screen.getByLabelText("Like") as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByLabelText("Like").getAttribute("aria-pressed")).toBe("false");
   });
 });

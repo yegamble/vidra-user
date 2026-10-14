@@ -165,6 +165,12 @@ export const ADMIN_NAV: readonly AdminNavItem[] = [
     group: "more",
   },
   {
+    href: "/admin/federation/blocklists",
+    label: "Blocklists",
+    description: "Shared denylists synced into the instance blocklist, plus domains exempt from them.",
+    group: "more",
+  },
+  {
     href: "/admin/jobs",
     label: "Jobs",
     description: "Background-work queue depth, stuck workers, and recent failures.",

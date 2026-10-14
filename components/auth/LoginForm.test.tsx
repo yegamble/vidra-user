@@ -130,7 +130,9 @@ describe("LoginForm identifier field", () => {
       new ApiError({ status: 401, code: "unauthorized", message: "invalid credentials" }),
     );
     await signIn("ada");
-    await screen.findByText("Invalid email/username or password.");
+    await screen.findByText(/^Invalid email\/username or password\./);
+    // The lockout hint is part of the one generic answer, never a separate one.
+    await screen.findByText(/wait a few minutes before trying again/);
   });
 
   // A05 defect 2 at the sign-in screen: the refusal that holds an unverified
