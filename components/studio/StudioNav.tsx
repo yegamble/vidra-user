@@ -3,33 +3,35 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
+import { useT } from "@/components/I18nProvider";
 import { ChevronDownIcon } from "@/components/icons";
 import { Avatar } from "@/components/ui/Avatar";
 import { Dropdown, type DropdownItem } from "@/components/ui/Dropdown";
 import { channelAvatarUrl } from "@/lib/api";
 import { cn } from "@/lib/cn";
+import type { PlainMessageKey } from "@/lib/i18n";
 import { useLiveAvailable } from "@/lib/live/availability";
 
 import { ChannelProtocolBadges } from "./ChannelProtocolBadges";
 import { useStudio } from "./StudioContext";
 
-// The studio tab strip — the seven surfaces the studio is split into. Active state
+// The studio tab strip — the eight surfaces the studio is split into. Active state
 // is derived from the pathname (exact match; the sub-routes are distinct paths).
 // The Live tab is dropped when the instance reports `features.live: false` (the
 // operator's switch AND the RTMP ingest capability); the route itself stays
 // reachable and explains itself, so a deep link is never a dead end.
-const TABS: ReadonlyArray<{ href: string; label: string; live?: true }> = [
-  { href: "/studio", label: "Dashboard" },
-  { href: "/studio/content", label: "Content" },
-  { href: "/studio/live", label: "Live", live: true },
+const TABS: ReadonlyArray<{ href: string; label: PlainMessageKey; live?: true }> = [
+  { href: "/studio", label: "studio.nav.dashboard" },
+  { href: "/studio/content", label: "studio.nav.content" },
+  { href: "/studio/live", label: "studio.nav.live", live: true },
   // "Comment queue", not "Comments": the dashboard/analytics stat grids
   // already label a column "Comments", and the tab must not read as one.
-  { href: "/studio/comments", label: "Comment queue" },
-  { href: "/studio/analytics", label: "Analytics" },
-  { href: "/studio/channel", label: "Channel" },
-  { href: "/studio/ownership", label: "Ownership" },
+  { href: "/studio/comments", label: "studio.nav.comments" },
+  { href: "/studio/analytics", label: "studio.nav.analytics" },
+  { href: "/studio/channel", label: "studio.nav.channel" },
+  { href: "/studio/ownership", label: "studio.nav.ownership" },
   // Creator-owned watched-word lists (core 0172), applied to comments on their videos.
-  { href: "/studio/word-filters", label: "Word filters" },
+  { href: "/studio/word-filters", label: "studio.nav.wordFilters" },
 ];
 
 // StudioNav is the sticky row under the studio page title: the current-channel
@@ -39,6 +41,7 @@ const TABS: ReadonlyArray<{ href: string; label: string; live?: true }> = [
 // none (the tab strip still renders so the surfaces stay reachable — each shows
 // its own onboarding state).
 export function StudioNav() {
+  const t = useT();
   const pathname = usePathname();
   const liveAvailable = useLiveAvailable();
   // Keep the tab while the user is standing on it, so the strip never loses the
@@ -49,7 +52,7 @@ export function StudioNav() {
 
   return (
     <nav
-      aria-label="Studio sections"
+      aria-label={t("studio.nav.label")}
       className="sticky top-2 z-20 -mx-1 mb-6 flex flex-col gap-3 px-1"
     >
       <ChannelSwitcher />
@@ -68,7 +71,7 @@ export function StudioNav() {
                   : "text-fg-muted hover:bg-surface-muted hover:text-fg",
               )}
             >
-              {tab.label}
+              {t(tab.label)}
             </Link>
           );
         })}
@@ -78,6 +81,7 @@ export function StudioNav() {
 }
 
 function ChannelSwitcher() {
+  const t = useT();
   const router = useRouter();
   const { channels, currentChannel, currentHandle, setCurrentHandle } = useStudio();
 
@@ -90,12 +94,12 @@ function ChannelSwitcher() {
           aria-hidden="true"
           className="h-9 w-9 shrink-0 rounded-full bg-surface-muted"
         />
-        <span>No channel yet</span>
+        <span>{t("studio.nav.noChannel")}</span>
         <Link
           href="/studio/channel?create=1"
           className="focus-ring rounded-full font-semibold text-accent-text hover:underline"
         >
-          Create one
+          {t("studio.nav.createOne")}
         </Link>
       </div>
     );
@@ -146,7 +150,7 @@ function ChannelSwitcher() {
           <ChannelProtocolBadges channel={c} className="mt-0.5" />
         </span>
         {c.handle === currentHandle ? (
-          <span className="ml-auto text-[12px] font-semibold text-accent-text">Current</span>
+          <span className="ml-auto text-[12px] font-semibold text-accent-text">{t("studio.nav.current")}</span>
         ) : null}
       </span>
     ),
@@ -156,17 +160,17 @@ function ChannelSwitcher() {
   const owned = channels.filter((c) => c.role !== "editor");
   const shared = channels.filter((c) => c.role === "editor");
   const newChannel: DropdownItem = {
-    label: <span className="font-semibold text-accent-text">+ New channel</span>,
+    label: <span className="font-semibold text-accent-text">{t("studio.nav.newChannel")}</span>,
     onSelect: () => router.push("/studio/channel?create=1"),
   };
 
   const items: DropdownItem[] =
     owned.length > 0 && shared.length > 0
       ? [
-          { type: "label", label: "Your channels" },
+          { type: "label", label: t("studio.nav.yourChannels") },
           ...owned.map(channelRow),
           { type: "separator" },
-          { type: "label", label: "Shared with you" },
+          { type: "label", label: t("studio.nav.sharedWithYou") },
           ...shared.map(channelRow),
           { type: "separator" },
           newChannel,
@@ -182,7 +186,7 @@ function ChannelSwitcher() {
             <ChevronDownIcon size={16} className="shrink-0 text-fg-muted" aria-hidden="true" />
           </span>
         }
-        triggerLabel={`Switch channel (current: ${channel.display_name})`}
+        triggerLabel={t("studio.nav.switchChannel", { name: channel.display_name })}
         items={items}
         align="start"
         triggerClassName="max-w-full !rounded-2xl !px-2 !py-1.5"

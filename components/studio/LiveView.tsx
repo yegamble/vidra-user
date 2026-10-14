@@ -3,6 +3,7 @@
 import { useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
+import { useT } from "@/components/I18nProvider";
 import { LiveStreamsSection } from "@/components/LiveStreamsSection";
 import { TvIcon } from "@/components/icons";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -14,6 +15,7 @@ import { useStudio } from "./StudioContext";
 // create-live Modal. Scoped to the studio's current channel via context. A
 // `?new=1` deep link opens the create-live form (then the param is stripped).
 export function LiveView() {
+  const t = useT();
   const { channels, currentHandle } = useStudio();
   const router = useRouter();
   const params = useSearchParams();
@@ -28,11 +30,11 @@ export function LiveView() {
       <section className="flex flex-col gap-4">
         <EmptyState
           icon={<TvIcon size={24} />}
-          title="Create a channel to go live"
-          message="Live streams belong to a channel. Create one to get a stream key."
+          title={t("studio.live.noChannelTitle")}
+          message={t("studio.live.noChannelMessage")}
         />
         <div className="flex justify-center">
-          <LinkButton href="/studio/channel?create=1">Create a channel</LinkButton>
+          <LinkButton href="/studio/channel?create=1">{t("studio.channel.createCta")}</LinkButton>
         </div>
       </section>
     );
