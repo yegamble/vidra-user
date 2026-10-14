@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { useFormat, useT } from "@/components/I18nProvider";
 import { ListBoundary } from "@/components/admin/ListBoundary";
 import { PagedListShell } from "@/components/admin/PagedListShell";
 import { UserText } from "@/components/UserText";
@@ -11,7 +12,6 @@ import { Button } from "@/components/ui/Button";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { ApiError, api, errorMessage } from "@/lib/api";
 import type { ManagedComment } from "@/lib/api";
-import { relativeTime } from "@/lib/format";
 import { usePagedList } from "@/lib/use-paged-list";
 
 type View = "held" | "all";
@@ -29,6 +29,7 @@ export function CommentsQueueView() {
 }
 
 function Queue() {
+  const t = useT();
   const list = usePagedList<ManagedComment>({
     filterKeys: ["view"],
     load: (query, signal) =>
@@ -54,13 +55,13 @@ function Queue() {
       toolbar={
         <>
           <SegmentedControl<View>
-            label="Show"
+            label={t("studio.queue.show")}
             size="sm"
             value={view}
             onChange={(next) => list.setFilter("view", next === "all" ? "all" : undefined)}
             options={[
-              { value: "held", label: "Awaiting approval" },
-              { value: "all", label: "All comments" },
+              { value: "held", label: t("studio.queue.held") },
+              { value: "all", label: t("studio.queue.all") },
             ]}
           />
           {notice ? (
@@ -70,12 +71,12 @@ function Queue() {
           ) : null}
         </>
       }
-      errorMessage="Could not load comments."
-      emptyTitle={view === "held" ? "Nothing awaiting approval" : "No comments yet"}
+      errorMessage={t("studio.queue.loadError")}
+      emptyTitle={view === "held" ? t("studio.queue.emptyHeldTitle") : t("studio.queue.emptyAllTitle")}
       emptyMessage={
         view === "held"
-          ? "Comments on videos set to “Require approval” wait here for you."
-          : "Comments on your videos will appear here."
+          ? t("studio.queue.emptyHeldMessage")
+          : t("studio.queue.emptyAllMessage")
       }
     >
       <ul className="flex flex-col gap-3">
@@ -92,7 +93,7 @@ function Queue() {
               }
               onRejected={() => list.drop((x) => x.id !== c.id)}
               onChanged={() => {
-                setNotice("A comment changed since you loaded it. Review it again.");
+                setNotice(t("studio.queue.changed"));
                 list.reload();
               }}
             />
@@ -115,6 +116,8 @@ function QueueRow({
   // The comment was edited since the queue loaded (409): reload it.
   onChanged: () => void;
 }) {
+  const t = useT();
+  const { relativeTime } = useFormat();
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -143,15 +146,15 @@ function QueueRow({
         <span>{relativeTime(comment.created_at)}</span>
         <span aria-hidden>·</span>
         <span>
-          on{" "}
+          {t("studio.queue.on")}{" "}
           <Link
             href={`/videos/${comment.video_id}`}
             className="focus-ring rounded underline underline-offset-2 transition-colors hover:text-fg"
           >
-            {comment.video_title || "a video"}
+            {comment.video_title || t("studio.queue.aVideo")}
           </Link>
         </span>
-        {comment.held_for_review ? <Badge variant="warning">Pending approval</Badge> : null}
+        {comment.held_for_review ? <Badge variant="warning">{t("studio.queue.pending")}</Badge> : null}
       </div>
 
       <UserText variant="comment" text={comment.body} timestamps={false} className="mt-2 text-sm text-fg" />
@@ -170,13 +173,13 @@ function QueueRow({
                   void run(async () => {
                     await api.deleteComment(comment.id);
                     onRejected();
-                  }, "Could not reject this comment.")
+                  }, t("studio.queue.rejectError"))
                 }
               >
-                {busy ? "Rejecting…" : "Confirm reject"}
+                {busy ? t("studio.queue.rejecting") : t("studio.queue.confirmReject")}
               </Button>
               <Button variant="secondary" size="sm" disabled={busy} onClick={() => setConfirming(false)}>
-                Cancel
+                {t("studio.queue.cancel")}
               </Button>
             </>
           ) : (
@@ -189,13 +192,13 @@ function QueueRow({
                     // Approve exactly the version shown (409 if edited since).
                     onApproved(await api.approveComment(comment.video_id, comment.id, comment.updated_at));
                     setBusy(false);
-                  }, "Could not approve this comment.")
+                  }, t("studio.queue.approveError"))
                 }
               >
-                Approve
+                {t("studio.queue.approve")}
               </Button>
               <Button variant="secondary" size="sm" disabled={busy} onClick={() => setConfirming(true)}>
-                Reject
+                {t("studio.queue.reject")}
               </Button>
             </>
           )}

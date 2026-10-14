@@ -1,27 +1,38 @@
 "use client";
 
+import { useFormat, useT } from "@/components/I18nProvider";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
 import { api } from "@/lib/api";
 import type { PlaybackShare, PlaybackStatsResponse } from "@/lib/api";
-import { formatCount, formatDuration } from "@/lib/format";
+import { formatDuration } from "@/lib/format";
+import type { Translate } from "@/lib/i18n";
 import { useApiResource } from "@/lib/use-api-resource";
 
-const DEVICE_LABEL: Record<string, string> = {
-  mobile: "Mobile",
-  desktop: "Desktop",
-  tv: "TV",
-  other: "Other",
-};
+// Known device keys; an unknown key falls back to the raw key.
+function deviceLabel(t: Translate, key: string): string {
+  switch (key) {
+    case "mobile":
+      return t("studio.playback.device.mobile");
+    case "desktop":
+      return t("studio.playback.device.desktop");
+    case "tv":
+      return t("studio.playback.device.tv");
+    case "other":
+      return t("studio.playback.device.other");
+    default:
+      return key;
+  }
+}
 
 function percent(share: number): string {
   return `${Math.round(share * 100)}%`;
 }
 
-function watchTime(seconds: number): string {
-  if (seconds < 3600) return `${Math.round(seconds / 60)} min`;
-  return `${(seconds / 3600).toFixed(1)} h`;
+function watchTime(t: Translate, seconds: number): string {
+  if (seconds < 3600) return t("studio.playback.minutes", { n: Math.round(seconds / 60) });
+  return t("studio.playback.hours", { n: (seconds / 3600).toFixed(1) });
 }
 
 // PlaybackStatsPanel — the last 30 days of anonymous playback aggregates for one
@@ -29,6 +40,8 @@ function watchTime(seconds: number): string {
 // the audience retention curve and the device split. The numbers are folded
 // from anonymous beacons server-side; nothing here is per viewer.
 export function PlaybackStatsPanel({ videoId }: { videoId: string }) {
+  const t = useT();
+  const { formatCount } = useFormat();
   const { status, data, retry } = useApiResource<PlaybackStatsResponse>(
     (signal) => api.getVideoPlaybackStats(videoId, signal),
     [videoId],
@@ -37,14 +50,14 @@ export function PlaybackStatsPanel({ videoId }: { videoId: string }) {
   if (status === "loading") {
     return (
       <div className="flex justify-center py-8">
-        <Spinner label="Loading playback stats" />
+        <Spinner label={t("studio.playback.loading")} />
       </div>
     );
   }
   if (status === "error" || !data) {
     return (
       <ErrorState
-        message="Could not load this video's playback stats."
+        message={t("studio.playback.error")}
         onRetry={retry}
       />
     );
@@ -52,21 +65,21 @@ export function PlaybackStatsPanel({ videoId }: { videoId: string }) {
   if (data.plays === 0 && data.watch_seconds === 0) {
     return (
       <EmptyState
-        title="No playback data yet"
-        message="Watch time and retention appear after viewers play this video."
+        title={t("studio.playback.emptyTitle")}
+        message={t("studio.playback.emptyMessage")}
       />
     );
   }
 
   return (
-    <section aria-label="Playback stats" className="flex flex-col gap-4">
+    <section aria-label={t("studio.playback.label")} className="flex flex-col gap-4">
       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <Tile label="Watch time · 30d" value={watchTime(data.watch_seconds)} />
+        <Tile label={t("studio.playback.watchTime")} value={watchTime(t, data.watch_seconds)} />
         <Tile
-          label="Avg view duration"
+          label={t("studio.playback.avgDuration")}
           value={formatDuration(data.avg_view_duration_seconds)}
         />
-        <Tile label="Plays · 30d" value={formatCount(data.plays)} />
+        <Tile label={t("studio.playback.plays")} value={formatCount(data.plays)} />
       </dl>
       {data.retention && data.retention.length > 0 ? (
         <RetentionChart
@@ -76,8 +89,7 @@ export function PlaybackStatsPanel({ videoId }: { videoId: string }) {
       ) : null}
       <DeviceSplit devices={data.devices} />
       <p className="text-xs text-fg-muted">
-        Aggregated from anonymous playback samples. No IP address, device
-        identifier or viewer is stored, and country is not collected.
+        {t("studio.playback.note")}
       </p>
     </section>
   );
@@ -105,6 +117,7 @@ export function RetentionChart({
   retention: number[];
   durationSeconds: number;
 }) {
+  const t = useT();
   const width = 300;
   const height = 100;
   const n = retention.length;
@@ -122,11 +135,11 @@ export function RetentionChart({
 
   return (
     <figure className="flex flex-col gap-1.5">
-      <h3 className="text-[13px] font-semibold text-fg">Audience retention</h3>
+      <h3 className="text-[13px] font-semibold text-fg">{t("studio.playback.retention")}</h3>
       <svg
         viewBox={`0 0 ${width} ${height}`}
         role="img"
-        aria-label={`Audience retention: ${first} watching at the start, ${last} at the end`}
+        aria-label={t("studio.playback.retentionLabel", { first, last })}
         preserveAspectRatio="none"
         className="h-32 w-full rounded-xl border border-border-subtle bg-surface"
       >
@@ -153,7 +166,7 @@ export function RetentionChart({
       <figcaption className="flex justify-between text-xs tabular-nums text-fg-muted">
         <span>0:00 · {first}</span>
         <span>
-          {durationSeconds > 0 ? formatDuration(durationSeconds) : "End"} ·{" "}
+          {durationSeconds > 0 ? formatDuration(durationSeconds) : t("studio.playback.end")} ·{" "}
           {last}
         </span>
       </figcaption>
@@ -162,19 +175,20 @@ export function RetentionChart({
 }
 
 function DeviceSplit({ devices }: { devices: PlaybackShare[] }) {
+  const t = useT();
   if (devices.length === 0) return null;
   return (
     <div className="flex flex-col gap-2">
-      <h3 className="text-[13px] font-semibold text-fg">Devices</h3>
+      <h3 className="text-[13px] font-semibold text-fg">{t("studio.playback.devices")}</h3>
       <ul className="flex flex-col gap-2">
         {devices.map((d) => (
           <li key={d.key} className="flex items-center gap-3 text-sm">
             <span className="w-20 shrink-0 text-fg">
-              {DEVICE_LABEL[d.key] ?? d.key}
+              {deviceLabel(t, d.key)}
             </span>
             <span
               role="img"
-              aria-label={`${DEVICE_LABEL[d.key] ?? d.key} ${percent(d.share)} of watch time`}
+              aria-label={t("studio.playback.deviceShare", { device: deviceLabel(t, d.key), percent: percent(d.share) })}
               className="h-2 flex-1 overflow-hidden rounded-full bg-surface-strong"
             >
               <span

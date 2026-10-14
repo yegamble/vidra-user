@@ -1413,6 +1413,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/import/peertube/follows/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Status of a background follow import
+         * @description Counts per outcome for the follow import started by POST /api/v1/me/import/peertube (its follows_job_id). Only the caller's own import is visible; any other id is 404.
+         */
+        get: operations["getPeerTubeFollowImport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/import/peertube": {
         parameters: {
             query?: never;
@@ -1424,7 +1444,7 @@ export interface paths {
         put?: never;
         /**
          * Import the metadata of a PeerTube user-export archive
-         * @description Accepts a PeerTube (>= 6.1) user-export zip as multipart field `archive` and imports its METADATA into the caller's own account: channels (created when the handle is free and valid here; a handle the caller already owns counts as existing, another owner's is skipped), regular playlists (matched by title, so a re-import never duplicates; items are not resolved and are counted in playlist_items_skipped), and the autoplay-next setting. Videos, likes, dislikes, comments, watch history, blocklists, followers and following are NOT imported yet and are counted under skipped_sections. Synchronous: the work is bounded and touches no network or media. The body cap for this route is PEERTUBE_IMPORT_MAX_SIZE, which defaults to the global HTTP body limit (8 MB), enough for an export trimmed to its peertube/*.json entries; an instance that raises it also accepts the full export including its video files. A Content-Length is required (411 without one). The upload is streamed to a temporary file that is always removed, and only the peertube/*.json entries are ever read; media entries are never opened. The archive is refused whole on traversal, symlink, encrypted, duplicate or oversize JSON entries, or an oversized or ambiguous central directory (more than 20000 entries or 4 MiB). An upload that stops sending for 60 s is abandoned with 408. 403 feature_disabled when user_import_enabled is off. At most 3 imports per user per hour. At most 50 channels may be owned after an import, existing ones included. If the import stops part-way on a server error, the answer is the standard error envelope with an added `summary` (PeerTubeImportSummary) of what was done first; rows already created are kept and re-uploading the same archive is safe.
+         * @description Accepts a PeerTube (>= 6.1) user-export zip as multipart field `archive` and imports its METADATA into the caller's own account: channels (created when the handle is free and valid here; a handle the caller already owns counts as existing, another owner's is skipped), regular playlists (matched by title, so a re-import never duplicates; items are not resolved and are counted in playlist_items_skipped), and the autoplay-next setting. Videos, likes, dislikes, comments, watch history, blocklists and followers are NOT imported yet and are counted under skipped_sections. The accounts in following.json (up to 1000) are queued and followed in the background through the same path as POST /me/remote-follows; the response carries follows_job_id. Synchronous: the work is bounded and touches no network or media. The body cap for this route is PEERTUBE_IMPORT_MAX_SIZE, which defaults to the global HTTP body limit (8 MB), enough for an export trimmed to its peertube/*.json entries; an instance that raises it also accepts the full export including its video files. A Content-Length is required (411 without one). The upload is streamed to a temporary file that is always removed, and only the peertube/*.json entries are ever read; media entries are never opened. The archive is refused whole on traversal, symlink, encrypted, duplicate or oversize JSON entries, or an oversized or ambiguous central directory (more than 20000 entries or 4 MiB). An upload that stops sending for 60 s is abandoned with 408. 403 feature_disabled when user_import_enabled is off. At most 3 imports per user per hour. At most 50 channels may be owned after an import, existing ones included. If the import stops part-way on a server error, the answer is the standard error envelope with an added `summary` (PeerTubeImportSummary) of what was done first; rows already created are kept and re-uploading the same archive is safe.
          */
         post: operations["importPeerTubeArchive"];
         delete?: never;
@@ -9778,6 +9798,15 @@ export interface components {
         };
         /** @description What POST /api/v1/me/import/peertube created and skipped. */
         PeerTubeImportSummary: {
+            /** @description Accounts from following.json queued to be followed in the background (name@host handles only; at most 1000 pending per user and 20 per host). Handles not queued (duplicate, malformed, over the cap) are counted in skipped_sections.following. */
+            follows_queued: number;
+            /** @description Handles held back because federation is disabled on this instance. */
+            follows_skipped_federation: number;
+            /**
+             * Format: uuid
+             * @description Poll GET /api/v1/me/import/peertube/follows/{id}; null when nothing was queued.
+             */
+            follows_job_id: string | null;
             channels_created: number;
             channels_existing: number;
             /** @description Channels whose PeerTube name was rewritten into the handle alphabet ([A-Za-z0-9_], 3-30 characters; other characters become "_", with a numeric "_N" suffix on a collision). Playlists follow their channel. */
@@ -9795,6 +9824,23 @@ export interface components {
             skipped_sections: {
                 [key: string]: number;
             };
+        };
+        /** @description Progress of one background follow import. total is the sum of the other counts; the import is finished when pending is 0. */
+        PeerTubeFollowImportStatus: {
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            created_at: string;
+            total: number;
+            /** @description Waiting or being retried with backoff. */
+            pending: number;
+            /** @description Follow requested (the remote may still accept or reject it). */
+            done: number;
+            /** @description Could not be resolved (unreachable after the retry limit, or not followable from this instance). */
+            failed: number;
+            skipped_federation: number;
+            /** @description A local actor or a handle that cannot be followed. */
+            skipped_invalid: number;
         };
         /** @description What POST /api/v1/me/import re-created (safe subsets only) and what it skipped. */
         AccountImportSummary: {
@@ -15625,6 +15671,46 @@ export interface operations {
             };
             /** @description Not a valid vidra account archive. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getPeerTubeFollowImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current counts. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PeerTubeFollowImportStatus"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such import for this caller. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -25994,7 +26080,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Invalid target (neither handle nor actor_url, or both), a target on this instance (follow local channels via POST /channels/{handle}/follow), or a handle/actor URL that could not be resolved to a remote channel. */
+            /** @description Invalid target (neither handle nor actor_url, or both), a target on this instance (follow local channels via POST /channels/{handle}/follow), or a handle/actor URL that could not be resolved to a remote channel. A target this instance does not federate with gets the same answer as an unresolvable one. */
             422: {
                 headers: {
                     [name: string]: unknown;
