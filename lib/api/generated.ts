@@ -9780,7 +9780,12 @@ export interface components {
         PeerTubeImportSummary: {
             channels_created: number;
             channels_existing: number;
-            /** @description Invalid handle, reserved, owned by someone else, or over the channel limit. */
+            /** @description Channels whose PeerTube name was rewritten into the handle alphabet ([A-Za-z0-9_], 3-30 characters; other characters become "_", with a numeric "_N" suffix on a collision). Playlists follow their channel. */
+            channels_mapped: {
+                from: string;
+                to: string;
+            }[];
+            /** @description Empty name, reserved, owned by someone else, or over the channel limit. */
             channels_skipped: number;
             playlists_created: number;
             playlists_existing: number;
