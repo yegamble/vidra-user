@@ -241,6 +241,15 @@ describe("VideoPlayer shell", () => {
     expect(fake.tracks.map((track) => track.mode)).toEqual(["hidden", "disabled", "hidden"]);
   });
 
+  it("toggles the Stats for nerds overlay from Settings and closes it with Escape", () => {
+    render(<Harness />);
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Stats for nerds" }));
+    expect(screen.getByRole("group", { name: "Playback statistics" })).toBeTruthy();
+    fireEvent.keyDown(screen.getByRole("button", { name: "Close statistics" }), { key: "Escape" });
+    expect(screen.queryByRole("group", { name: "Playback statistics" })).toBeNull();
+  });
+
   it("turns captions on by default when the user asked for it", async () => {
     const fake = fakeTextTracks(["English"]);
     vi.spyOn(HTMLMediaElement.prototype, "textTracks", "get").mockReturnValue(fake.list);

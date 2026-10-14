@@ -29,6 +29,7 @@ import {
   type EngineId,
   type EngineSources,
 } from "@/lib/player-engine";
+import type { StatsEngine } from "@/lib/player-stats";
 import { finalFetchUrl, hlsErrorClass } from "@/lib/playback-qoe";
 import {
   playbackMasterUrl,
@@ -178,6 +179,8 @@ export interface HlsPlayback {
    * when it lands, finds the manifest already in hand.
    */
   dashUrl: string | null;
+  /** The live hls.js engine's stats slice (levels/bandwidth), or null when hls.js is not the engine. */
+  statsEngine?: () => StatsEngine | null;
 }
 
 /**
@@ -783,6 +786,7 @@ function usePlaybackEngine(
     pending: pendingQuality !== null,
     // Advertised, never played — see HlsPlayback.dashUrl.
     dashUrl: session?.dash_url ?? null,
+    statsEngine: () => hlsRef.current,
     setQuality: (quality: QualitySelection) => {
       const hls = hlsRef.current;
       if (!hls) return;

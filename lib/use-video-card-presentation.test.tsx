@@ -38,6 +38,7 @@ vi.mock("@/lib/device-preferences", () => ({
   useRestrictedMode: () => mocks.restricted,
 }));
 
+import { hydrateContentPreferences, resetContentPreferences } from "@/lib/content-preferences";
 import {
   useVideoCardPresentation,
   type VideoCardPresentationOptions,
@@ -73,6 +74,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  resetContentPreferences();
 });
 
 describe("routing and poster by federation", () => {
@@ -108,6 +110,50 @@ describe("routing and poster by federation", () => {
 
   it("no thumbnail means no poster", () => {
     expect(presentation({ has_thumbnail: false }).posterSrc).toBeNull();
+  });
+});
+
+describe("per-flag sensitive-content treatment", () => {
+  function withOverrides(policies: Record<string, string>) {
+    hydrateContentPreferences({
+      sensitive_flag_policies: policies as Record<string, "hide" | "warn" | "blur" | "display">,
+      preferred_languages: [],
+    });
+  }
+
+  it("a flag the viewer blurs blurs the tile even when their base policy displays", () => {
+    mocks.policy = "display";
+    withOverrides({ violent: "blur" });
+    const p = presentation({ is_sensitive: true, sensitive_flags: ["violent"] });
+    expect(p.blurSensitive).toBe(true);
+    expect(p.markSensitive).toBe(true);
+  });
+
+  it("a flag the viewer displays lifts a base blur for that kind only", () => {
+    mocks.policy = "blur";
+    withOverrides({ sex: "display" });
+    expect(presentation({ is_sensitive: true, sensitive_flags: ["sex"] }).blurSensitive).toBe(false);
+    expect(presentation({ is_sensitive: true, sensitive_flags: ["violent"] }).blurSensitive).toBe(true);
+  });
+
+  it("several flags: the strictest of the viewer's choices wins", () => {
+    mocks.policy = "display";
+    withOverrides({ violent: "warn", sex: "blur" });
+    // warn is stricter than blur in the resolved order, so the tile is badged
+    // (warn) rather than blurred, and the watch page would gate it.
+    const p = presentation({ is_sensitive: true, sensitive_flags: ["violent", "sex"] });
+    expect(p.blurSensitive).toBe(false);
+    expect(p.markSensitive).toBe(true);
+    withOverrides({ violent: "display", sex: "blur" });
+    expect(presentation({ is_sensitive: true, sensitive_flags: ["violent", "sex"] }).blurSensitive).toBe(true);
+  });
+
+  it("an unflagged sensitive video ignores the per-flag overrides", () => {
+    mocks.policy = "warn";
+    withOverrides({ violent: "blur" });
+    const p = presentation({ is_sensitive: true, sensitive_flags: [] });
+    expect(p.blurSensitive).toBe(false);
+    expect(p.markSensitive).toBe(true);
   });
 });
 

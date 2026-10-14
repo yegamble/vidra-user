@@ -19,6 +19,7 @@ vi.mock("@/components/FollowButton", () => ({
     <button>{initialFollowing ? "Following" : "Follow"}</button>,
 }));
 vi.mock("@/components/ChannelLiveBadge", () => ({ ChannelLiveBadge: () => null }));
+vi.mock("@/components/ChannelUpcomingBadge", () => ({ ChannelUpcomingBadge: () => null }));
 vi.mock("@/components/MessageButton", () => ({ MessageButton: () => null }));
 vi.mock("@/components/SupportButton", () => ({ SupportButton: () => null }));
 

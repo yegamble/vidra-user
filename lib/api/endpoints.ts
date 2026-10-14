@@ -103,6 +103,7 @@ import type {
   LiveTerminationResult,
   TerminateLiveStreamRequest,
   LivePublicListResponse,
+  LiveUpcomingListResponse,
   UpdateLiveStreamRequest,
   MessageListResponse,
   Message,
@@ -154,7 +155,9 @@ import type {
   CreatePlaylistRequest,
   NotificationListResponse,
   NotificationPrefsResponse,
+  ContentPreferences,
   PlayerSettings,
+  UpdateContentPreferencesRequest,
   UpdatePlayerSettingsRequest,
   Playlist,
   QuarantinedVideoListResponse,
@@ -191,6 +194,8 @@ import type {
   VideoFile,
   VideoRating,
   VideoStatsResponse,
+  PlaybackStatsResponse,
+  PlaybackBeaconRequest,
   VideoSearchResponse,
   RemoteInteractionResolution,
   AccountSearchResponse,
@@ -204,6 +209,10 @@ import type {
   SuggestionBanResponse,
   WatchedWord,
   WatchedWordListResponse,
+  WatchedWordList,
+  WatchedWordListsPage,
+  CreateWatchedWordListRequest,
+  UpdateWatchedWordListRequest,
   WatchedWordMatchListResponse,
   WatchedWordMatchStatusFilter,
   ResolveWatchedWordMatchRequest,
@@ -284,6 +293,34 @@ export interface JobRunListParams {
   limit?: number;
   offset?: number;
 }
+
+/**
+ * Named watched-word lists (core 0172) exist at two scopes with the same shape:
+ * `/admin/watched-word-lists` (instance lists; moderator/admin) and
+ * `/me/watched-word-lists` (a creator's own lists, applied to comments on their
+ * videos). One factory so the two can never drift apart.
+ */
+function watchedWordListEndpoints(base: string) {
+  const one = (id: string) => `${base}/${encodeURIComponent(id)}`;
+  return {
+    /** GET — one page of lists, default list first; word_count only (no words). */
+    list: (params: PageParams = {}, signal?: AbortSignal) =>
+      apiRequest<WatchedWordListsPage>(base, { query: pageQuery(params), signal }),
+    /** GET — one list WITH its words (the default list's words are paged elsewhere). */
+    get: (id: string, signal?: AbortSignal) => apiRequest<WatchedWordList>(one(id), { signal }),
+    /** POST — create a list (409 on a name already used in this scope). */
+    create: (body: CreateWatchedWordListRequest) =>
+      apiRequest<WatchedWordList>(base, { method: "POST", body }),
+    /** PATCH — rename / change action; `words` REPLACES the terms when present. */
+    update: (id: string, body: UpdateWatchedWordListRequest) =>
+      apiRequest<WatchedWordList>(one(id), { method: "PATCH", body }),
+    /** DELETE — remove a list and its terms (409 for the default list). */
+    remove: (id: string) => apiRequest<void>(one(id), { method: "DELETE" }),
+  };
+}
+
+export const adminWatchedWordLists = watchedWordListEndpoints("/api/v1/admin/watched-word-lists");
+export const myWatchedWordLists = watchedWordListEndpoints("/api/v1/me/watched-word-lists");
 
 /** Typed wrappers for the public vidra-core read endpoints. */
 export const api = {
@@ -683,6 +720,16 @@ export const api = {
     apiRequest<VideoStatsResponse>(`/api/v1/videos/${encodeURIComponent(id)}/stats`, { signal }),
 
   /**
+   * GET /api/v1/videos/{id}/playback-stats — watch time, retention curve and
+   * device split for a video (auth; owner or channel editor, else 404).
+   */
+  getVideoPlaybackStats: (id: string, signal?: AbortSignal) =>
+    apiRequest<PlaybackStatsResponse>(
+      `/api/v1/videos/${encodeURIComponent(id)}/playback-stats`,
+      { signal },
+    ),
+
+  /**
    * GET /api/v1/channels/{handle}/stats — aggregated creator statistics for a
    * channel (auth, owner only; a non-owner/unknown handle is 404).
    */
@@ -758,6 +805,24 @@ export const api = {
    */
   updatePlayerSettings: (patch: UpdatePlayerSettingsRequest) =>
     apiRequest<PlayerSettings>("/api/v1/me/player-settings", {
+      method: "PUT",
+      body: patch,
+    }),
+
+  /**
+   * GET /api/v1/me/content-preferences — the caller's per-flag sensitive-content
+   * policy overrides (auth). A flag with no entry inherits the base policy.
+   */
+  getContentPreferences: (signal?: AbortSignal) =>
+    apiRequest<ContentPreferences>("/api/v1/me/content-preferences", { signal }),
+
+  /**
+   * PUT /api/v1/me/content-preferences — MERGE update (auth): the supplied
+   * sensitive_flag_policies REPLACES the overrides (an empty-string value
+   * inherits); an omitted field is kept. 400 on an unknown flag or policy.
+   */
+  updateContentPreferences: (patch: UpdateContentPreferencesRequest) =>
+    apiRequest<ContentPreferences>("/api/v1/me/content-preferences", {
       method: "PUT",
       body: patch,
     }),
@@ -1127,6 +1192,20 @@ export const api = {
    * contract deliberately carries NO viewer/concurrent count and NO thumbnail
    * (neither exists server-side yet — W4 dependencies), so neither is surfaced.
    */
+  /**
+   * GET /api/v1/live/upcoming — PUBLIC, not-yet-live streams with a planned
+   * start, soonest first. `channel` (a handle) narrows it to one channel for the
+   * channel page. Auth optional (a muted/blocked owner drops out for the viewer).
+   */
+  listUpcomingLiveStreams: (
+    params: PageParams & { channel?: string } = {},
+    signal?: AbortSignal,
+  ) =>
+    apiRequest<LiveUpcomingListResponse>("/api/v1/live/upcoming", {
+      query: { ...pageQuery(params), channel: params.channel },
+      signal,
+    }),
+
   listLivePublicStreams: (
     params: PageParams = {},
     signal?: AbortSignal,
@@ -2142,6 +2221,17 @@ export const api = {
   recordVideoView: (id: string) =>
     apiRequest<void>(`/api/v1/videos/${encodeURIComponent(id)}/view`, {
       method: "POST",
+    }),
+
+  /**
+   * POST /api/v1/videos/{id}/playback — anonymous watch-time sample (about every
+   * 10 s of playback). Carries no identifier; best-effort, callers swallow errors.
+   */
+  recordPlaybackBeacon: (id: string, body: PlaybackBeaconRequest, opts?: { keepalive?: boolean }) =>
+    apiRequest<void>(`/api/v1/videos/${encodeURIComponent(id)}/playback`, {
+      method: "POST",
+      body,
+      keepalive: opts?.keepalive,
     }),
 
   /** DELETE /api/v1/me/history/{id} — remove one video from history (auth, idempotent). */

@@ -25,10 +25,18 @@ import {
   resumableUpload,
   videoThumbnailUrl,
 } from "@/lib/api";
-import type { Channel, CommentsPolicy, Video, VideoConfigResponse, VideoPrivacy } from "@/lib/api";
+import type {
+  Channel,
+  CommentsPolicy,
+  SensitiveFlag,
+  Video,
+  VideoConfigResponse,
+  VideoPrivacy,
+} from "@/lib/api";
 import { watchPath } from "@/lib/watch-path";
 import { VIDEO_PRIVACY_CHOICES } from "@/lib/video-privacy";
 
+import { SensitiveFlagsField } from "./SensitiveFlagsField";
 import { SupportTextField } from "./SupportTextField";
 import { TransferOwnershipDialog } from "./TransferOwnershipDialog";
 
@@ -101,6 +109,7 @@ export function VideoRow({
   // The paired creator content-warning text (sensitive_reason, ≤280 chars). Like
   // the flag above, the authoritative value arrives with the detail fetch.
   const [sensitiveReason, setSensitiveReason] = useState(video.sensitive_reason ?? "");
+  const [sensitiveFlags, setSensitiveFlags] = useState<SensitiveFlag[]>(video.sensitive_flags ?? []);
   // Per-video publish policies (config-parity W9); like tags/sensitive, the
   // authoritative values arrive with the detail fetch (list rows omit them).
   const [commentsPolicy, setCommentsPolicy] = useState<CommentsPolicy>(
@@ -174,7 +183,11 @@ export function VideoRow({
         // the real current value (list rows omit it). The paired content-warning
         // rides with it — cleared (empty string) when the flag is off.
         ...(detail
-          ? { is_sensitive: sensitive, sensitive_reason: sensitive ? sensitiveReason.trim() : "" }
+          ? {
+              is_sensitive: sensitive,
+              sensitive_reason: sensitive ? sensitiveReason.trim() : "",
+              sensitive_flags: sensitive ? sensitiveFlags : [],
+            }
           : {}),
         // Same rule for the per-video publish policies (W9).
         ...(detail
@@ -208,6 +221,7 @@ export function VideoRow({
     setPrivacy(video.privacy ?? "private");
     setSensitive(isSensitiveVideo(detail ?? video));
     setSensitiveReason((detail ?? video).sensitive_reason ?? "");
+    setSensitiveFlags((detail ?? video).sensitive_flags ?? []);
     setCommentsPolicy((detail ?? video).comments_policy ?? "enabled");
     setDownloadEnabled((detail ?? video).download_enabled !== false);
     setPublishAt(toLocalInputValue((detail ?? video).publish_at));
@@ -233,6 +247,7 @@ export function VideoRow({
       setPrivacy(full.privacy ?? "private");
       setSensitive(isSensitiveVideo(full));
       setSensitiveReason(full.sensitive_reason ?? "");
+      setSensitiveFlags(full.sensitive_flags ?? []);
       setCommentsPolicy(full.comments_policy ?? "enabled");
       setDownloadEnabled(full.download_enabled !== false);
       setPublishAt(toLocalInputValue(full.publish_at));
@@ -347,6 +362,9 @@ export function VideoRow({
         ) : null}
         {/* Paired content-warning, revealed only while the flag is on; clearing
             it (empty) removes the reason on save. */}
+        {detail && sensitive ? (
+          <SensitiveFlagsField value={sensitiveFlags} onChange={setSensitiveFlags} disabled={busy} />
+        ) : null}
         {detail && sensitive ? (
           <Input
             label={t("studio.edit.warning")}

@@ -335,7 +335,7 @@ export interface paths {
         put?: never;
         /**
          * Log in
-         * @description Verifies credentials and returns an access token. The account is identified by EXACTLY ONE of `identifier` (an email address or a username) or the legacy `email` field. When an `identifier` matches both one account's email and another account's username, the EMAIL always wins — the owner of an address is the only account that string can reach, so a lookalike username can never shadow someone else's sign-in. Unknown account and wrong password are reported identically (401) to prevent account enumeration. Browser cookie mode also sets `vidra_video_access`, an HttpOnly, SameSite=Lax access-token cookie scoped to `/api/v1/videos/`, Secure on HTTPS, with the access-token TTL. It authorizes only private or unpublished video GET/HEAD reads, never mutations; public playback ignores it. Refresh renews it; logout, logout-all and invalid-cookie refresh clear it. With `cookie_mode: true` (or an existing `vidra_refresh` cookie) the refresh token is delivered as an httpOnly `vidra_refresh` cookie (Path=/api/v1/auth, SameSite=Lax, Secure on https instances) instead of in the response body. When the account has two-factor authentication enabled, valid credentials return `{mfa_required: true, mfa_token}` with NO session tokens — complete the login at POST /api/v1/auth/mfa/challenge within 5 minutes.
+         * @description Verifies credentials and returns an access token. The account is identified by EXACTLY ONE of `identifier` (an email address or a username) or the legacy `email` field. When an `identifier` matches both one account's email and another account's username, the EMAIL always wins — the owner of an address is the only account that string can reach, so a lookalike username can never shadow someone else's sign-in. Unknown account and wrong password are reported identically (401) to prevent account enumeration. So is a temporarily LOCKED account: after repeated failures from one network prefix (IPv4 /24, IPv6 /48), or a larger number across all networks, sign-in is refused with the same 401 body, the same status and no Retry-After — even with the right password — until the backoff expires or an administrator clears it. Browser cookie mode also sets `vidra_video_access`, an HttpOnly, SameSite=Lax access-token cookie scoped to `/api/v1/videos/`, Secure on HTTPS, with the access-token TTL. It authorizes only private or unpublished video GET/HEAD reads, never mutations; public playback ignores it. Refresh renews it; logout, logout-all and invalid-cookie refresh clear it. With `cookie_mode: true` (or an existing `vidra_refresh` cookie) the refresh token is delivered as an httpOnly `vidra_refresh` cookie (Path=/api/v1/auth, SameSite=Lax, Secure on https instances) instead of in the response body. When the account has two-factor authentication enabled, valid credentials return `{mfa_required: true, mfa_token}` with NO session tokens — complete the login at POST /api/v1/auth/mfa/challenge within 5 minutes.
          */
         post: operations["login"];
         delete?: never;
@@ -694,6 +694,66 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List recognised devices
+         * @description The browsers and devices the account has signed in from, most recent first, and whether the new-device sign-in email is on. A device is a long-lived random `vidra_device` cookie (httpOnly, Path=/api/v1/auth) bound to the browser family and OS; only a hash and a coarse label such as "Chrome on macOS" are stored, never an IP address. `current` marks the device making this request.
+         */
+        get: operations["listRecognisedDevices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/devices/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Forget a recognised device
+         * @description Removes the record, so the next sign-in from that device is treated as new (and mails the account, unless that is turned off). It does NOT end sessions: sessions carry no device link, so use sign out of all devices for that. Audited as `auth.device.forget`.
+         */
+        delete: operations["forgetRecognisedDevice"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/security-prefs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Turn the new-device sign-in email on or off
+         * @description The email is on by default. At most one such email is sent to an account per hour, and an account with no recognised device yet never gets one (its first sign-in just records).
+         */
+        patch: operations["updateSecurityPrefs"];
         trace?: never;
     };
     "/api/v1/auth/mfa": {
@@ -1906,6 +1966,46 @@ export interface paths {
          * @description Engagement totals (views, likes, dislikes, comments) plus a 30-day daily-views series (zero-filled, oldest first, UTC days) for one video. Owner only: a non-owner or unknown id is reported as 404 so the video's existence is not leaked.
          */
         get: operations["getVideoStats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/videos/{id}/playback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Anonymous watch-time beacon
+         * @description One periodic playback sample (about every 10 s while playing). Folded into the video's daily aggregates; no IP address, User-Agent, session or viewer id is stored. Device class and OS family are bucketed from the User-Agent server-side and the raw value is discarded. Rate limited per client and video; the owner's own plays are ignored; a play may be marked started once per client per 10 minutes. 204 on success, 404 for a video that is not published or visible.
+         */
+        post: operations["recordVideoPlayback"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/videos/{id}/playback-stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Watch-time, retention and device analytics for a video (owner or channel editor)
+         * @description Last 30 days of playback aggregates: plays, watch seconds, average view duration, a 20-bucket audience retention curve (omitted when the video duration is unknown or nothing was watched), a device-class and OS split and a daily series. Country is not available (no GeoIP in core). A non-owner/non-editor or unknown id is reported as 404.
+         */
+        get: operations["getVideoPlaybackStats"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3282,6 +3382,30 @@ export interface paths {
          * @description Applies a partial preference update: only the types present in the body are changed, in `prefs` (in-app) and/or `email`. Disabling a type suppresses new notifications of that type at creation time (existing notifications are unaffected). Email rides the in-app notification: it is queued only when that notification is created, so an in-app type that is off sends no email either, and it is delivered in the background, only to a verified address, while the instance has mail configured. An unknown type, or an email switch for a type without email delivery, is 422 and nothing is written. Returns the full updated maps.
          */
         patch: operations["updateNotificationPrefs"];
+        trace?: never;
+    };
+    "/api/v1/me/content-preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the caller's content preferences
+         * @description The signed-in viewer's per-flag sensitive-content policy overrides, layered on their own sensitive_content_policy (else the instance policy) and their preferred feed languages. A flag with no entry inherits that base policy. Always 200.
+         */
+        get: operations["getContentPreferences"];
+        /**
+         * Update the caller's content preferences
+         * @description Merge-update: sensitive_flag_policies replaces the overrides wholesale (a flag set to an empty string, or omitted, inherits the base policy) and preferred_languages replaces the language list; an omitted field is kept. Unknown flag, policy or language, or more than 10 languages -> 400.
+         */
+        put: operations["updateContentPreferences"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/me/player-settings": {
@@ -6319,6 +6443,26 @@ export interface paths {
         patch: operations["updateUser"];
         trace?: never;
     };
+    "/api/v1/admin/users/{id}/login-lockout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Clear an account's failed-login lockout (admin)
+         * @description Drops every failed-login counter and lock for the account, so the holder can sign in again immediately. Admin-only; audited as `admin.user.login_lockout_clear` with the target named. Idempotent: 204 whether or not a lockout existed. No password step-up — it only removes a brake.
+         */
+        delete: operations["adminClearLoginLockout"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/users/{id}/mfa": {
         parameters: {
             query?: never;
@@ -7163,6 +7307,8 @@ export interface components {
             state?: "draft" | "processing" | "scheduled" | "quarantined" | "transcoding" | "published" | "failed";
             /** @description Whether the owner flagged the video as sensitive content. Always present; false on remote cards (no local flag exists for them). When the instance sensitive_content_policy is "hide", flagged videos are excluded from the public feed and search server-side; under warn/blur the frontend applies the matching presentation. */
             is_sensitive: boolean;
+            /** @description The kinds of sensitive content (PeerTube 7.2 nsfwFlags), always present ([] when none; a flag implies is_sensitive). The viewer's per-flag policy (GET /me/content-preferences) overrides their base policy for that flag; with several flags the most restrictive applies. "hide" is enforced server-side in browse and search; blur and warn are presentation. */
+            sensitive_flags?: components["schemas"]["SensitiveFlag"][];
             /** @description The creator's optional content-warning text, paired with is_sensitive by the frontend. Always present (empty string when unset, and on remote cards). At most 280 characters. */
             sensitive_reason: string;
             /**
@@ -7486,6 +7632,43 @@ export interface components {
             /** @description Dense 30-day series, oldest first, zero-filled. */
             daily_views: components["schemas"]["DailyViews"][];
         };
+        PlaybackBeaconRequest: {
+            /** @description Playhead position at sample time. */
+            position_seconds: number;
+            /** @description Seconds actually played since the previous sample (heartbeat is 10 s). */
+            watched_seconds: number;
+            /** @description True on the first sample of a play. */
+            started?: boolean;
+        };
+        PlaybackShare: {
+            key: string;
+            /** Format: int64 */
+            watch_seconds: number;
+            /** @description Fraction of total watch seconds, 0..1. */
+            share: number;
+        };
+        PlaybackDay: {
+            /** Format: date */
+            day: string;
+            /** Format: int64 */
+            plays: number;
+            /** Format: int64 */
+            watch_seconds: number;
+        };
+        PlaybackStatsResponse: {
+            /** Format: int64 */
+            plays: number;
+            /** Format: int64 */
+            watch_seconds: number;
+            avg_view_duration_seconds: number;
+            /** @description Probed video duration; 0 when unknown. */
+            duration_seconds: number;
+            /** @description 20 buckets of the video's length, each 0..1. */
+            retention?: number[] | null;
+            devices: components["schemas"]["PlaybackShare"][];
+            os: components["schemas"]["PlaybackShare"][];
+            daily: components["schemas"]["PlaybackDay"][];
+        };
         ChannelStatsResponse: {
             /** Format: int64 */
             views: number;
@@ -7620,6 +7803,8 @@ export interface components {
             publish_at?: string;
             /** @description Mark the video as sensitive content (defaults to false). See the Video schema for how the instance policy treats flagged videos. */
             is_sensitive?: boolean;
+            /** @description The kinds of sensitive content. Any flag also marks the video sensitive. An unknown flag -> 422. */
+            sensitive_flags?: components["schemas"]["SensitiveFlag"][];
             /** @description Optional creator content-warning text, trimmed and capped at 280 characters (-> 422 over the cap). Storable regardless of is_sensitive; the frontend pairs them. */
             sensitive_reason?: string;
             /**
@@ -7660,6 +7845,8 @@ export interface components {
             originally_published_at?: string;
             /** @description Set or clear the sensitive-content flag (omit to leave unchanged). */
             is_sensitive?: boolean;
+            /** @description Replace the sensitive-content kinds (omit to leave unchanged; [] clears). A non-empty set also marks the video sensitive. An unknown flag -> 422. */
+            sensitive_flags?: components["schemas"]["SensitiveFlag"][];
             /** @description Set the creator content-warning text (omit to leave unchanged; an empty string clears it). Trimmed and capped at 280 characters -> 422 over the cap. */
             sensitive_reason?: string;
             /**
@@ -7839,6 +8026,8 @@ export interface components {
             has_thumbnail: boolean;
             /** @description The origin flagged this video sensitive (ActivityStreams `sensitive`). The viewer's sensitive-content policy applies as to a local video's is_sensitive: under "hide" it is excluded from search. */
             is_sensitive: boolean;
+            /** @description The origin's PeerTube SensitiveTag flags (explicitSex maps to sex); unknown names are dropped. */
+            sensitive_flags?: components["schemas"]["SensitiveFlag"][];
         };
         /** @description Credentials for linking a Bluesky account. app_password must be a Bluesky APP PASSWORD (Settings → App Passwords), never the account's main password — the backend never returns it. */
         ATProtoLinkRequest: {
@@ -8358,6 +8547,28 @@ export interface components {
             email?: {
                 [key: string]: boolean;
             };
+        };
+        /**
+         * @description A kind of sensitive content. On the wire to PeerTube these are SensitiveTag entries (sex is explicitSex); `sensitive` stays the boolean Mastodon reads.
+         * @enum {string}
+         */
+        SensitiveFlag: "violent" | "shocking" | "sex";
+        ContentPreferences: {
+            /** @description Per-flag viewer policy overrides. Keys are SensitiveFlag values; each value is hide, warn, blur or display. A flag with no entry inherits the viewer's base policy. */
+            sensitive_flag_policies: {
+                [key: string]: "hide" | "warn" | "blur" | "display";
+            };
+            /** @description Language ids (GET /videos/config) the viewer wants in browse feeds; [] = no filter. The client passes them as the feed's comma-separated ?language. */
+            preferred_languages: string[];
+        };
+        /** @description A merge: an omitted field keeps its stored value. */
+        UpdateContentPreferencesRequest: {
+            /** @description REPLACES the per-flag overrides. An empty string value (or an omitted flag) inherits the base policy. */
+            sensitive_flag_policies?: {
+                [key: string]: "hide" | "warn" | "blur" | "display" | "";
+            };
+            /** @description REPLACES the language list ([] clears). Unknown id -> 400. */
+            preferred_languages?: string[];
         };
         /** @description A signed-in user's effective player defaults (PLAY-07). Every field is always present. video_card_previews_enabled is resolved from the current instance default until the user explicitly chooses true or false. */
         PlayerSettings: {
@@ -11509,6 +11720,26 @@ export interface components {
             /** @description Short-lived (5 min) single-purpose token. Not an access token — it is only accepted by the MFA challenge endpoint. */
             mfa_token: string;
         };
+        RecognisedDevice: {
+            /** Format: uuid */
+            id: string;
+            /** @example Chrome on macOS */
+            label: string;
+            /** Format: date-time */
+            first_seen_at: string;
+            /** Format: date-time */
+            last_seen_at: string;
+            /** @description True for the device making this request. */
+            current: boolean;
+        };
+        RecognisedDevicesResponse: {
+            devices: components["schemas"]["RecognisedDevice"][];
+            /** @description Whether the new-device sign-in email is on (default true). */
+            new_device_email: boolean;
+        };
+        SecurityPrefsRequest: {
+            new_device_email: boolean;
+        };
         MFAStatusResponse: {
             /** @description Whether TOTP two-factor authentication is enabled. */
             enabled: boolean;
@@ -13182,6 +13413,115 @@ export interface operations {
                 };
             };
             /** @description Validation failed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listRecognisedDevices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The account's recognised devices. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecognisedDevicesResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    forgetRecognisedDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The device was forgotten. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such device on this account. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateSecurityPrefs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SecurityPrefsRequest"];
+            };
+        };
+        responses: {
+            /** @description The stored preference. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecurityPrefsRequest"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation failed (new_device_email is required). */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -16018,7 +16358,7 @@ export interface operations {
                 tag?: string;
                 /** @description Only videos with this subject-category id (see GET /videos/config). Unknown value -> 422. */
                 category?: string;
-                /** @description Only videos with this content-language code (see GET /videos/config). Unknown value -> 422. */
+                /** @description Only videos in this content language (see GET /videos/config), or in ANY of a comma-separated list of up to 10 (`en,fr`; a viewer's preferred_languages from GET /me/content-preferences). Unknown value -> 422. */
                 language?: string;
                 /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
                 limit?: components["parameters"]["PageLimit"];
@@ -16511,6 +16851,97 @@ export interface operations {
                 };
             };
             /** @description No such video, or not owned by the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    recordVideoPlayback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlaybackBeaconRequest"];
+            };
+        };
+        responses: {
+            /** @description Sample accepted (or ignored). */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Malformed body or out-of-range value. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such video, or not visible to the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Beacon budget exceeded. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getVideoPlaybackStats: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The video's playback statistics. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaybackStatsResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such video, or the caller may not manage it. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -20808,6 +21239,77 @@ export interface operations {
             };
             /** @description Empty update, unknown notification type, or an email switch for a type without email delivery. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getContentPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's content preferences. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContentPreferences"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateContentPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateContentPreferencesRequest"];
+            };
+        };
+        responses: {
+            /** @description The saved content preferences. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContentPreferences"];
+                };
+            };
+            /** @description Malformed body, unknown flag, or invalid policy. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -30454,6 +30956,53 @@ export interface operations {
             };
             /** @description Validation failed, or an attempt to self-demote/deactivate. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    adminClearLoginLockout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Any lockout on the account was cleared. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such user. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
