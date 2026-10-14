@@ -2,6 +2,7 @@
 
 import { useId, useState, type ReactNode } from "react";
 
+import { useT } from "@/components/I18nProvider";
 import { ADMIN_PANEL, AdminSearch } from "@/components/admin/AdminControls";
 import { Badge } from "@/components/ui/Badge";
 import { Select } from "@/components/ui/Select";
@@ -121,8 +122,9 @@ export function ListToolbar({
   panel = false,
   className,
 }: ListToolbarProps) {
+  const t = useT();
   const sortLabelId = useId();
-  const sortLabel = sort?.label ?? "Sort";
+  const sortLabel = sort?.label ?? t("admin.toolbar.sort");
   return (
     <div
       className={cn(
@@ -158,7 +160,7 @@ export function ListToolbar({
         {filters}
         {activeFilterCount > 0 ? (
           <Badge variant="accent" className="tabular-nums">
-            {activeFilterCount} active
+            {t("admin.toolbar.activeCount", { count: activeFilterCount })}
           </Badge>
         ) : null}
         {actions}
