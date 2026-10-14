@@ -1679,6 +1679,17 @@ export const api = {
     apiRequest<RemoteVideo>(`/api/v1/remote-videos/${encodeURIComponent(id)}`, { signal }),
 
   /**
+   * POST /api/v1/remote-videos/{id}/view — report a view of a federated video to
+   * its origin instance (anonymous allowed, 204; 429 when rate-limited). Fired
+   * once per page view from the player's first play; best-effort, so callers
+   * swallow failures.
+   */
+  recordRemoteVideoView: (id: string) =>
+    apiRequest<void>(`/api/v1/remote-videos/${encodeURIComponent(id)}/view`, {
+      method: "POST",
+    }),
+
+  /**
    * GET /api/v1/remote-videos/{id}/comments — the comments for a federated
    * video. Two disjoint arrays: `comments` is the paginated MIRRORED origin
    * thread (each `local:false`), `authored` is the complete set of comments
