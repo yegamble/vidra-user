@@ -289,6 +289,7 @@ export type IPFSNetworkStatus = Schemas["IPFSNetworkStatus"];
 export type IPFSPinCounts = Schemas["IPFSPinCounts"];
 export type IPFSClassPinCounts = Schemas["IPFSClassPinCounts"];
 export type IPFSReconcileResult = Schemas["IPFSReconcileResult"];
+export type IPFSRepinStatus = Schemas["IPFSRepinStatus"];
 
 // --- Admin: playback quality (phase-4 delivery item 4) ----------------------
 // GET /admin/qoe/playback-health. Two projections in one payload: `sources` is
