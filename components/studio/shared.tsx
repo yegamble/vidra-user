@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/components/I18nProvider";
 import { ChevronDownIcon } from "@/components/icons";
 import { ApiError, api, errorMessage, forgetUploadSession } from "@/lib/api";
 import type { StoredUploadSession, VideoConfigOption, VideoState } from "@/lib/api";
@@ -110,6 +111,7 @@ export function TaxonomySelect({
 
 // StateBadge renders the video lifecycle micro-status pill.
 export function StateBadge({ state }: { state: VideoState }) {
+  const t = useT();
   const styles: Record<VideoState, string> = {
     draft: "bg-surface-strong text-fg-muted",
     processing: "bg-warning/15 text-warning",
@@ -125,7 +127,7 @@ export function StateBadge({ state }: { state: VideoState }) {
     <span
       className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-[0.04em] ${styles[state]}`}
     >
-      {state}
+      {t(`studio.badge.${state}`)}
     </span>
   );
 }
@@ -138,9 +140,10 @@ export function StateBadge({ state }: { state: VideoState }) {
 // is staff-only (an open product ruling), and a placeholder implying one exists
 // would be worse than silence.
 export function BlockedBadge() {
+  const t = useT();
   return (
     <span className="inline-flex items-center rounded-full bg-danger-surface px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-[0.04em] text-danger">
-      blocked
+      {t("studio.badge.blocked")}
     </span>
   );
 }

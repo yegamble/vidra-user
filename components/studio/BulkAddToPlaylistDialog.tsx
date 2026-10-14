@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { useT } from "@/components/I18nProvider";
 import { CheckIcon } from "@/components/icons";
 import { Alert, Button, Modal, Spinner } from "@/components/ui";
 import { ListTail } from "@/components/ui/ListTail";
@@ -27,6 +28,7 @@ export function BulkAddToPlaylistDialog({
   /** Called with the ids that were added, once the run has finished. */
   onDone?: (addedIds: string[]) => void;
 }) {
+  const t = useT();
   const list = useAppendingList<Playlist>({
     queryKey: "my-playlists",
     getId: (p) => p.id,
@@ -50,7 +52,7 @@ export function BulkAddToPlaylistDialog({
         await api.addToPlaylist(playlist.id, v.id);
         added.push(v.id);
       } catch (err) {
-        failures.push({ id: v.id, title: v.title, error: errorMessage(err, "Could not add.") });
+        failures.push({ id: v.id, title: v.title, error: errorMessage(err, t("studio.bulkPlaylist.addError")) });
       }
       setProgress({ done: i + 1, total: videos.length });
     }
@@ -59,17 +61,23 @@ export function BulkAddToPlaylistDialog({
     onDone?.(added);
   }
 
-  const noun = videos.length === 1 ? "video" : "videos";
   return (
-    <Modal title={`Add ${videos.length} ${noun} to a playlist`} onClose={onClose}>
+    <Modal
+      title={t("studio.bulkPlaylist.title", { videos: t("studio.videos", { count: String(videos.length) }) })}
+      onClose={onClose}
+    >
       <div className="flex flex-col gap-4">
         {result ? (
           <>
             <Alert variant={result.failures.length === 0 ? "success" : "warning"}>
-              Added {result.added} of {videos.length} to {result.playlist}.
+              {t("studio.bulkPlaylist.added", {
+                added: result.added,
+                total: videos.length,
+                playlist: result.playlist,
+              })}
             </Alert>
             {result.failures.length > 0 ? (
-              <ul className="flex max-h-48 flex-col gap-1 overflow-y-auto text-sm" aria-label="Videos that could not be added">
+              <ul className="flex max-h-48 flex-col gap-1 overflow-y-auto text-sm" aria-label={t("studio.bulkPlaylist.failedList")}>
                 {result.failures.map((f) => (
                   <li key={f.id} className="rounded-lg bg-danger-surface px-3 py-2 text-danger">
                     <span className="font-medium">{f.title}</span>: {f.error}
@@ -78,25 +86,25 @@ export function BulkAddToPlaylistDialog({
               </ul>
             ) : null}
             <div className="flex justify-end">
-              <Button onClick={onClose}>Done</Button>
+              <Button onClick={onClose}>{t("studio.bulkPlaylist.done")}</Button>
             </div>
           </>
         ) : progress ? (
           <div className="flex flex-col items-center gap-3 py-6" role="status">
-            <Spinner label="Adding videos" />
+            <Spinner label={t("studio.bulkPlaylist.adding")} />
             <p className="text-sm text-fg-muted">
-              Adding {progress.done} of {progress.total}
+              {t("studio.bulkPlaylist.progress", { done: progress.done, total: progress.total })}
             </p>
           </div>
         ) : list.status === "error" ? (
-          <p role="alert" className="text-sm text-danger">Could not load your playlists.</p>
+          <p role="alert" className="text-sm text-danger">{t("studio.bulkPlaylist.loadError")}</p>
         ) : list.status === "loading" ? (
           <div className="flex justify-center py-8">
-            <Spinner label="Loading your playlists" />
+            <Spinner label={t("studio.bulkPlaylist.loading")} />
           </div>
         ) : list.items.length === 0 ? (
           <p className="rounded-xl bg-surface-muted px-3 py-3 text-sm text-fg-muted">
-            You have no playlists yet. Create one from the Playlists page first.
+            {t("studio.bulkPlaylist.none")}
           </p>
         ) : (
           <ul className="max-h-64 overflow-y-auto rounded-xl border border-border-subtle p-1">
@@ -121,7 +129,7 @@ export function BulkAddToPlaylistDialog({
             hasMore={list.hasMore}
             autoLoad={false}
             busy={list.moreStatus === "loading"}
-            error={list.moreStatus === "error" ? "Could not load more playlists." : null}
+            error={list.moreStatus === "error" ? t("studio.bulkPlaylist.moreError") : null}
             onLoadMore={list.loadMore}
           />
         ) : null}

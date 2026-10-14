@@ -1,5 +1,6 @@
 "use client";
 
+import { useT } from "@/components/I18nProvider";
 import type { SensitiveFlag } from "@/lib/api";
 import { SENSITIVE_FLAGS } from "@/lib/sensitive-flags";
 import { Checkbox } from "@/components/ui/Checkbox";
@@ -21,6 +22,7 @@ export function SensitiveFlagsField({
   onChange: (next: SensitiveFlag[]) => void;
   disabled?: boolean;
 }) {
+  const t = useT();
   function toggle(flag: SensitiveFlag, on: boolean) {
     const next = on ? [...value, flag] : value.filter((f) => f !== flag);
     // Canonical order, so the saved set never depends on tick order.
@@ -28,7 +30,7 @@ export function SensitiveFlagsField({
   }
   return (
     <fieldset className="flex flex-col gap-1.5" disabled={disabled}>
-      <legend className="text-sm font-medium text-fg">What kind of content? (optional)</legend>
+      <legend className="text-sm font-medium text-fg">{t("studio.sensitive.legend")}</legend>
       {SENSITIVE_FLAGS.map((f) => (
         <Checkbox
           key={f.value}

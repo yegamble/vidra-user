@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { useT } from "@/components/I18nProvider";
 import { useSession } from "@/components/auth/AuthProvider";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -19,6 +20,7 @@ import { VideoRow } from "./VideoRow";
 // on the video param). An owner sees the full edit surface; a privileged
 // moderator managing someone else's video edits metadata only (basicOnly).
 export function ManagedVideoView({ videoId }: { videoId: string }) {
+  const t = useT();
   const { user } = useSession();
   const privileged = user?.role === "admin" || user?.role === "moderator";
   const [status, setStatus] = useState<Status>("loading");
@@ -58,24 +60,24 @@ export function ManagedVideoView({ videoId }: { videoId: string }) {
   if (status === "loading") {
     return (
       <div className="flex justify-center py-24">
-        <Spinner label="Loading video management" />
+        <Spinner label={t("studio.manage.loading")} />
       </div>
     );
   }
   if (deleted) {
     return (
       <EmptyState
-        title="Video deleted"
+        title={t("studio.manage.deleted")}
         message={
           <Link href="/studio" className="font-semibold underline underline-offset-2">
-            Return to the studio
+            {t("studio.manage.returnToStudio")}
           </Link>
         }
       />
     );
   }
   if (status === "error" || !video) {
-    return <ErrorState message="This video is unavailable or you cannot manage it." />;
+    return <ErrorState message={t("studio.manage.unavailable")} />;
   }
 
   return (
@@ -83,17 +85,15 @@ export function ManagedVideoView({ videoId }: { videoId: string }) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 id="manage-video-title" className="text-[15px] font-bold tracking-tight">
-            Manage video
+            {t("studio.manage.heading")}
           </h2>
-          <p className="mt-1 text-sm text-fg-muted">
-            Edit metadata or permanently delete this video.
-          </p>
+          <p className="mt-1 text-sm text-fg-muted">{t("studio.manage.subtitle")}</p>
         </div>
         <Link
           href="/studio"
           className="focus-ring rounded-full px-3 py-2 text-sm font-semibold text-fg-muted hover:bg-surface-muted hover:text-fg"
         >
-          Full studio
+          {t("studio.manage.fullStudio")}
         </Link>
       </div>
       <ul className="overflow-hidden rounded-2xl bg-surface-muted">
