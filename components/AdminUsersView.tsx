@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 
 import { useT } from "@/components/I18nProvider";
-import { slot, withSlots } from "@/components/admin/messageSlot";
+import { SLOT, slot, withSlot, withSlots } from "@/components/admin/messageSlot";
 import { AdminPagination, RolePill } from "@/components/admin/AdminControls";
 import { BanUserDialog } from "@/components/admin/BanUserDialog";
 import { CreateUserDialog } from "@/components/admin/CreateUserDialog";
@@ -730,6 +730,7 @@ function RemoveSecondFactorCard({
   user: AdminUser;
   onUpdated: (updated: AdminUser) => void;
 }) {
+  const t = useT();
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -750,7 +751,7 @@ function RemoveSecondFactorCard({
       // replaced by a server view that does not exist.
       onUpdated({ ...user, mfa_enabled: false });
     } catch (err) {
-      setError(errorMessage(err, "Could not remove this account's second factor."));
+      setError(errorMessage(err, t("admin.users.mfa.error")));
     } finally {
       setBusy(false);
     }
@@ -758,37 +759,31 @@ function RemoveSecondFactorCard({
 
   return (
     <div className="rounded-2xl border border-border p-4">
-      <h3 className="text-[13.5px] font-semibold text-fg">Two-factor authentication</h3>
+      <h3 className="text-[13.5px] font-semibold text-fg">{t("admin.users.mfa.title")}</h3>
       <p className="mt-1.5 text-[12px] leading-relaxed text-fg-muted">
         {enabled ? (
-          <>
-            <span className="font-medium text-fg">{user.username}</span> signs in with an
-            authenticator app. Removing it leaves the account protected by its password alone,
-            signs out every device it is signed in on, and invalidates its recovery codes. Do this
-            when they have lost both their authenticator and their recovery codes — it is the only
-            way back in. They are emailed, and the action is recorded in the audit log. You will
-            never see their secret or their codes.
-          </>
+          withSlot(
+            t("admin.users.mfa.enabled", { name: SLOT }),
+            <span className="font-medium text-fg">{user.username}</span>,
+          )
         ) : (
-          <>
-            <span className="font-medium text-fg">{user.username}</span> has not set up an
-            authenticator app, so there is nothing to remove. Only the account holder can turn
-            two-factor authentication on.
-          </>
+          withSlot(
+            t("admin.users.mfa.disabled", { name: SLOT }),
+            <span className="font-medium text-fg">{user.username}</span>,
+          )
         )}
       </p>
       {done ? (
         <p className="mt-2 text-sm text-success">
-          Removed. {user.username} can sign in with their password and set two-factor
-          authentication up again.
+          {t("admin.users.mfa.removed", { name: user.username })}
         </p>
       ) : enabled ? (
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <input
             type="password"
             autoComplete="current-password"
-            aria-label="Your password"
-            placeholder="Your password"
+            aria-label={t("admin.users.yourPassword")}
+            placeholder={t("admin.users.yourPassword")}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="focus-ring rounded-xl border border-border bg-surface px-3.5 py-1.5 text-sm text-fg placeholder:text-fg-muted"
@@ -796,11 +791,11 @@ function RemoveSecondFactorCard({
           <Button
             variant="danger-outline"
             size="sm"
-            aria-label={`Remove second factor for ${user.username}`}
+            aria-label={t("admin.users.mfa.removeAria", { name: user.username })}
             disabled={busy || password === ""}
             onClick={() => void remove()}
           >
-            {busy ? "Removing…" : "Remove second factor"}
+            {busy ? t("admin.users.mfa.removing") : t("admin.users.mfa.remove")}
           </Button>
         </div>
       ) : (
@@ -808,13 +803,13 @@ function RemoveSecondFactorCard({
           <Button
             variant="danger-outline"
             size="sm"
-            aria-label={`Remove second factor for ${user.username}`}
+            aria-label={t("admin.users.mfa.removeAria", { name: user.username })}
             disabled
           >
-            Remove second factor
+            {t("admin.users.mfa.remove")}
           </Button>
           <span className="text-[11.5px] text-fg-muted">
-            This account has no second factor.
+            {t("admin.users.mfa.none")}
           </span>
         </div>
       )}
@@ -853,7 +848,7 @@ function TransferOwnershipCard({
       await reloadUser();
       onTransferred();
     } catch (err) {
-      setError(errorMessage(err, "Could not transfer ownership."));
+      setError(errorMessage(err, t("admin.users.transfer.error")));
     } finally {
       setBusy(false);
     }
@@ -862,23 +857,21 @@ function TransferOwnershipCard({
   return (
     <div className="rounded-2xl border border-border p-4">
       <h3 className="text-[13.5px] font-semibold text-fg">
-        Instance ownership
+        {t("admin.users.transfer.title")}
       </h3>
       <p className="mt-1.5 text-[12px] leading-relaxed text-fg-muted">
-        You own this instance. Handing ownership to{" "}
-        <span className="font-medium text-fg">{user.username}</span> gives them
-        the protection you have — no other administrator can change their role,
-        deactivate them or delete them — and takes it from you. You stay an
-        administrator, but you will not be able to transfer ownership again, and
-        only they will. Both of you are emailed.
+        {withSlot(
+          t("admin.users.transfer.body", { name: SLOT }),
+          <span className="font-medium text-fg">{user.username}</span>,
+        )}
       </p>
       {gate.allowed ? (
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <input
             type="password"
             autoComplete="current-password"
-            aria-label="Your password"
-            placeholder="Your password"
+            aria-label={t("admin.users.yourPassword")}
+            placeholder={t("admin.users.yourPassword")}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="focus-ring rounded-xl border border-border bg-surface px-3.5 py-1.5 text-sm text-fg placeholder:text-fg-muted"
@@ -889,13 +882,13 @@ function TransferOwnershipCard({
             disabled={busy || password === ""}
             onClick={() => void transfer()}
           >
-            {busy ? "Transferring…" : "Transfer ownership"}
+            {busy ? t("admin.users.transfer.busy") : t("admin.users.transfer.submit")}
           </Button>
         </div>
       ) : (
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <Button variant="danger-outline" size="sm" disabled>
-            Transfer ownership
+            {t("admin.users.transfer.submit")}
           </Button>
           <span className="text-[11.5px] text-fg-muted">{t(gate.reason)}</span>
         </div>
@@ -957,7 +950,7 @@ function UserDetail({
         className="focus-ring -ml-1 inline-flex w-fit items-center gap-1.5 rounded px-1 py-0.5 text-[13px] font-semibold text-fg-muted transition-colors hover:text-fg"
       >
         <ChevronLeftIcon size={15} strokeWidth={2.2} />
-        All users
+        {t("admin.users.back")}
       </button>
 
       <div className="flex flex-wrap items-start gap-4">
@@ -977,12 +970,12 @@ function UserDetail({
             <span className="break-all">{user.email}</span>
             <span aria-hidden> · </span>
             {user.email_verified ? (
-              <span className="text-success">verified</span>
+              <span className="text-success">{t("admin.users.verified")}</span>
             ) : (
-              <span>unverified</span>
+              <span>{t("admin.users.unverified")}</span>
             )}
             <span aria-hidden> · </span>
-            joined {formatMonthYear(user.created_at)}
+            {t("admin.users.joinedOn", { when: formatMonthYear(user.created_at) })}
           </p>
           <BanNote user={user} />
         </div>
@@ -994,23 +987,25 @@ function UserDetail({
               <Button
                 variant="tonal"
                 size="sm"
-                aria-label={`${user.is_active ? "Deactivate" : "Reactivate"} ${user.username}`}
+                aria-label={t(user.is_active ? "admin.users.deactivateAria" : "admin.users.reactivateAria", {
+                  name: user.username,
+                })}
                 disabled={!canBan || saving}
                 onClick={() =>
                   user.is_active ? setBanOpen(true) : void save({ is_active: true })
                 }
               >
-                {user.is_active ? "Deactivate" : "Reactivate"}
+                {user.is_active ? t("admin.users.deactivate") : t("admin.users.reactivate")}
               </Button>
               {viewerIsAdmin && !deleteArmed ? (
                 <Button
                   variant="danger-outline"
                   size="sm"
-                  aria-label={`Delete ${user.username} permanently`}
+                  aria-label={t("admin.users.deleteAria", { name: user.username })}
                   disabled={!guard.allowed || saving}
                   onClick={() => setDeleteArmed(true)}
                 >
-                  Delete account
+                  {t("admin.users.deleteAccount")}
                 </Button>
               ) : null}
             </>
@@ -1023,13 +1018,13 @@ function UserDetail({
         <div className="flex flex-col gap-3.5">
           <div className="rounded-2xl bg-surface-muted p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <span className="text-[13.5px] font-semibold text-fg">Role</span>
+              <span className="text-[13.5px] font-semibold text-fg">{t("admin.users.col.role")}</span>
               {!viewerIsAdmin || !guard.allowed || deleted ? (
                 <RolePill role={user.role} />
               ) : (
                 <SegmentedControl
                   size="sm"
-                  label={`Role for ${user.username}`}
+                  label={t("admin.users.roleFor", { name: user.username })}
                   options={roleOptions(t)}
                   value={user.role}
                   disabled={saving}
@@ -1065,7 +1060,7 @@ function UserDetail({
 
           <p className="px-1 text-[11.5px] leading-relaxed text-fg-muted">
             {guard.allowed
-              ? "Deletion is permanent and audited. Deactivating is the reversible alternative — it revokes the account's sessions and hides its content without destroying it."
+              ? t("admin.users.deleteNote")
               : t(guard.reason)}
           </p>
 
@@ -1082,18 +1077,17 @@ function UserDetail({
           {viewerIsAdmin && deleteArmed ? (
             <div className="flex flex-col gap-2 rounded-2xl border border-danger-border p-3">
               <p className="text-sm text-fg-muted">
-                This permanently deletes{" "}
-                <span className="font-semibold text-fg">{user.username}</span>
-                &apos;s account: their channels and videos are removed for good,
-                their comments become &ldquo;[deleted]&rdquo; tombstones, and
-                this cannot be undone.
+                {withSlot(
+                  t("admin.users.deleteWarning", { name: SLOT }),
+                  <span className="font-semibold text-fg">{user.username}</span>,
+                )}
               </p>
               <div className="flex flex-wrap items-center gap-2">
                 <input
                   type="text"
                   autoComplete="off"
-                  aria-label={`Type ${user.username} to confirm deletion`}
-                  placeholder={`Type ${user.username} to confirm`}
+                  aria-label={t("admin.users.typeAria", { name: user.username })}
+                  placeholder={t("admin.users.typePlaceholder", { name: user.username })}
                   value={confirmName}
                   onChange={(e) => setConfirmName(e.target.value)}
                   className="focus-ring rounded-xl border border-border bg-surface px-3.5 py-1.5 text-sm text-fg placeholder:text-fg-muted"
@@ -1101,11 +1095,11 @@ function UserDetail({
                 <Button
                   variant="danger"
                   size="sm"
-                  aria-label={`Confirm permanent deletion of ${user.username}`}
+                  aria-label={t("admin.users.confirmDeleteAria", { name: user.username })}
                   disabled={saving || confirmName !== user.username}
                   onClick={() => void doDelete()}
                 >
-                  {saving ? "Deleting…" : "Confirm permanent delete"}
+                  {saving ? t("admin.queue.deleting") : t("admin.users.confirmDelete")}
                 </Button>
                 <Button
                   variant="secondary"
@@ -1117,7 +1111,7 @@ function UserDetail({
                     setError(null);
                   }}
                 >
-                  Cancel
+                  {t("common.cancel")}
                 </Button>
               </div>
             </div>
@@ -1139,52 +1133,55 @@ function UserDetail({
 
         {/* Right column: real facts only. */}
         <dl className="divide-y divide-border-subtle overflow-hidden rounded-2xl bg-surface-muted">
-          <Fact k="Role" v={<RolePill role={user.role} />} />
+          <Fact k={t("admin.users.col.role")} v={<RolePill role={user.role} />} />
           <Fact
-            k="Status"
+            k={t("admin.users.col.status")}
             v={
               <span
                 className={user.is_active ? "text-success" : "text-fg-muted"}
               >
                 {deleted
-                  ? "Deleted"
+                  ? t("admin.users.status.deleted")
                   : user.is_active
-                    ? "Active"
-                    : "Deactivated"}
+                    ? t("admin.users.status.active")
+                    : t("admin.users.status.deactivated")}
               </span>
             }
           />
-          <Fact k="Email" v={user.email_verified ? "Verified" : "Unverified"} />
           <Fact
-            k="Two-factor"
+            k={t("admin.users.col.email")}
+            v={user.email_verified ? t("admin.users.fact.verified") : t("admin.users.fact.unverified")}
+          />
+          <Fact
+            k={t("admin.users.fact.twoFactor")}
             v={
               user.mfa_enabled ? (
-                <span className="text-success">On</span>
+                <span className="text-success">{t("admin.users.fact.on")}</span>
               ) : (
-                <span className="text-fg-muted">Off</span>
+                <span className="text-fg-muted">{t("admin.users.fact.off")}</span>
               )
             }
           />
-          <Fact k="Joined" v={relativeTime(user.created_at)} />
+          <Fact k={t("admin.users.col.joined")} v={relativeTime(user.created_at)} />
           <Fact
-            k="Storage used"
+            k={t("admin.users.fact.storageUsed")}
             v={<span className="tabular-nums">{formatBytes(used)}</span>}
           />
           <Fact
-            k="Storage quota"
+            k={t("admin.users.fact.storageQuota")}
             v={
               <span className="tabular-nums">
                 {quota === null
-                  ? "Instance default"
+                  ? t("admin.users.fact.instanceDefault")
                   : quota === 0
-                    ? "Unlimited"
+                    ? t("admin.users.fact.unlimited")
                     : formatBytes(quota)}
               </span>
             }
           />
           <Fact
-            k="New-upload quarantine"
-            v={user.bypass_quarantine ? "Exempt" : "Standard"}
+            k={t("admin.users.fact.quarantine")}
+            v={user.bypass_quarantine ? t("admin.users.fact.exempt") : t("admin.users.fact.standard")}
           />
         </dl>
       </div>
