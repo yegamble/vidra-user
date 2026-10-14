@@ -571,8 +571,7 @@ function SearchHistorySection({ instanceEnabled }: { instanceEnabled: boolean })
       ) : null}
 
       {status === "ready" && entries.length === 0 ? (
-        <p className="text-sm text-fg-muted">
-{t("settings.search.h.empty")}        </p>
+        <p className="text-sm text-fg-muted">{t("settings.search.h.empty")}</p>
       ) : null}
 
       {status === "ready" && entries.length > 0 ? (
