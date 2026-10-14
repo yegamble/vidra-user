@@ -2,7 +2,7 @@
 // architecture note 4). The single /admin/config page split into the
 // PeerTube-mirroring multi-page IA:
 //
-//   general | email | vod | live | federation | customization | homepage | ipfs | advanced
+//   general | email | signin | vod | live | federation | customization | homepage | ipfs | advanced
 //
 // This module is the client-side placement registry: which page + section
 // every known setting renders on, how it is edited, validated, and disclosed.
@@ -85,6 +85,7 @@ export type InfrastructureWiringInfo = {
 export type ConfigPageId =
   | "general"
   | "email"
+  | "signin"
   | "vod"
   | "live"
   | "federation"
@@ -117,6 +118,11 @@ export const CONFIG_PAGES: readonly ConfigPageDef[] = [
     label: "Email",
     description:
       "How this instance sends mail: the relay or provider, the sender address, and a delivery test.",
+  },
+  {
+    id: "signin",
+    label: "Sign-in",
+    description: "The single sign-on providers people can use to sign in.",
   },
   {
     id: "vod",
@@ -279,6 +285,9 @@ export const PAGE_SECTIONS: Record<ConfigPageId, SectionDef[]> = {
   // exhaustive, the same shape the IPFS page uses. The PRESENTATION strings
   // (subject prefix, signature) stay registry keys on Customization → Email.
   email: [],
+  // Sign-in providers are admin-managed documents (write-only client secret),
+  // rendered by AdminOIDCProvidersView; no registry keys.
+  signin: [],
   vod: [
     {
       id: "uploads",
