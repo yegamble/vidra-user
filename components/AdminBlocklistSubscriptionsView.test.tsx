@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { BlocklistSubscription } from "@/lib/api";
@@ -38,6 +38,7 @@ vi.mock("@/lib/api", async (importActual) => {
 });
 
 import { ApiError } from "@/lib/api";
+import { useT } from "@/components/I18nProvider";
 import { AdminBlocklistSubscriptionsView, syncSummary } from "./AdminBlocklistSubscriptionsView";
 
 function sub(o: Partial<BlocklistSubscription> = {}): BlocklistSubscription {
@@ -197,8 +198,10 @@ describe("held syncs", () => {
 });
 
 describe("syncSummary", () => {
+  // Outside a provider useT() is the default (en) translator.
+  const t = renderHook(() => useT()).result.current;
   it("covers every status", () => {
-    expect(syncSummary({ status: "not_modified", added: 0, removed: 0, entries: 0, ignored_severity: 0, invalid: 0, protected: 0 })).toBe("Already up to date.");
-    expect(syncSummary({ status: "error", error: "address not allowed", added: 0, removed: 0, entries: 0, ignored_severity: 0, invalid: 0, protected: 0 })).toBe("Sync failed: address not allowed.");
+    expect(syncSummary({ status: "not_modified", added: 0, removed: 0, entries: 0, ignored_severity: 0, invalid: 0, protected: 0 }, t)).toBe("Already up to date.");
+    expect(syncSummary({ status: "error", error: "address not allowed", added: 0, removed: 0, entries: 0, ignored_severity: 0, invalid: 0, protected: 0 }, t)).toBe("Sync failed: address not allowed.");
   });
 });
