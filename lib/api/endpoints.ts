@@ -3041,14 +3041,15 @@ export const api = {
 
   /**
    * GET /api/v1/admin/comments — all comments newest first, each with its author
-   * and the video it's on (moderator/admin). Optional `q` filters by body.
+   * and the video it's on (moderator/admin). Optional `q` filters by body;
+   * `auto_tag` keeps comments carrying that automatic tag (case-insensitive).
    */
   getAdminComments: (
-    params: PageParams & { q?: string } = {},
+    params: PageParams & { q?: string; auto_tag?: string } = {},
     signal?: AbortSignal,
   ) =>
     apiRequest<AdminCommentListResponse>("/api/v1/admin/comments", {
-      query: { q: params.q, ...pageQuery(params) },
+      query: { q: params.q, auto_tag: params.auto_tag, ...pageQuery(params) },
       signal,
     }),
 

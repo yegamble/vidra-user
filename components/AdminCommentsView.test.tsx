@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -50,5 +50,41 @@ describe("AdminCommentsView body rendering", () => {
     expect(container.textContent).toContain("bad");
     // ?t= links would only reload the admin page.
     expect(container.querySelector("a[data-timestamp-seconds]")).toBeNull();
+  });
+});
+
+describe("AdminCommentsView automatic tags", () => {
+  const row = (id: string, tags: string[]) => ({
+    id,
+    video_id: "v1",
+    video_title: "Clip",
+    author_username: "mona",
+    body: "hello",
+    created_at: "2026-07-10T14:30:00Z",
+    automatic_tags: tags,
+  });
+  const page = (comments: unknown[]) => ({ comments, total: comments.length, limit: 10, offset: 0 });
+
+  it("shows each row's automatic tags as chips and none for an untagged row", async () => {
+    mocks.getAdminComments.mockResolvedValue(page([row("c1", ["external-link", "Spam words"]), row("c2", [])]));
+    render(<AdminCommentsView />);
+    expect(await screen.findByText("external-link")).toBeTruthy();
+    expect(screen.getByText("Spam words")).toBeTruthy();
+    expect(screen.getAllByRole("list", { name: "Automatic tags" })).toHaveLength(1);
+  });
+
+  it("filters by automatic tag, sends auto_tag, and resets pagination", async () => {
+    navigation.reset("/admin/comments", "offset=10");
+    mocks.getAdminComments.mockResolvedValue(page([row("c1", ["external-link"])]));
+    render(<AdminCommentsView />);
+    const box = await screen.findByLabelText("Filter by automatic tag");
+    fireEvent.change(box, { target: { value: "external-link" } });
+    fireEvent.submit(box.closest("form")!);
+    await waitFor(() => {
+      const last = mocks.getAdminComments.mock.calls.at(-1)![0];
+      expect(last.auto_tag).toBe("external-link");
+      expect(last.offset).toBe(0);
+      expect(navigation.params().get("offset")).toBeNull();
+    });
   });
 });
