@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
+import { useT } from "@/components/I18nProvider";
 import { useOptionalSession } from "@/components/auth/AuthProvider";
 import { UploadIcon } from "@/components/icons";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -20,6 +21,7 @@ import { useStudio } from "./StudioContext";
 // shared context (the per-section channel <select>s are gone). A `?upload=1` deep
 // link auto-opens the upload sheet (then the param is stripped via router.replace).
 export function ContentView() {
+  const t = useT();
   const { channels, currentHandle, currentChannel } = useStudio();
   const userId = useOptionalSession()?.user?.id;
   const router = useRouter();
@@ -49,11 +51,11 @@ export function ContentView() {
       <section className="flex flex-col gap-4">
         <EmptyState
           icon={<UploadIcon size={24} />}
-          title="Create a channel to upload"
-          message="Videos live on a channel. Create one to start publishing and importing."
+          title={t("studio.content.noChannelTitle")}
+          message={t("studio.content.noChannelMessage")}
         />
         <div className="flex justify-center">
-          <LinkButton href="/studio/channel?create=1">Create a channel</LinkButton>
+          <LinkButton href="/studio/channel?create=1">{t("studio.channel.createCta")}</LinkButton>
         </div>
       </section>
     );

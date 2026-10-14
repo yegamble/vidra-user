@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { useFormat, useT } from "@/components/I18nProvider";
 import { StudioStorageCard } from "@/components/StudioStorageCard";
 import { UploadRecoveryCard } from "@/components/UploadRecoveryCard";
 import { ChevronRightIcon, TvIcon, UploadIcon } from "@/components/icons";
@@ -11,7 +12,6 @@ import { LinkButton } from "@/components/ui/LinkButton";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { api, videoThumbnailUrl } from "@/lib/api";
 import type { ChannelStatsResponse, Video, VideoStatsResponse } from "@/lib/api";
-import { formatCount } from "@/lib/format";
 import { useLiveAvailable } from "@/lib/live/availability";
 import { watchPath } from "@/lib/watch-path";
 
@@ -25,6 +25,7 @@ import { views28d } from "./all-channels-stats";
 // recovery, the distribution status, and quick actions. Everything is scoped to
 // the studio's current channel via the shared context.
 export function DashboardView() {
+  const t = useT();
   const { channels, currentChannel } = useStudio();
 
   if (channels.length === 0) {
@@ -32,11 +33,11 @@ export function DashboardView() {
       <section className="flex flex-col gap-4">
         <EmptyState
           icon={<UploadIcon size={24} />}
-          title="Welcome to your studio"
-          message="Create a channel to publish videos, go live, and see your analytics."
+          title={t("studio.dash.welcomeTitle")}
+          message={t("studio.dash.welcomeMessage")}
         />
         <div className="flex justify-center">
-          <LinkButton href="/studio/channel?create=1">Create your first channel</LinkButton>
+          <LinkButton href="/studio/channel?create=1">{t("studio.dash.createFirst")}</LinkButton>
         </div>
       </section>
     );
@@ -65,6 +66,8 @@ export function DashboardView() {
 // only (from GET /channels/{handle}/stats); it renders nothing on a load failure
 // rather than inventing numbers.
 function QuickStatsStrip({ handle }: { handle: string }) {
+  const t = useT();
+  const { formatCount } = useFormat();
   const [status, setStatus] = useState<Status>("loading");
   const [stats, setStats] = useState<ChannelStatsResponse | null>(null);
 
@@ -97,9 +100,9 @@ function QuickStatsStrip({ handle }: { handle: string }) {
   if (status === "error" || !stats) return null;
 
   const cards: Array<{ label: string; value: number }> = [
-    { label: "Views · 28d", value: views28d(stats.daily_views) },
-    { label: "Followers", value: stats.followers },
-    { label: "Videos", value: stats.videos },
+    { label: t("studio.stats.views28d"), value: views28d(stats.daily_views) },
+    { label: t("studio.stats.followers"), value: stats.followers },
+    { label: t("studio.stats.videos"), value: stats.videos },
   ];
 
   // A list of stat links (not a <dl>): each card is a whole <Link>, and an <a>
@@ -129,6 +132,8 @@ function QuickStatsStrip({ handle }: { handle: string }) {
 // LatestVideoCard — the most recent video for the current channel, with its
 // engagement counts and a Manage link into the single-video management surface.
 function LatestVideoCard({ handle }: { handle: string }) {
+  const t = useT();
+  const { formatCount } = useFormat();
   const [status, setStatus] = useState<Status>("loading");
   const [video, setVideo] = useState<Video | null>(null);
   const [stats, setStats] = useState<VideoStatsResponse | null>(null);
@@ -161,15 +166,15 @@ function LatestVideoCard({ handle }: { handle: string }) {
       className="flex flex-col gap-3 rounded-2xl bg-surface p-4 shadow-soft"
     >
       <h2 id="latest-video-heading" className="text-[15px] font-bold tracking-tight">
-        Latest video
+        {t("studio.dash.latest")}
       </h2>
       {status === "loading" ? (
         <Skeleton className="h-20 rounded-xl" />
       ) : status === "error" ? (
-        <p className="text-sm text-fg-muted">Could not load your latest video.</p>
+        <p className="text-sm text-fg-muted">{t("studio.dash.latestError")}</p>
       ) : !video ? (
         <p className="text-sm text-fg-muted">
-          No videos yet — upload one to see how it performs.
+          {t("studio.dash.latestEmpty")}
         </p>
       ) : (
         <div className="flex items-start gap-3">
@@ -194,19 +199,19 @@ function LatestVideoCard({ handle }: { handle: string }) {
             </div>
             <dl className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-fg-muted">
               <div className="flex items-center gap-1">
-                <dt>Views</dt>
+                <dt>{t("studio.stats.views")}</dt>
                 <dd className="font-semibold tabular-nums text-fg">
                   {stats ? formatCount(stats.views) : "—"}
                 </dd>
               </div>
               <div className="flex items-center gap-1">
-                <dt>Likes</dt>
+                <dt>{t("studio.stats.likes")}</dt>
                 <dd className="font-semibold tabular-nums text-fg">
                   {stats ? formatCount(stats.likes) : "—"}
                 </dd>
               </div>
               <div className="flex items-center gap-1">
-                <dt>Comments</dt>
+                <dt>{t("studio.stats.comments")}</dt>
                 <dd className="font-semibold tabular-nums text-fg">
                   {stats ? formatCount(stats.comments) : "—"}
                 </dd>
@@ -216,7 +221,7 @@ function LatestVideoCard({ handle }: { handle: string }) {
               href={`/studio?video=${encodeURIComponent(video.id)}`}
               className="focus-ring mt-2 inline-flex items-center gap-0.5 rounded-full text-[13px] font-semibold text-accent-text hover:underline"
             >
-              Manage
+              {t("studio.dash.manage")}
               <ChevronRightIcon size={15} aria-hidden="true" />
             </Link>
           </div>
@@ -229,6 +234,7 @@ function LatestVideoCard({ handle }: { handle: string }) {
 // QuickActions — the two primary creator entry points, mirroring the header
 // "+ Create" dropdown and the mobile CreateSheet.
 function QuickActions() {
+  const t = useT();
   // Live is offered only when the instance reports the capability (the
   // operator's switch AND an RTMP ingest); otherwise the button could only
   // reach a create call that refuses.
@@ -236,17 +242,17 @@ function QuickActions() {
   return (
     <section aria-labelledby="quick-actions-heading" className="flex flex-col gap-3">
       <h2 id="quick-actions-heading" className="text-[15px] font-bold tracking-tight">
-        Quick actions
+        {t("studio.dash.quickActions")}
       </h2>
       <div className="flex flex-wrap gap-2">
         <LinkButton href="/studio/content?upload=1">
           <UploadIcon size={16} aria-hidden="true" />
-          Upload video
+          {t("studio.dash.upload")}
         </LinkButton>
         {liveAvailable ? (
           <LinkButton href="/studio/live?new=1" variant="tonal">
             <TvIcon size={16} aria-hidden="true" />
-            Go live
+            {t("studio.dash.goLive")}
           </LinkButton>
         ) : null}
       </div>
