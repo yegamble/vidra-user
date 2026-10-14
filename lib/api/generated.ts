@@ -8158,14 +8158,14 @@ export interface components {
             error?: string;
             /** @description Entries skipped because they name this instance or a parent domain. */
             protected: number;
-            /** @description With needs_confirmation */
+            /** @description With needs_confirmation, how many blocks a confirmed sync would remove. */
             pending_removals?: number;
             added: number;
             removed: number;
             entries: number;
             /** @description Rows skipped because vidra has no equivalent of silence/limit. */
             ignored_severity: number;
-            /** @description Rows skipped as malformed (wildcard */
+            /** @description Rows skipped as malformed (wildcard, obfuscated, IP, ...). */
             invalid: number;
         };
         BlocklistAllowRequest: {
