@@ -1413,6 +1413,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/import/peertube": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import the metadata of a PeerTube user-export archive
+         * @description Accepts a PeerTube (>= 6.1) user-export zip as multipart field `archive` and imports its METADATA into the caller's own account: channels (created when the handle is free and valid here; a handle the caller already owns counts as existing, another owner's is skipped), regular playlists (matched by title, so a re-import never duplicates; items are not resolved and are counted in playlist_items_skipped), and the autoplay-next setting. Videos, likes, dislikes, comments, watch history, blocklists, followers and following are NOT imported yet and are counted under skipped_sections. Synchronous: the work is bounded and touches no network or media. The zip is parsed in memory, never extracted, and refused whole on traversal, symlink, encrypted, duplicate or oversize entries; the body is bounded by the HTTP body limit (default 8 MB), so an export that bundles video files must be trimmed to its peertube/*.json entries first. 403 feature_disabled when user_import_enabled is off. At most 3 imports per user per hour. At most 50 channels may be owned after an import, existing ones included. If the import stops part-way on a server error, the answer is the standard error envelope with an added `summary` (PeerTubeImportSummary) of what was done first; rows already created are kept and re-uploading the same archive is safe.
+         */
+        post: operations["importPeerTubeArchive"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/quota": {
         parameters: {
             query?: never;
@@ -9721,6 +9741,21 @@ export interface components {
                 watched_at?: string;
             }[];
         };
+        /** @description What POST /api/v1/me/import/peertube created and skipped. */
+        PeerTubeImportSummary: {
+            channels_created: number;
+            channels_existing: number;
+            /** @description Invalid handle, reserved, owned by someone else, or over the channel limit. */
+            channels_skipped: number;
+            playlists_created: number;
+            playlists_existing: number;
+            playlists_skipped: number;
+            playlist_items_skipped: number;
+            settings_applied: number;
+            skipped_sections: {
+                [key: string]: number;
+            };
+        };
         /** @description What POST /api/v1/me/import re-created (safe subsets only) and what it skipped. */
         AccountImportSummary: {
             /** @description True when display_name/bio were applied from the archive. */
@@ -15550,6 +15585,78 @@ export interface operations {
             };
             /** @description Not a valid vidra account archive. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    importPeerTubeArchive: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    archive: string;
+                };
+            };
+        };
+        responses: {
+            /** @description What was imported and what was skipped. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PeerTubeImportSummary"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Archive imports are disabled (code feature_disabled). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The archive exceeds the request body limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, not a zip, or not a valid PeerTube export. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many imports in the window (3 per user per hour). */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
