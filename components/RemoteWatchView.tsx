@@ -129,7 +129,7 @@ export function RemoteWatchView({ id }: { id: string }) {
             Watch on {video.domain}
             <ExternalLinkIcon size={14} strokeWidth={2} />
           </a>
-          <RatingControls videoId={video.id} adapter={remoteRatingAdapter} />
+          <RatingControls key={video.id} videoId={video.id} adapter={remoteRatingAdapter} />
           <ReportButton kind="remote_video" targetId={video.id} />
           <BlockRemoteAccountControl video={video} />
           <MuteInstanceControl domain={video.domain} />
