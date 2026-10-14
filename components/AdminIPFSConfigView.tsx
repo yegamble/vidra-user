@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { RoleGate } from "@/components/RoleGate";
 import { IPFSPolicyForm } from "@/components/admin/IPFSPolicyForm";
+import { IPFSRepinCard } from "@/components/admin/IPFSRepinCard";
 import { Badge, type BadgeVariant } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -209,6 +210,7 @@ export function IPFSConfigPanel() {
             </p>
           ) : null}
         </Card>
+        {anyEnabled ? <IPFSRepinCard /> : null}
       </section>
 
       <ConfigurationHelp />

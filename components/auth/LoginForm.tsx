@@ -177,7 +177,11 @@ export function LoginForm({
       setError(
         errorMessage(err, "Something went wrong. Please try again.", {
           // Identifier-neutral: the attempt may have used a username.
-          "401": "Invalid email/username or password.",
+          // Deliberately generic, exactly like the API: a wrong password, an
+          // unknown account and a temporarily locked account are one answer,
+          // so the lockout hint is always shown and never says which applies.
+          "401":
+            "Invalid email/username or password. If you have tried several times, wait a few minutes before trying again.",
           // Server-side validation reject (too short/long identifier, missing
           // password) — the raw backend string is "validation failed", which
           // tells a person nothing.

@@ -20,9 +20,11 @@ import type {
   OAuthIdentitiesResponse,
   PasswordResetConfirmRequest,
   PasswordResetRequest,
+  RecognisedDevicesResponse,
   RecoveryCodesResponse,
   RegisterRequest,
   RegistrationPending,
+  SecurityPrefsRequest,
   SetPasswordRequest,
   StepUpStartRequest,
   StepUpStartResponse,
@@ -126,6 +128,29 @@ export const authApi = {
       credentials: "include",
       retryOn401: false,
     }),
+
+  /**
+   * GET /api/v1/auth/devices — the browsers/devices the account has signed in
+   * from (a coarse label, never an IP) plus whether the new-device sign-in
+   * email is on (auth). Credentials are included so the httpOnly `vidra_device`
+   * cookie reaches the server and the current device can be marked.
+   */
+  listDevices: (signal?: AbortSignal) =>
+    apiRequest<RecognisedDevicesResponse>("/api/v1/auth/devices", {
+      signal,
+      credentials: "include",
+    }),
+
+  /**
+   * DELETE /api/v1/auth/devices/{id} — forget a recognised device (auth). The
+   * next sign-in from it is treated as new. It does not end sessions.
+   */
+  forgetDevice: (id: string) =>
+    apiRequest<void>(`/api/v1/auth/devices/${encodeURIComponent(id)}`, { method: "DELETE" }),
+
+  /** PATCH /api/v1/auth/security-prefs — turn the new-device email on or off (auth). */
+  updateSecurityPrefs: (body: SecurityPrefsRequest) =>
+    apiRequest<SecurityPrefsRequest>("/api/v1/auth/security-prefs", { method: "PATCH", body }),
 
   /**
    * GET /api/v1/auth/mfa — whether TOTP two-factor auth is enabled for the

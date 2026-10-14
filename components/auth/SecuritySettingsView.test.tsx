@@ -12,6 +12,9 @@ const verifyTOTPEnrollment = vi.fn();
 vi.mock("@/lib/api", () => ({
   authApi: {
     getMFAStatus: (...args: unknown[]) => getMFAStatus(...args),
+    listDevices: vi.fn(async () => ({ devices: [], new_device_email: true })),
+    forgetDevice: vi.fn(),
+    updateSecurityPrefs: vi.fn(),
     beginTOTPEnrollment: (...args: unknown[]) => beginTOTPEnrollment(...args),
     verifyTOTPEnrollment: (...args: unknown[]) => verifyTOTPEnrollment(...args),
     disableTOTP: vi.fn(),

@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   getChannelStats: vi.fn(),
   listChannelVideos: vi.fn(),
   getVideoStats: vi.fn(),
+  getVideoPlaybackStats: vi.fn(),
   getMyStats: vi.fn(),
   studio: {
     channels: [] as unknown[],
@@ -20,6 +21,7 @@ vi.mock("@/lib/api", () => ({
     getChannelStats: mocks.getChannelStats,
     listChannelVideos: mocks.listChannelVideos,
     getVideoStats: mocks.getVideoStats,
+    getVideoPlaybackStats: mocks.getVideoPlaybackStats,
     getMyStats: mocks.getMyStats,
   },
 }));
