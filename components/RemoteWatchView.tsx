@@ -173,6 +173,17 @@ function RemotePlayer({ video, onEnded }: { video: RemoteVideo; onEnded?: () => 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const playback = useRemotePlayback(videoRef, video);
 
+  // Report one view to the origin instance on the first play signal — the same
+  // fire-once seam local views use (WatchView.handlePlay). The ref is keyed by
+  // video id, so a pause/replay/seek never re-fires. Best-effort telemetry: a
+  // failure (e.g. the origin's 429) is swallowed and never touches playback.
+  const viewReportedForRef = useRef<string | null>(null);
+  const handlePlay = () => {
+    if (viewReportedForRef.current === video.id) return;
+    viewReportedForRef.current = video.id;
+    void api.recordRemoteVideoView(video.id).catch(() => {});
+  };
+
   // "Nothing playable was advertised" and "the origin's stream would not load"
   // are different facts. The panel below is for the first: with no source there
   // is nothing to render a player around. A source that WAS advertised and then
@@ -209,6 +220,7 @@ function RemotePlayer({ video, onEnded }: { video: RemoteVideo; onEnded?: () => 
       src={playback.src}
       poster={video.has_thumbnail ? remoteVideoThumbnailUrl(video.id) : undefined}
       onEnded={onEnded}
+      onPlay={handlePlay}
     >
       Your browser does not support the video tag.
     </video>
