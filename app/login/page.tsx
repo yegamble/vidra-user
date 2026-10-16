@@ -31,6 +31,7 @@ export default async function LoginPage({
         mfaPending={sp.mfa === "required"}
         returnTo={safeLoginReturn(sp.return_to)}
         initialProviders={instance?.oauth_providers}
+        initialProviderDetails={instance?.oauth_provider_details}
         initialAtprotoLogin={instance?.atproto_login}
         instanceName={instance?.name}
       />
