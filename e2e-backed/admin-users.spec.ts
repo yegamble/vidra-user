@@ -72,6 +72,10 @@ test("an admin promotes then deactivates a user, and it persists", async ({ page
     (r) => /\/admin\/users\/[^/]+$/.test(r.url()) && r.request().method() === "PATCH" && r.ok(),
   );
   await desktop.getByRole("button", { name: `Deactivate ${target.username}` }).click();
+  // Banning needs a stated reason (stored, emailed to the user, shown to staff).
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Reason").fill("e2e: violated the rules");
+  await dialog.getByRole("button", { name: `Ban ${target.username}` }).click();
   await deactivated;
   await expect(desktop.getByRole("button", { name: `Reactivate ${target.username}` })).toBeVisible();
 
@@ -93,6 +97,7 @@ test("an admin promotes then deactivates a user, and it persists", async ({ page
     "true",
   );
   await expect(desktop.getByRole("button", { name: `Reactivate ${target.username}` })).toBeVisible();
+  await expect(desktop.getByText("e2e: violated the rules")).toBeVisible();
 
   // Persisted in the database (admin API read).
   const after = (await adminUsers(request, token, target.username))[0];

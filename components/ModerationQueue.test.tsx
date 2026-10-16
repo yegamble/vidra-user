@@ -7,18 +7,23 @@ import type { Report } from "@/lib/api";
 const mocks = vi.hoisted(() => ({
   getReports: vi.fn(),
   blockVideo: vi.fn(),
+  getReportMessages: vi.fn(),
+  postReportMessage: vi.fn(),
+  replace: vi.fn(),
 }));
 
 vi.mock("@/lib/api", () => ({
   api: {
     getReports: mocks.getReports,
     blockVideo: mocks.blockVideo,
+    getReportMessages: mocks.getReportMessages,
+    postReportMessage: mocks.postReportMessage,
   },
   errorMessage: (_error: unknown, fallback: string) => fallback,
 }));
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ replace: () => {}, push: () => {} }),
+  useRouter: () => ({ replace: mocks.replace, push: () => {} }),
   usePathname: () => "/moderation",
   useSearchParams: () => new URLSearchParams(),
 }));
@@ -37,12 +42,14 @@ const REPORT: Report = {
   reporter: { username: "bob", display_name: "" },
   created_at: "2026-09-06T12:00:00Z",
   moderator_note: "",
+  reasons: [],
 } as Report;
 
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.getReports.mockResolvedValue({ reports: [REPORT], total: 1, limit: 20, offset: 0 });
   mocks.blockVideo.mockResolvedValue(undefined);
+  mocks.getReportMessages.mockResolvedValue({ messages: [], can_reply: true, total: 0, limit: 100, offset: 0 });
   // The queue's two-pane layout auto-selects the first report only on a wide
   // viewport; jsdom has no matchMedia at all.
   window.matchMedia = ((query: string) => ({
@@ -108,5 +115,98 @@ describe("ModerationQueue — blocking a reported video", () => {
 
     expect(screen.queryByLabelText(/block reason/i)).toBeNull();
     expect(mocks.blockVideo).not.toHaveBeenCalled();
+  });
+});
+
+describe("ModerationQueue — the report's message thread", () => {
+  it("shows staff the thread with who wrote each message, and lets them reply to the reporter", async () => {
+    mocks.getReportMessages.mockResolvedValue({
+      messages: [
+        {
+          id: "m-1",
+          body: "It is a re-upload of my video",
+          by_moderator: false,
+          is_mine: false,
+          author_username: "bob",
+          created_at: "2026-10-01T12:00:00Z",
+        },
+      ],
+      can_reply: true,
+      total: 1,
+      limit: 100,
+      offset: 0,
+    });
+    mocks.postReportMessage.mockResolvedValue({
+      id: "m-2",
+      body: "Thanks, looking now",
+      by_moderator: true,
+      is_mine: true,
+      author_username: "mod",
+      created_at: "2026-10-01T12:05:00Z",
+    });
+    const { ModerationQueue } = await import("./ModerationQueue");
+    render(<ModerationQueue />);
+
+    const thread = await screen.findByRole("region", { name: "Messages about this report" });
+    expect(thread.textContent).toContain("bob · Reporter");
+    expect(thread.textContent).toContain("It is a re-upload of my video");
+    expect(mocks.getReportMessages).toHaveBeenCalledWith("r-1", { limit: 100, offset: 0 }, expect.anything());
+
+    fireEvent.change(screen.getByLabelText("Message"), { target: { value: "Thanks, looking now" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(mocks.postReportMessage).toHaveBeenCalledWith("r-1", "Thanks, looking now"));
+    expect(await screen.findByText("Thanks, looking now")).toBeTruthy();
+  });
+});
+
+describe("ModerationQueue — report categories and timestamp", () => {
+  it("shows category chips and a ?t= link to the reported moment", async () => {
+    mocks.getReports.mockResolvedValue({
+      reports: [
+        { ...REPORT, reasons: ["spamOrMisleading", "captions"], start_seconds: 75, end_seconds: 90 },
+      ],
+      total: 1,
+      limit: 20,
+      offset: 0,
+    });
+    const { ModerationQueue } = await import("./ModerationQueue");
+    render(<ModerationQueue />);
+    await screen.findByRole("region", { name: "Report detail" });
+
+    expect(screen.getAllByText("Spam or misleading").length).toBeGreaterThan(0);
+    const at = screen.getByRole("link", { name: "1:15–1:30" });
+    expect(at.getAttribute("href")).toBe("/videos/v-1?t=75");
+  });
+
+  it("filters by category on the server", async () => {
+    const { ModerationQueue } = await import("./ModerationQueue");
+    render(<ModerationQueue />);
+    await screen.findByRole("region", { name: "Report detail" });
+
+    fireEvent.change(screen.getByLabelText("Filter reports by category"), { target: { value: "privacy" } });
+    // The filter lives in the URL (usePagedList); the server does the narrowing.
+    await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith(expect.stringContaining("reason=privacy"), expect.anything()));
+  });
+});
+
+describe("ModerationQueue — row accessible name", () => {
+  it("keeps the exact row button name, with or without categories", async () => {
+    // A fixture from before core 0170 has no `reasons` at all: must not crash.
+    const legacy = { ...REPORT } as Record<string, unknown>;
+    delete legacy.reasons;
+    mocks.getReports.mockResolvedValue({ reports: [legacy], total: 1, limit: 20, offset: 0 });
+    const { ModerationQueue } = await import("./ModerationQueue");
+    const { unmount } = render(<ModerationQueue />);
+    expect(await screen.findByRole("button", { name: "Video report by bob, open" })).toBeTruthy();
+    unmount();
+
+    mocks.getReports.mockResolvedValue({
+      reports: [{ ...REPORT, reasons: ["privacy"] }],
+      total: 1,
+      limit: 20,
+      offset: 0,
+    });
+    render(<ModerationQueue />);
+    expect(await screen.findByRole("button", { name: "Video report by bob, open" })).toBeTruthy();
   });
 });

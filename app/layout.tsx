@@ -4,15 +4,17 @@ import Script from "next/script";
 import "./globals.css";
 
 import { AuthProvider } from "@/components/auth/AuthProvider";
+import { ContentPreferencesBootstrap } from "@/components/auth/ContentPreferencesBootstrap";
 import { PlayerSettingsBootstrap } from "@/components/auth/PlayerSettingsBootstrap";
 import { BottomTabBar } from "@/components/BottomTabBar";
 import { Header } from "@/components/Header";
+import { I18nProvider } from "@/components/I18nProvider";
 import { InstanceBanner } from "@/components/InstanceBanner";
 import { InstanceCustomization } from "@/components/InstanceCustomization";
 import { Sidebar } from "@/components/Sidebar";
 import { SoftwareBrandProvider } from "@/components/SoftwareBrandProvider";
 import { ToastProvider } from "@/components/ui";
-import { t } from "@/lib/i18n";
+import { getI18n } from "@/lib/i18n/locale.server";
 import { getInstanceConfig } from "@/lib/instance-config.server";
 import { buildRootMetadata } from "@/lib/layout-metadata";
 import { hideSoftwareName } from "@/lib/software-brand";
@@ -31,6 +33,8 @@ import { buildThemeBootstrapScript } from "@/lib/theme-bootstrap";
 //   - CSS/JS inject   → components/InstanceCustomization.tsx (W6 documents)
 //   - software brand  → components/SoftwareBrandProvider.tsx (white-label:
 //                       branding.hide_software_name, lib/software-brand.ts)
+//   - locale          → lib/i18n/locale.server.ts → <html lang dir> +
+//                       components/I18nProvider.tsx (per-request locale)
 
 // EVERY PAGE UNDER THIS LAYOUT RENDERS PER REQUEST.
 //
@@ -82,8 +86,9 @@ export default async function RootLayout({
   // Per-request CSP nonce from proxy.ts; the enforced policy runs no script
   // without it. Next stamps its own scripts; these are the ones we emit.
   const nonce = (await headers()).get("x-nonce") ?? undefined;
+  const { locale, dir, messages, t } = await getI18n();
   return (
-    <html lang="en" className="h-full antialiased" suppressHydrationWarning>
+    <html lang={locale} dir={dir} className="h-full antialiased" suppressHydrationWarning>
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
         {/* Runtime browser config (app/runtime-config.js/route.ts): tells the
             client bundle which API origin to call ("" = same-origin) from the
@@ -103,9 +108,11 @@ export default async function RootLayout({
         <a href="#main-content" className="skip-link">
           {t("a11y.skipToContent")}
         </a>
-        <SoftwareBrandProvider hidden={hideSoftwareName(instance)}>
+        {/* Two providers, one indent: both are pure context with no markup. */}
+        <I18nProvider locale={locale} messages={messages}><SoftwareBrandProvider hidden={hideSoftwareName(instance)}>
           <AuthProvider>
             <PlayerSettingsBootstrap />
+            <ContentPreferencesBootstrap />
             <ToastProvider>
               <InstanceBanner instance={instance} nonce={nonce} />
               <Header instance={instance} />
@@ -128,7 +135,7 @@ export default async function RootLayout({
               <BottomTabBar />
             </ToastProvider>
           </AuthProvider>
-        </SoftwareBrandProvider>
+        </SoftwareBrandProvider></I18nProvider>
       </body>
     </html>
   );

@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 
+import { useFormat, useT } from "@/components/I18nProvider";
 import { CaptionsManager } from "@/components/CaptionsManager";
 import { ChaptersManager } from "@/components/ChaptersManager";
 import { EmbedPrivacyManager } from "@/components/EmbedPrivacyManager";
@@ -24,9 +25,20 @@ import {
   resumableUpload,
   videoThumbnailUrl,
 } from "@/lib/api";
-import type { Video, VideoConfigResponse, VideoPrivacy } from "@/lib/api";
-import { formatDateTime } from "@/lib/format";
+import type {
+  Channel,
+  CommentsPolicy,
+  SensitiveFlag,
+  Video,
+  VideoConfigResponse,
+  VideoPrivacy,
+} from "@/lib/api";
 import { watchPath } from "@/lib/watch-path";
+import { VIDEO_PRIVACY_CHOICES } from "@/lib/video-privacy";
+
+import { SensitiveFlagsField } from "./SensitiveFlagsField";
+import { SupportTextField } from "./SupportTextField";
+import { TransferOwnershipDialog } from "./TransferOwnershipDialog";
 
 import {
   BlockedBadge,
@@ -46,15 +58,21 @@ import {
 export function VideoRow({
   video,
   config,
+  channels,
   onUpdated,
   onDeleted,
   initiallyEditing = false,
   basicOnly = false,
   replaceEnabled = false,
-  replaceAccept = "video/*",
+  replaceAccept = "video/*,audio/*",
+  canTransfer = false,
+  leading,
 }: {
   video: Video;
   config: VideoConfigResponse | null;
+  /** Channels the caller can manage (owner + editor). With more than one, the
+   * edit form offers "Channel" so the video can move; omitted → no move UI. */
+  channels?: Channel[];
   onUpdated: (v: Video) => void;
   onDeleted: () => void;
   initiallyEditing?: boolean;
@@ -64,10 +82,19 @@ export function VideoRow({
   replaceEnabled?: boolean;
   /** File-picker accept list for the replace flow (extension gate, W10). */
   replaceAccept?: string;
+  /** The caller OWNS this video's channel: only the owner may give it away (core 0165). */
+  canTransfer?: boolean;
+  /** Rendered before the thumbnail in the resting row (the bulk-select checkbox). */
+  leading?: ReactNode;
 }) {
+  const t = useT();
+  const { formatDateTime } = useFormat();
   const [mode, setMode] = useState<RowMode>(initiallyEditing ? "edit" : "view");
   const [title, setTitle] = useState(video.title);
   const [description, setDescription] = useState(video.description);
+  // Markdown support message (PeerTube "support"); like tags, the authoritative
+  // value arrives with the detail fetch (list rows omit it).
+  const [support, setSupport] = useState(video.support ?? "");
   const [category, setCategory] = useState(video.category ?? "");
   const [language, setLanguage] = useState(video.language ?? "");
   const [license, setLicense] = useState(video.license ?? "");
@@ -82,10 +109,11 @@ export function VideoRow({
   // The paired creator content-warning text (sensitive_reason, ≤280 chars). Like
   // the flag above, the authoritative value arrives with the detail fetch.
   const [sensitiveReason, setSensitiveReason] = useState(video.sensitive_reason ?? "");
+  const [sensitiveFlags, setSensitiveFlags] = useState<SensitiveFlag[]>(video.sensitive_flags ?? []);
   // Per-video publish policies (config-parity W9); like tags/sensitive, the
   // authoritative values arrive with the detail fetch (list rows omit them).
-  const [commentsPolicy, setCommentsPolicy] = useState<"enabled" | "disabled">(
-    video.comments_policy === "disabled" ? "disabled" : "enabled",
+  const [commentsPolicy, setCommentsPolicy] = useState<CommentsPolicy>(
+    video.comments_policy ?? "enabled",
   );
   const [downloadEnabled, setDownloadEnabled] = useState(video.download_enabled !== false);
   // The number of stored passwords (CORE-17), reported up by PasswordManager
@@ -95,8 +123,19 @@ export function VideoRow({
   // The schedule as a datetime-local value; the owner list rows carry
   // publish_at once set (per the contract), the detail fetch refreshes it.
   const [publishAt, setPublishAt] = useState(toLocalInputValue(video.publish_at));
+  // The channel the video lives on, edited via the Channel select (T20).
+  const [channelId, setChannelId] = useState(video.channel_id ?? "");
+  // Moves stay within ONE owner's channels (the server refuses anything else),
+  // so a channel the caller merely edits for someone else is never offered.
+  const currentOwner = channels?.find((c) => c.id === video.channel_id)?.owner_id;
+  const moveTargets = currentOwner ? (channels ?? []).filter((c) => c.owner_id === currentOwner) : [];
+  const canMove = moveTargets.length > 1;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [transferring, setTransferring] = useState(false);
+  // A draft or processing video cannot be given yet (the server answers 409):
+  // its final size, which the recipient's quota is checked against, is unknown.
+  const transferable = canTransfer && video.state !== "draft" && video.state !== "processing";
   // The full detail fetched when Edit opens — the only view carrying hls_url/
   // renditions (list rows omit them per the contract), so the streaming-status
   // note can be honest. null until (unless) the detail fetch succeeds.
@@ -114,7 +153,7 @@ export function VideoRow({
     // 400s otherwise, and would leave the video unwatchable). Block the save
     // client-side with a clear message once the count is known to be zero.
     if (privacy === "password" && passwordCount === 0) {
-      setError("Add at least one password below before saving a password-protected video.");
+      setError(t("studio.edit.needPassword"));
       return;
     }
     setBusy(true);
@@ -137,11 +176,18 @@ export function VideoRow({
         // the detail fetch supplied the real current set to edit from — never
         // from list-row data, which omits tags entirely.
         ...(detail ? { tags } : {}),
+        // Same rule for the support text: sent only once the detail supplied the
+        // real current value, so a list-row edit can never clear it.
+        ...(detail ? { support: support.trim() } : {}),
         // Same rule for the sensitive flag: only sent once the detail supplied
         // the real current value (list rows omit it). The paired content-warning
         // rides with it — cleared (empty string) when the flag is off.
         ...(detail
-          ? { is_sensitive: sensitive, sensitive_reason: sensitive ? sensitiveReason.trim() : "" }
+          ? {
+              is_sensitive: sensitive,
+              sensitive_reason: sensitive ? sensitiveReason.trim() : "",
+              sensitive_flags: sensitive ? sensitiveFlags : [],
+            }
           : {}),
         // Same rule for the per-video publish policies (W9).
         ...(detail
@@ -151,11 +197,13 @@ export function VideoRow({
             }
           : {}),
         ...(scheduleChanged ? { publish_at: scheduleIso } : {}),
+        // Only a CHANGED choice is a move; a plain edit never names the channel.
+        ...(canMove && channelId !== video.channel_id ? { channel_id: channelId } : {}),
       });
       onUpdated(updated);
       setMode("view");
     } catch (err) {
-      setError(errorMessage(err, "Could not update the video."));
+      setError(errorMessage(err, t("studio.edit.error")));
     } finally {
       setBusy(false);
     }
@@ -165,6 +213,7 @@ export function VideoRow({
     setMode("view");
     setTitle(video.title);
     setDescription(video.description);
+    setSupport((detail ?? video).support ?? "");
     setCategory(video.category ?? "");
     setLanguage(video.language ?? "");
     setLicense(video.license ?? "");
@@ -172,9 +221,11 @@ export function VideoRow({
     setPrivacy(video.privacy ?? "private");
     setSensitive(isSensitiveVideo(detail ?? video));
     setSensitiveReason((detail ?? video).sensitive_reason ?? "");
-    setCommentsPolicy((detail ?? video).comments_policy === "disabled" ? "disabled" : "enabled");
+    setSensitiveFlags((detail ?? video).sensitive_flags ?? []);
+    setCommentsPolicy((detail ?? video).comments_policy ?? "enabled");
     setDownloadEnabled((detail ?? video).download_enabled !== false);
     setPublishAt(toLocalInputValue((detail ?? video).publish_at));
+    setChannelId(video.channel_id ?? "");
     setError(null);
   }
 
@@ -188,6 +239,7 @@ export function VideoRow({
       setDetail(full);
       setTitle(full.title);
       setDescription(full.description);
+      setSupport(full.support ?? "");
       setCategory(full.category ?? "");
       setLanguage(full.language ?? "");
       setLicense(full.license ?? "");
@@ -195,7 +247,8 @@ export function VideoRow({
       setPrivacy(full.privacy ?? "private");
       setSensitive(isSensitiveVideo(full));
       setSensitiveReason(full.sensitive_reason ?? "");
-      setCommentsPolicy(full.comments_policy === "disabled" ? "disabled" : "enabled");
+      setSensitiveFlags(full.sensitive_flags ?? []);
+      setCommentsPolicy(full.comments_policy ?? "enabled");
       setDownloadEnabled(full.download_enabled !== false);
       setPublishAt(toLocalInputValue(full.publish_at));
     } catch {
@@ -220,58 +273,75 @@ export function VideoRow({
     return (
       <li className="flex flex-col gap-3 px-4 py-4">
         <Input
-          label="Title"
+          label={t("studio.edit.title")}
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          aria-label="Edit title"
+          aria-label={t("studio.edit.titleLabel")}
           maxLength={200}
         />
         <Textarea
-          label="Description"
+          label={t("studio.edit.description")}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          aria-label="Edit description"
+          aria-label={t("studio.edit.descriptionLabel")}
           rows={3}
           maxLength={5000}
           className="resize-y"
         />
+        <SupportTextField value={support} onChange={setSupport} ariaLabel={t("studio.edit.supportLabel")} />
         <TaxonomySelect
-          label="Category"
-          ariaLabel="Edit category"
+          label={t("studio.edit.category")}
+          ariaLabel={t("studio.edit.categoryLabel")}
           value={category}
           onChange={setCategory}
           options={config?.categories ?? []}
         />
         <TaxonomySelect
-          label="Language"
-          ariaLabel="Edit language"
+          label={t("studio.edit.language")}
+          ariaLabel={t("studio.edit.languageLabel")}
           value={language}
           onChange={setLanguage}
           options={config?.languages ?? []}
         />
         <TaxonomySelect
-          label="License"
-          ariaLabel="Edit license"
+          label={t("studio.edit.license")}
+          ariaLabel={t("studio.edit.licenseLabel")}
           value={license}
           onChange={setLicense}
           options={config?.licenses ?? []}
         />
         {/* Tags are editable only when the detail fetch supplied the current
             set (see save()); otherwise the editor would show a false empty. */}
-        {detail ? <TagsInput value={tags} onChange={setTags} ariaLabel="Edit tags" /> : null}
+        {detail ? <TagsInput value={tags} onChange={setTags} ariaLabel={t("studio.edit.tagsLabel")} /> : null}
         <Select
-          label="Privacy"
+          label={t("studio.edit.privacy")}
           value={privacy}
           onChange={(e) => setPrivacy(e.target.value as VideoPrivacy)}
-          aria-label="Edit privacy"
+          aria-label={t("studio.edit.privacyLabel")}
         >
-          <option value="public">Public</option>
-          <option value="unlisted">Unlisted</option>
-          <option value="private">Private</option>
+          {VIDEO_PRIVACY_CHOICES.map((c) => (
+            <option key={c.value} value={c.value}>
+              {c.label}
+            </option>
+          ))}
           <option value="password" disabled={basicOnly && video.privacy !== "password"}>
-            Password-protected
+            {t("studio.edit.passwordProtected")}
           </option>
         </Select>
+        {canMove ? (
+          <Select
+            label={t("studio.edit.channel")}
+            value={channelId}
+            onChange={(e) => setChannelId(e.target.value)}
+            aria-label={t("studio.edit.channelLabel")}
+          >
+            {moveTargets.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.display_name || c.handle} (@{c.handle})
+              </option>
+            ))}
+          </Select>
+        ) : null}
         {/* Password management (CORE-17) appears when privacy is password; it
             reports its count up so the Save guard can block an empty set. */}
         {!basicOnly && privacy === "password" ? (
@@ -281,11 +351,11 @@ export function VideoRow({
             current value (see save()) — a list row would show a false "off". */}
         {detail ? (
           <div className="flex items-center justify-between gap-4 text-sm">
-            <span className="font-medium text-fg">Contains sensitive content</span>
+            <span className="font-medium text-fg">{t("studio.edit.sensitive")}</span>
             <Toggle
               checked={sensitive}
               onChange={setSensitive}
-              label="Edit contains sensitive content"
+              label={t("studio.edit.sensitiveLabel")}
               disabled={busy}
             />
           </div>
@@ -293,12 +363,15 @@ export function VideoRow({
         {/* Paired content-warning, revealed only while the flag is on; clearing
             it (empty) removes the reason on save. */}
         {detail && sensitive ? (
+          <SensitiveFlagsField value={sensitiveFlags} onChange={setSensitiveFlags} disabled={busy} />
+        ) : null}
+        {detail && sensitive ? (
           <Input
-            label="Content warning (optional)"
+            label={t("studio.edit.warning")}
             value={sensitiveReason}
             onChange={(e) => setSensitiveReason(e.target.value)}
-            aria-label="Edit content warning"
-            placeholder="Briefly describe what viewers will see"
+            aria-label={t("studio.edit.warningLabel")}
+            placeholder={t("studio.edit.warningPlaceholder")}
             maxLength={280}
             disabled={busy}
           />
@@ -307,21 +380,25 @@ export function VideoRow({
             rule as the sensitive flag. */}
         {detail ? (
           <>
+            {/* Three-way since core 0161: "Require approval" holds each new
+                comment for you (or an editor) to approve in Studio → Comments. */}
+            <Select
+              label={t("studio.edit.comments")}
+              aria-label={t("studio.edit.commentsLabel")}
+              value={commentsPolicy}
+              onChange={(e) => setCommentsPolicy(e.target.value as CommentsPolicy)}
+              disabled={busy}
+            >
+              <option value="enabled">{t("studio.edit.commentsOn")}</option>
+              <option value="requires_approval">{t("studio.edit.commentsApproval")}</option>
+              <option value="disabled">{t("studio.edit.commentsOff")}</option>
+            </Select>
             <div className="flex items-center justify-between gap-4 text-sm">
-              <span className="font-medium text-fg">Allow comments</span>
-              <Toggle
-                checked={commentsPolicy === "enabled"}
-                onChange={(on) => setCommentsPolicy(on ? "enabled" : "disabled")}
-                label="Edit allow comments"
-                disabled={busy}
-              />
-            </div>
-            <div className="flex items-center justify-between gap-4 text-sm">
-              <span className="font-medium text-fg">Allow downloads</span>
+              <span className="font-medium text-fg">{t("studio.edit.downloads")}</span>
               <Toggle
                 checked={downloadEnabled}
                 onChange={setDownloadEnabled}
-                label="Edit allow downloads"
+                label={t("studio.edit.downloadsLabel")}
                 disabled={busy}
               />
             </div>
@@ -332,12 +409,12 @@ export function VideoRow({
           // the backend rejects publish_at on a published video, and a schedule
           // cannot be cleared through the contract (only moved).
           <Input
-            label="Scheduled publish"
+            label={t("studio.edit.schedule")}
             type="datetime-local"
             value={publishAt}
             onChange={(e) => setPublishAt(e.target.value)}
-            aria-label="Edit scheduled publish"
-            hint="Set or move the automatic publish time (must be in the future)."
+            aria-label={t("studio.edit.scheduleLabel")}
+            hint={t("studio.edit.scheduleHint")}
           />
         ) : null}
         {error ? <p className="text-sm text-danger">{error}</p> : null}
@@ -370,10 +447,10 @@ export function VideoRow({
         ) : null}
         <div className="flex gap-2">
           <Button size="sm" disabled={busy || title.trim() === ""} onClick={() => void save()}>
-            Save
+            {t("studio.edit.save")}
           </Button>
           <Button variant="secondary" size="sm" disabled={busy} onClick={cancelEdit}>
-            Cancel
+            {t("studio.edit.cancel")}
           </Button>
         </div>
       </li>
@@ -382,6 +459,7 @@ export function VideoRow({
 
   return (
     <li className="flex items-center gap-3 px-4 py-3">
+      {leading}
       {/* Design row thumbnail: poster when ready, else a plain surface tile; a
           spinner overlays while the backend is still transcoding. */}
       <div className="relative aspect-video w-[92px] shrink-0 overflow-hidden rounded-lg bg-surface-strong sm:w-28">
@@ -405,26 +483,24 @@ export function VideoRow({
           <StateBadge state={video.state ?? "draft"} />
           {video.blocked ? <BlockedBadge /> : null}
           {video.privacy === "public" ? (
-            <span className="text-fg-muted">Public</span>
+            <span className="text-fg-muted">{t("studio.privacy.public")}</span>
           ) : (
             <PrivacyBadge privacy={video.privacy ?? "private"} />
           )}
           {video.state === "scheduled" && video.publish_at ? (
             <span className="text-fg-muted tabular-nums">
-              publishes {formatDateTime(video.publish_at)}
+              {t("studio.row.publishes", { when: formatDateTime(video.publish_at) })}
             </span>
           ) : null}
         </div>
         {video.state === "quarantined" ? (
           <p className="mt-1 text-xs text-warning">
-            Held for review — this instance reviews new uploads before they go public. Only you and
-            the moderators can see it until it is approved.
+            {t("studio.row.quarantined")}
           </p>
         ) : null}
         {video.blocked ? (
           <p className="mt-1 text-xs text-danger">
-            Blocked by moderation — this video is not available to viewers, including you, until a
-            moderator lifts the block. Nothing else about it has changed.
+            {t("studio.row.blocked")}
             {/* The moderator's reason, creator-facing since the A16 ruling: being
                 told only that something was taken down leaves nothing to appeal
                 or to fix on the next upload. Absent when they wrote none, and
@@ -432,7 +508,7 @@ export function VideoRow({
             {video.block_reason?.trim() ? (
               <>
                 {" "}
-                <span className="font-medium">Reason:</span> {video.block_reason.trim()}
+                <span className="font-medium">{t("studio.row.reason")}</span> {video.block_reason.trim()}
               </>
             ) : null}
           </p>
@@ -440,14 +516,14 @@ export function VideoRow({
       </div>
       {mode === "confirm-delete" ? (
         <div className="flex shrink-0 items-center gap-1 text-sm">
-          <span className="text-[13px] text-fg-muted">Delete?</span>
+          <span className="text-[13px] text-fg-muted">{t("studio.row.deleteAsk")}</span>
           <button
             type="button"
             disabled={busy}
             onClick={() => void remove()}
             className={`${ROW_ACTION} text-danger hover:bg-danger-surface`}
           >
-            Confirm
+            {t("studio.row.confirm")}
           </button>
           <button
             type="button"
@@ -455,7 +531,7 @@ export function VideoRow({
             onClick={() => setMode("view")}
             className={`${ROW_ACTION} text-fg-muted hover:bg-surface-strong hover:text-fg`}
           >
-            Cancel
+            {t("studio.row.cancel")}
           </button>
         </div>
       ) : (
@@ -465,17 +541,33 @@ export function VideoRow({
             onClick={() => void startEdit()}
             className={`${ROW_ACTION} text-fg-muted hover:bg-surface-strong hover:text-fg`}
           >
-            Edit
+            {t("studio.row.edit")}
           </button>
+          {transferable ? (
+            <button
+              type="button"
+              onClick={() => setTransferring(true)}
+              className={`${ROW_ACTION} text-fg-muted hover:bg-surface-strong hover:text-fg`}
+            >
+              {t("studio.row.transfer")}
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => setMode("confirm-delete")}
             className={`${ROW_ACTION} text-fg-muted hover:bg-danger-surface hover:text-danger`}
           >
-            Delete
+            {t("studio.row.delete")}
           </button>
         </div>
       )}
+      {transferring ? (
+        <TransferOwnershipDialog
+          videoId={video.id}
+          videoTitle={video.title}
+          onClose={() => setTransferring(false)}
+        />
+      ) : null}
     </li>
   );
 }
@@ -496,6 +588,7 @@ export function ReplaceVideoManager({
   accept: string;
   onReplaced: (v: Video) => void;
 }) {
+  const t = useT();
   const fileRef = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [state, setState] = useState<UploadState>("idle");
@@ -542,7 +635,7 @@ export function ReplaceVideoManager({
         setState("cancelled");
         return;
       }
-      setError(replaceErrorMessage(err));
+      setError(replaceErrorMessage(err, t));
       setState("error");
     } finally {
       abortRef.current = null;
@@ -551,17 +644,16 @@ export function ReplaceVideoManager({
 
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-border-subtle p-3 text-sm">
-      <span className="font-medium text-fg">Replace video file</span>
+      <span className="font-medium text-fg">{t("studio.replace.title")}</span>
       <p className="text-xs text-fg-muted">
-        Upload a new file for this video. Its link, views, and details stay the same; viewers keep
-        watching the current version until the new file finishes processing.
+        {t("studio.replace.help")}
       </p>
       <div className="flex flex-wrap items-center gap-2">
         <input
           ref={fileRef}
           type="file"
           accept={accept}
-          aria-label="Replacement video file"
+          aria-label={t("studio.replace.fileLabel")}
           onChange={onPicked}
           disabled={state === "uploading"}
           className="min-w-0 flex-1 text-xs text-fg-muted file:mr-2 file:rounded-lg file:border-0 file:bg-surface-strong file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-fg"
@@ -570,19 +662,19 @@ export function ReplaceVideoManager({
           <Button
             variant="secondary"
             size="sm"
-            aria-label="Cancel replacement upload"
+            aria-label={t("studio.replace.cancelLabel")}
             onClick={() => abortRef.current?.abort()}
           >
-            Cancel
+            {t("studio.replace.cancel")}
           </Button>
         ) : (
           <Button
             size="sm"
             disabled={fileName === null}
             onClick={() => void replace()}
-            aria-label="Upload replacement"
+            aria-label={t("studio.replace.uploadLabel")}
           >
-            Replace
+            {t("studio.replace.submit")}
           </Button>
         )}
       </div>
@@ -590,7 +682,7 @@ export function ReplaceVideoManager({
         <div className="flex items-center gap-2">
           <div
             role="progressbar"
-            aria-label="Replacement upload progress"
+            aria-label={t("studio.replace.progressLabel")}
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={progress}
@@ -608,7 +700,7 @@ export function ReplaceVideoManager({
       ) : null}
       {state === "done" ? (
         <p role="status" className="text-xs text-success">
-          New file uploaded — viewers see the current version until processing finishes.
+          {t("studio.replace.done")}
         </p>
       ) : null}
       {state === "error" && error ? <p className="text-xs text-danger">{error}</p> : null}
@@ -625,17 +717,18 @@ export function ReplaceVideoManager({
 // N+1-fetch row badge). Only published videos are annotated: a draft has no
 // file and processing/failed already have their own badges.
 function StreamingStatus({ video }: { video: Video }) {
+  const t = useT();
+
   if (video.state !== "published") return null;
   if (video.hls_url) {
     const heights = (video.renditions ?? []).map((r) => `${r.height}p`).join(", ");
     return (
-      <p className="text-xs text-fg-muted">Streaming (HLS) ready{heights ? `: ${heights}` : ""}.</p>
+      <p className="text-xs text-fg-muted">{t("studio.stream.ready", { heights: heights ? `: ${heights}` : "" })}</p>
     );
   }
   return (
     <p className="text-xs text-fg-muted">
-      HD streaming versions are not ready — viewers currently watch the original file. They appear
-      automatically once transcoding completes (if enabled on this instance).
+      {t("studio.stream.notReady")}
     </p>
   );
 }

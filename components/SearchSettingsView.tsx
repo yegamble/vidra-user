@@ -15,8 +15,10 @@ import type { SearchHistoryEntry, UpdateProfileRequest } from "@/lib/api";
 import { FULL_LIST_LIMIT } from "@/lib/api/pagination";
 import { relativeTime } from "@/lib/format";
 import type { InstanceSearchBlock } from "@/lib/instance-config.server";
+import type { Translate } from "@/lib/i18n";
 import { SEARCH_RETRY_QUALIFIER, searchServiceDown } from "@/lib/search-failure";
 import { subscribeSearchHistoryFlushed } from "@/lib/search-events";
+import { useT } from "@/components/I18nProvider";
 import { SignInGate } from "@/components/SignInGate";
 import { usePlatformLabel } from "@/components/SoftwareBrandProvider";
 
@@ -44,16 +46,15 @@ type Gate = { allowed: true } | { allowed: false; reason: string };
 
 const GATE_OPEN: Gate = { allowed: true };
 
-/** The one-line reason for an operator switching a whole feature off. */
-const ADMIN_OFF = "Turned off for everyone on this site by the administrator.";
-
 /**
  * The instance half of each gate. `undefined` means "not gated": an older
  * backend, a failed /instance fetch, or the mocked e2e suite must never make a
  * working control look forbidden, which is the same `!== false` reading every
  * other consumer of this block uses (SearchResults, Header).
  */
-function instanceGates(search: InstanceSearchBlock | undefined): Record<PrefKey, Gate> {
+function instanceGates(search: InstanceSearchBlock | undefined, t: Translate): Record<PrefKey, Gate> {
+  // The one-line reason for an operator switching a whole feature off.
+  const adminOff = t("settings.search.adminOff");
   // BOTH personalization controls are mode-gated server-side, and for the same
   // reason: simple mode never applies behavioural signals, whatever the toggles
   // say. Core computes the search flag as `searchAdvanced() &&
@@ -63,28 +64,25 @@ function instanceGates(search: InstanceSearchBlock | undefined): Record<PrefKey,
   // default it accepted a click, said "Saved." in green, and changed nothing —
   // the exact failure the search toggle's gate exists to prevent.
   const simpleMode = search?.mode === "simple";
-  const modeOff = (what: string): Gate => ({
-    allowed: false,
-    reason: `This site ranks search with simple heuristics, so personalized ${what} are not available.`,
-  });
+  const modeOff = (reason: string): Gate => ({ allowed: false, reason });
   return {
     search_history_enabled:
       search?.search_history_enabled === false
-        ? { allowed: false, reason: ADMIN_OFF }
+        ? { allowed: false, reason: adminOff }
         : // Deliberately NOT mode-gated: history stores rows, it does not rank
           // them, and it works identically in both modes.
           GATE_OPEN,
     personalized_search_enabled:
       search?.personalized_search_enabled === false
-        ? { allowed: false, reason: ADMIN_OFF }
+        ? { allowed: false, reason: adminOff }
         : simpleMode
-          ? modeOff("results")
+          ? modeOff(t("settings.search.simpleResults"))
           : GATE_OPEN,
     personalized_recommendations_enabled:
       search?.personalized_recommendations_enabled === false
-        ? { allowed: false, reason: ADMIN_OFF }
+        ? { allowed: false, reason: adminOff }
         : simpleMode
-          ? modeOff("recommendations")
+          ? modeOff(t("settings.search.simpleRecs"))
           : GATE_OPEN,
   };
 }
@@ -101,21 +99,22 @@ export function SearchSettingsView({
   /** The `search{}` block of GET /instance, threaded down by the server page. */
   instanceSearch?: InstanceSearchBlock;
 }) {
+  const t = useT();
   const { status, user } = useSession();
 
   if (status === "anon" || !user) {
     return (
       <SignInGate
-        title="Sign in to manage your search settings"
-        lead="Your session has ended."
-        restoringLabel="Loading your settings"
+        title={t("settings.search.gate.title")}
+        lead={t("settings.search.gate.lead")}
+        restoringLabel={t("settings.search.gate.restoring")}
       >
-        to change your search and recommendation preferences.
+        {t("settings.search.gate.body")}
       </SignInGate>
     );
   }
 
-  const gates = instanceGates(instanceSearch);
+  const gates = instanceGates(instanceSearch, t);
 
   return (
     <div className="flex max-w-xl flex-col gap-8">
@@ -143,6 +142,7 @@ function PreferencesSection({
   initial: Record<PrefKey, boolean>;
   gates: Record<PrefKey, Gate>;
 }) {
+  const t = useT();
   const { updateProfile } = useSession();
   // The privacy explainer's subject is the software; a white-labelled instance
   // may not name it (branding.hide_software_name).
@@ -167,73 +167,53 @@ function PreferencesSection({
       // Revert the optimistic flip and surface the failure.
       setPrefs((p) => ({ ...p, [key]: !value }));
       setSaveState("error");
-      setError(errorMessage(err, "Could not save that change."));
+      setError(errorMessage(err, t("settings.search.saveError")));
     }
   }
 
   return (
     <section className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
-        <h2 className="text-base font-semibold tracking-tight text-fg">Personalization</h2>
+        <h2 className="text-base font-semibold tracking-tight text-fg">{t("settings.search.personalization.title")}</h2>
         <p className="text-[13px] text-fg-muted">
-          {platformLabel} can use your searches and what you watch to tailor suggestions,
-          search results, and your home recommendations. These controls are yours —
-          turn any of them off at any time, and each one feeds only its own
-          feature. Once none of them is active for you, your searches and plays
-          stop being recorded against your account altogether: from that moment
-          they are stored the way a signed-out visitor&rsquo;s are, counted once
-          toward the anonymous totals this site uses to decide what is popular,
-          and never linked back to you. That covers how your video played, too:
-          the quality measurements this site takes while you watch — start time,
-          stalls, errors — stop carrying any pseudonym for you, while still
-          counting toward the anonymous playback totals the administrator reads.
-          A control this site has switched off collects nothing either — it is greyed out below with the reason.
+          {t("settings.search.personalization.intro", { platformLabel })}
         </p>
       </div>
 
       {/* Polite, non-focus-stealing save status (design-system role=status line). */}
       <div role="status" aria-live="polite" className="min-h-5 text-[13px]">
-        {saveState === "saving" ? <span className="text-fg-muted">Saving…</span> : null}
-        {saveState === "saved" ? <span className="text-success">Saved.</span> : null}
+        {saveState === "saving" ? <span className="text-fg-muted">{t("settings.search.saving")}</span> : null}
+        {saveState === "saved" ? <span className="text-success">{t("settings.search.saved")}</span> : null}
         {saveState === "error" && error ? <span className="text-danger">{error}</span> : null}
       </div>
 
       <ToggleRow
         id="pref-search-history"
-        label="Keep my search history"
-        help="Save the searches you make so you can revisit them and get more relevant suggestions. While off, new searches are not stored to your history. Clear existing history below."
+        label={t("settings.search.history.label")}
+        help={t("settings.search.history.help")}
         checked={prefs.search_history_enabled}
         onChange={(v) => void toggle("search_history_enabled", v)}
         gate={gates.search_history_enabled}
       />
       <ToggleRow
         id="pref-personalized-search"
-        label="Personalize my search results"
-        help="Rank search results using what you've watched and searched before. While off, everyone sees the same results for a query."
+        label={t("settings.search.results.label")}
+        help={t("settings.search.results.help")}
         checked={prefs.personalized_search_enabled}
         onChange={(v) => void toggle("personalized_search_enabled", v)}
         gate={gates.personalized_search_enabled}
       />
       <ToggleRow
         id="pref-personalized-recommendations"
-        label="Personalize my recommendations"
-        help="Tailor your home 'For you' rail and related videos to your activity. While off, you'll see trending and related videos that aren't personalized."
+        label={t("settings.search.recs.label")}
+        help={t("settings.search.recs.help")}
         checked={prefs.personalized_recommendations_enabled}
         onChange={(v) => void toggle("personalized_recommendations_enabled", v)}
         gate={gates.personalized_recommendations_enabled}
       />
 
       <p className="text-xs text-fg-muted">
-        Retention: your search activity is kept only as long as the administrator
-        of this instance configures — 90 days unless they change it — and is
-        removed on request. Turning a control off works from that moment onward:
-        activity recorded before you turned it off keeps the link to your account
-        until it ages out. To remove it now, use Clear all below: it deletes
-        your stored searches and the search service&apos;s raw records of them
-        outright — not just your name from them. The anonymous popularity totals
-        this site keeps are recomputed without you within a day, except the
-        trending counters, which cannot be edited and instead expire within 8
-        days.
+        {t("settings.search.retention")}
       </p>
     </section>
   );
@@ -321,49 +301,50 @@ type LoadFailure = {
  *  - 403/401 otherwise — the caller may not read this history. Retrying cannot
  *    help either.
  */
-function describeHistoryFailure(err: unknown, platformLabel: string): LoadFailure {
+function describeHistoryFailure(err: unknown, platformLabel: string, t: Translate): LoadFailure {
   if (err instanceof ApiError) {
     if (err.status === 503 || err.code === "search_unavailable") {
       return {
-        title: "The search service did not answer",
-        message: `Your search history is stored by the search service. ${searchServiceDown(platformLabel)} ${SEARCH_RETRY_QUALIFIER}`,
+        title: t("settings.search.fail.down.title"),
+        message: t("settings.search.fail.down.message", {
+          down: searchServiceDown(platformLabel),
+          qualifier: SEARCH_RETRY_QUALIFIER,
+        }),
         retryable: true,
       };
     }
     if (err.status === 403 && err.code === "feature_disabled") {
       return {
-        title: "Smart search is switched off",
-        message:
-          "This instance is not running smart search, so it is not keeping a search history for you. An administrator can turn it on in the instance settings.",
+        title: t("settings.search.fail.off.title"),
+        message: t("settings.search.fail.off.message"),
         retryable: false,
       };
     }
     if (err.status === 403 || err.status === 401) {
       return {
-        title: "You cannot see this search history",
-        message:
-          "Your account does not have permission to read or change these stored searches. Sign in again if your session has changed.",
+        title: t("settings.search.fail.denied.title"),
+        message: t("settings.search.fail.denied.message"),
         retryable: false,
       };
     }
   }
-  return { message: "Could not load your search history.", retryable: true };
+  return { message: t("settings.search.fail.load"), retryable: true };
 }
 
 /** The same three states for a delete/clear that did NOT take effect. */
-function historyMutationError(notDone: string, err: unknown, platformLabel: string): string {
+function historyMutationError(notDone: string, err: unknown, platformLabel: string, t: Translate): string {
   if (err instanceof ApiError) {
     if (err.status === 503 || err.code === "search_unavailable") {
-      return `${notDone}. ${searchServiceDown(platformLabel)}`;
+      return t("settings.search.mut.down", { notDone, down: searchServiceDown(platformLabel) });
     }
     if (err.status === 403 && err.code === "feature_disabled") {
-      return `${notDone}. Smart search is switched off on this instance.`;
+      return t("settings.search.mut.off", { notDone });
     }
     if (err.status === 403) {
-      return `${notDone}. Your account cannot change these stored searches.`;
+      return t("settings.search.mut.denied", { notDone });
     }
   }
-  return errorMessage(err, `${notDone}.`);
+  return errorMessage(err, t("settings.search.mut.plain", { notDone }));
 }
 
 // When a search the viewer just made reaches the server (the batched
@@ -408,6 +389,7 @@ function historyFingerprint(entries: SearchHistoryEntry[]): string {
 // the strongest claim on the control. It stays hidden while the list is loading
 // or has failed, where a click would race an unknown state.
 function SearchHistorySection({ instanceEnabled }: { instanceEnabled: boolean }) {
+  const t = useT();
   const platformLabel = usePlatformLabel();
   const [entries, setEntries] = useState<SearchHistoryEntry[]>([]);
   const [fetchStatus, setFetchStatus] = useState<HistoryStatus>("loading");
@@ -508,7 +490,7 @@ function SearchHistorySection({ instanceEnabled }: { instanceEnabled: boolean })
   // "off" is derived, not stored: the operator's verdict outranks any fetch
   // state, and deriving it keeps the spinner from flashing before the effect.
   const status: HistoryStatus = instanceEnabled ? fetchStatus : "off";
-  const problem = status === "error" ? describeHistoryFailure(failure, platformLabel) : null;
+  const problem = status === "error" ? describeHistoryFailure(failure, platformLabel, t) : null;
 
   function retry() {
     setFetchStatus("loading");
@@ -526,7 +508,7 @@ function SearchHistorySection({ instanceEnabled }: { instanceEnabled: boolean })
     } catch (err) {
       // Restore on failure and report.
       setEntries((prev) => [...prev, entry]);
-      setActionError(historyMutationError("That search was not removed", err, platformLabel));
+      setActionError(historyMutationError(t("settings.search.mut.removeFailed"), err, platformLabel, t));
     }
   }
 
@@ -538,7 +520,7 @@ function SearchHistorySection({ instanceEnabled }: { instanceEnabled: boolean })
       setEntries([]);
       setConfirmClear(false);
     } catch (err) {
-      setActionError(historyMutationError("Your history was not cleared", err, platformLabel));
+      setActionError(historyMutationError(t("settings.search.mut.clearFailed"), err, platformLabel, t));
     } finally {
       setClearing(false);
     }
@@ -547,14 +529,14 @@ function SearchHistorySection({ instanceEnabled }: { instanceEnabled: boolean })
   return (
     <section className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-base font-semibold tracking-tight text-fg">Search history</h2>
+        <h2 className="text-base font-semibold tracking-tight text-fg">{t("settings.search.h.title")}</h2>
         {status === "off" || status === "ready" ? (
           <button
             type="button"
             onClick={() => setConfirmClear(true)}
             className="focus-ring rounded-full border border-border px-3.5 py-1.5 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted"
           >
-            Clear all
+            {t("settings.search.h.clearAll")}
           </button>
         ) : null}
       </div>
@@ -567,7 +549,7 @@ function SearchHistorySection({ instanceEnabled }: { instanceEnabled: boolean })
 
       {status === "loading" ? (
         <div className="flex justify-center py-8">
-          <Spinner label="Loading your search history" />
+          <Spinner label={t("settings.search.h.loading")} />
         </div>
       ) : null}
 
@@ -575,8 +557,8 @@ function SearchHistorySection({ instanceEnabled }: { instanceEnabled: boolean })
         <EmptyState
           icon={<SearchIcon size={24} />}
           tint="gray"
-          title="This site does not record search history"
-          message="The administrator turned search history off for everyone here, so your searches are no longer saved. Anything stored before that is not listed, but you can still erase it."
+          title={t("settings.search.h.off.title")}
+          message={t("settings.search.h.off.message")}
         />
       ) : null}
 
@@ -589,10 +571,7 @@ function SearchHistorySection({ instanceEnabled }: { instanceEnabled: boolean })
       ) : null}
 
       {status === "ready" && entries.length === 0 ? (
-        <p className="text-sm text-fg-muted">
-          You have no saved searches. Clear all still erases any earlier activity
-          this site holds under your account.
-        </p>
+        <p className="text-sm text-fg-muted">{t("settings.search.h.empty")}</p>
       ) : null}
 
       {status === "ready" && entries.length > 0 ? (
@@ -617,7 +596,7 @@ function SearchHistorySection({ instanceEnabled }: { instanceEnabled: boolean })
                 <button
                   type="button"
                   onClick={() => void removeOne(entry)}
-                  aria-label={`Remove “${text}” from your search history`}
+                  aria-label={t("settings.search.h.removeLabel", { text })}
                   className="focus-ring flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-fg-muted transition-colors hover:bg-surface-strong hover:text-fg"
                 >
                   <TrashIcon size={16} strokeWidth={2} />
@@ -629,10 +608,9 @@ function SearchHistorySection({ instanceEnabled }: { instanceEnabled: boolean })
       ) : null}
 
       {confirmClear ? (
-        <Modal title="Clear your search history?" onClose={() => setConfirmClear(false)}>
+        <Modal title={t("settings.search.h.modalTitle")} onClose={() => setConfirmClear(false)}>
           <p className="text-sm text-fg-muted">
-            This permanently removes every search you have made on this instance.
-            This cannot be undone.
+            {t("settings.search.h.modalBody")}
           </p>
           <div className="mt-5 flex flex-wrap justify-end gap-2">
             <button
@@ -641,7 +619,7 @@ function SearchHistorySection({ instanceEnabled }: { instanceEnabled: boolean })
               onClick={() => setConfirmClear(false)}
               className="focus-ring rounded-full border border-border bg-surface px-4 py-2 text-sm font-semibold text-fg transition-colors hover:bg-surface-muted disabled:opacity-60"
             >
-              Cancel
+              {t("common.cancel")}
             </button>
             <button
               type="button"
@@ -649,7 +627,7 @@ function SearchHistorySection({ instanceEnabled }: { instanceEnabled: boolean })
               onClick={() => void clearAll()}
               className="focus-ring rounded-full bg-danger-solid px-4 py-2 text-sm font-semibold text-danger-fg transition-colors hover:bg-danger-solid/90 disabled:opacity-60"
             >
-              {clearing ? "Clearing…" : "Clear history"}
+              {clearing ? t("settings.search.h.clearing") : t("settings.search.h.clear")}
             </button>
           </div>
         </Modal>

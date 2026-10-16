@@ -1,9 +1,12 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+const updateVideo = vi.hoisted(() => vi.fn());
+const getVideo = vi.hoisted(() => vi.fn());
+
 vi.mock("@/lib/api", () => ({
-  api: {},
+  api: { updateVideo, getVideo },
   errorMessage: (_error: unknown, fallback: string) => fallback,
   isSensitiveVideo: () => false,
   isUploadCancelled: () => false,
@@ -12,7 +15,7 @@ vi.mock("@/lib/api", () => ({
 }));
 
 import { VideoRow } from "@/components/studio/VideoRow";
-import type { Video } from "@/lib/api";
+import type { Channel, Video } from "@/lib/api";
 
 afterEach(cleanup);
 
@@ -76,5 +79,223 @@ describe("VideoRow — moderation state", () => {
     renderRow(row({ blocked: true }));
     expect(screen.queryByText(/reason/i)).toBeNull();
     expect(screen.getByText(/not available to viewers/i)).toBeTruthy();
+  });
+});
+
+// T20: a creator can move a video to another channel they manage. The select is
+// only worth showing when there IS another channel to move to, and the request
+// carries channel_id only when the choice actually changed (a plain title edit
+// must not look like a move to the server).
+describe("VideoRow — move to another channel", () => {
+  const channel = (id: string, handle: string, owner = "owner-1"): Channel =>
+    ({ id, handle, display_name: `Name ${handle}`, owner_id: owner }) as Channel;
+  const A = channel("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "alpha");
+  const B = channel("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "beta");
+  // A channel the caller edits for SOMEONE ELSE: never a move target.
+  const C = channel("cccccccc-cccc-4ccc-8ccc-cccccccccccc", "gamma", "owner-2");
+
+  function renderEditing(channels: Channel[] | undefined, onUpdated = vi.fn()) {
+    render(
+      <VideoRow
+        video={row({ channel_id: A.id })}
+        config={null}
+        channels={channels}
+        initiallyEditing
+        basicOnly
+        onUpdated={onUpdated}
+        onDeleted={() => {}}
+      />,
+    );
+    return onUpdated;
+  }
+
+  it("hides the Channel select when the caller manages one channel or none are passed", () => {
+    renderEditing([A]);
+    expect(screen.queryByLabelText("Edit channel")).toBeNull();
+    cleanup();
+    renderEditing(undefined);
+    expect(screen.queryByLabelText("Edit channel")).toBeNull();
+  });
+
+  it("offers only channels with the same owner, and hides the select when none remain", () => {
+    renderEditing([A, B, C]);
+    const opts = Array.from(
+      (screen.getByLabelText("Edit channel") as HTMLSelectElement).options,
+    ).map((o) => o.value);
+    expect(opts).toEqual([A.id, B.id]);
+    cleanup();
+    renderEditing([A, C]);
+    expect(screen.queryByLabelText("Edit channel")).toBeNull();
+  });
+
+  it("omits channel_id from an edit that did not change the channel", async () => {
+    updateVideo.mockReset();
+    updateVideo.mockResolvedValue(row({ channel_id: A.id }));
+    renderEditing([A, B]);
+    expect((screen.getByLabelText("Edit channel") as HTMLSelectElement).value).toBe(A.id);
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    await waitFor(() => expect(updateVideo).toHaveBeenCalledTimes(1));
+    expect(updateVideo.mock.calls[0][1]).not.toHaveProperty("channel_id");
+  });
+
+  it("sends the chosen channel_id and reports the moved video", async () => {
+    updateVideo.mockReset();
+    updateVideo.mockResolvedValue(row({ channel_id: B.id }));
+    const onUpdated = renderEditing([A, B]);
+    fireEvent.change(screen.getByLabelText("Edit channel"), { target: { value: B.id } });
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    await waitFor(() => expect(updateVideo).toHaveBeenCalledTimes(1));
+    expect(updateVideo.mock.calls[0][1]).toMatchObject({ channel_id: B.id });
+    await waitFor(() => expect(onUpdated).toHaveBeenCalled());
+  });
+});
+
+// Comment approval (core 0161): the edit form's comments control is a three-way
+// policy — on, held for the creator's approval, or off — and round-trips the
+// value the server sent rather than collapsing approval into "on".
+describe("VideoRow — comments policy", () => {
+  function renderPolicy(policy: Video["comments_policy"]) {
+    render(
+      <VideoRow
+        video={row({ comments_policy: policy })}
+        config={null}
+        initiallyEditing
+        basicOnly
+        onUpdated={() => {}}
+        onDeleted={() => {}}
+      />,
+    );
+    return screen.getByLabelText("Edit comments") as HTMLSelectElement;
+  }
+
+  it("offers Require approval and saves it", async () => {
+    updateVideo.mockReset();
+    updateVideo.mockResolvedValue(row({ comments_policy: "requires_approval" }));
+    const select = renderPolicy("enabled");
+    expect(Array.from(select.options).map((o) => [o.value, o.textContent])).toEqual([
+      ["enabled", "On"],
+      ["requires_approval", "Require approval"],
+      ["disabled", "Off"],
+    ]);
+    fireEvent.change(select, { target: { value: "requires_approval" } });
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    await waitFor(() => expect(updateVideo).toHaveBeenCalledTimes(1));
+    expect(updateVideo.mock.calls[0][1]).toMatchObject({ comments_policy: "requires_approval" });
+  });
+
+  it("prefills each stored policy, defaulting an absent one to On", () => {
+    expect(renderPolicy("requires_approval").value).toBe("requires_approval");
+    cleanup();
+    expect(renderPolicy("disabled").value).toBe("disabled");
+    cleanup();
+    expect(renderPolicy(undefined).value).toBe("enabled");
+  });
+});
+
+// PeerTube's members-only tier: the creator can pick it in the edit form and the
+// row says what it means.
+describe("VideoRow — internal privacy", () => {
+  it("offers Internal in the editor and saves privacy=internal", async () => {
+    updateVideo.mockReset();
+    updateVideo.mockResolvedValue(row({ privacy: "internal" }));
+    render(
+      <VideoRow video={row()} config={null} initiallyEditing basicOnly onUpdated={() => {}} onDeleted={() => {}} />,
+    );
+    const select = screen.getByLabelText("Edit privacy") as HTMLSelectElement;
+    expect(Array.from(select.options).map((o) => o.text)).toContain("Internal (signed-in users only)");
+    fireEvent.change(select, { target: { value: "internal" } });
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    await waitFor(() => expect(updateVideo).toHaveBeenCalledTimes(1));
+    expect(updateVideo.mock.calls[0][1]).toMatchObject({ privacy: "internal" });
+  });
+
+  it("badges an internal video in the list", () => {
+    renderRow(row({ privacy: "internal" }));
+    expect(screen.getByText("internal")).toBeTruthy();
+  });
+});
+
+// PeerTube's support text (migration 0160). Like tags, the authoritative value
+// only arrives with the detail fetch, so a save made without it must never send
+// `support` (an empty list-row field would otherwise clear the real one).
+describe("VideoRow — support text", () => {
+  // basicOnly keeps the owner-only media panels (captions, chapters, passwords)
+  // out of the tree, so this exercises the metadata form alone.
+  function renderBasic(video: Video) {
+    render(<VideoRow video={video} config={null} basicOnly onUpdated={() => {}} onDeleted={() => {}} />);
+  }
+
+  it("prefills from the detail, sends the edited text trimmed, and counts characters", async () => {
+    getVideo.mockReset();
+    getVideo.mockResolvedValue(row({ support: "Ko-fi: ada" }));
+    updateVideo.mockReset();
+    updateVideo.mockResolvedValue(row({ support: "Liberapay: ada" }));
+    renderBasic(row());
+    fireEvent.click(screen.getByRole("button", { name: /^edit/i }));
+    const field = (await screen.findByLabelText("Edit support text")) as HTMLTextAreaElement;
+    expect(field.value).toBe("Ko-fi: ada");
+    expect(screen.getByText(/10\/1000/)).toBeTruthy();
+    fireEvent.change(field, { target: { value: "  Liberapay: ada  " } });
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    await waitFor(() => expect(updateVideo).toHaveBeenCalledTimes(1));
+    expect(updateVideo.mock.calls[0][1]).toMatchObject({ support: "Liberapay: ada" });
+  });
+
+  it("clears the text with an empty string when the creator empties the field", async () => {
+    getVideo.mockReset();
+    getVideo.mockResolvedValue(row({ support: "Ko-fi: ada" }));
+    updateVideo.mockReset();
+    updateVideo.mockResolvedValue(row());
+    renderBasic(row());
+    fireEvent.click(screen.getByRole("button", { name: /^edit/i }));
+    fireEvent.change(await screen.findByLabelText("Edit support text"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    await waitFor(() => expect(updateVideo).toHaveBeenCalledTimes(1));
+    expect(updateVideo.mock.calls[0][1]).toMatchObject({ support: "" });
+  });
+
+  it("never sends support when the detail fetch failed (list rows omit it)", async () => {
+    getVideo.mockReset();
+    getVideo.mockRejectedValue(new Error("offline"));
+    updateVideo.mockReset();
+    updateVideo.mockResolvedValue(row());
+    renderBasic(row());
+    fireEvent.click(screen.getByRole("button", { name: /^edit/i }));
+    await screen.findByLabelText("Edit support text");
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    await waitFor(() => expect(updateVideo).toHaveBeenCalledTimes(1));
+    expect(updateVideo.mock.calls[0][1]).not.toHaveProperty("support");
+  });
+});
+
+// Only the OWNER may give a video away (core 0165), and only once its upload
+// has settled — the server answers 409 for a draft or a processing video, so
+// the row never offers a control that cannot work.
+describe("VideoRow — transfer ownership", () => {
+  function renderTransferRow(video: Video, canTransfer: boolean) {
+    render(
+      <VideoRow
+        video={video}
+        config={null}
+        canTransfer={canTransfer}
+        onUpdated={() => {}}
+        onDeleted={() => {}}
+      />,
+    );
+  }
+
+  it("opens the transfer dialog for the owner of a settled video", () => {
+    renderTransferRow(row(), true);
+    fireEvent.click(screen.getByRole("button", { name: "Transfer" }));
+    expect(screen.getByRole("dialog", { name: "Transfer ownership" })).toBeTruthy();
+    expect(screen.getByLabelText("Recipient's username")).toBeTruthy();
+  });
+
+  it("offers no transfer to a collaborator or while the upload is unsettled", () => {
+    renderTransferRow(row(), false);
+    expect(screen.queryByRole("button", { name: "Transfer" })).toBeNull();
+    cleanup();
+    renderTransferRow(row({ state: "processing" }), true);
+    expect(screen.queryByRole("button", { name: "Transfer" })).toBeNull();
   });
 });

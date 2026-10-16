@@ -1,6 +1,7 @@
 "use client";
 
 import { FederatedOriginBadge } from "@/components/FederatedOriginBadge";
+import { UserText } from "@/components/UserText";
 import { EmptyState } from "@/components/ui/EmptyState";
 import type { RemoteVideoComment } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
@@ -118,7 +119,7 @@ export function RemoteVideoThread({ comments }: { comments: RemoteVideoComment[]
               {comment.replyingTo ? (
                 <p className="text-[13px] text-fg-muted">Replying to {comment.replyingTo}</p>
               ) : null}
-              <p className="whitespace-pre-wrap text-sm leading-relaxed text-fg">{comment.body}</p>
+              <UserText variant="comment" mentions={false} text={comment.body} className="text-sm leading-relaxed text-fg" />
             </li>
           ))}
         </ul>

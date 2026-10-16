@@ -1,20 +1,31 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
-import { FlagIcon, MessageCircleIcon, ShieldIcon, UserIcon, VideoIcon } from "@/components/icons";
+import { useFormat, useT } from "@/components/I18nProvider";
+import {
+  FlagIcon,
+  GlobeIcon,
+  MessageCircleIcon,
+  ShareIcon,
+  ShieldIcon,
+  UserIcon,
+  UsersIcon,
+  VideoIcon,
+} from "@/components/icons";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { ListTail } from "@/components/ui/ListTail";
 import { Spinner } from "@/components/ui/Spinner";
 import { api } from "@/lib/api";
 import type { Notification } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import { relativeTime } from "@/lib/format";
+import type { Translate } from "@/lib/i18n";
+import { useAppendingList } from "@/lib/use-appending-list";
+import { useBrowseAutoLoad } from "@/lib/use-browse-auto-load";
 import { SignInGate } from "@/components/SignInGate";
-
-type Status = "loading" | "error" | "ready";
 
 // NotificationTypeIcon maps each notification type to a design-set glyph, rendered
 // inside the round leading chip. The design's Inbox uses message-circle for
@@ -24,8 +35,11 @@ type Status = "loading" | "error" | "ready";
 export function NotificationTypeIcon({ type }: { type: string }) {
   switch (type) {
     case "comment":
+    case "comment_held":
     case "comment_reply":
+    case "comment_mention":
     case "message":
+    case "report_message":
       return <MessageCircleIcon size={16} />;
     case "video_rejected":
     case "video_blocked":
@@ -34,8 +48,16 @@ export function NotificationTypeIcon({ type }: { type: string }) {
       return <ShieldIcon size={16} />;
     case "new_report":
       return <FlagIcon size={16} />;
+    case "new_registration_request":
+      return <UsersIcon size={16} />;
+    case "upload_quarantined":
+      return <ShieldIcon size={16} />;
+    case "federation_follower_request":
+      return <GlobeIcon size={16} />;
     case "new_video":
       return <VideoIcon size={16} />;
+    case "video_ownership_request":
+      return <ShareIcon size={16} />;
     default:
       return <UserIcon size={16} />;
   }
@@ -51,6 +73,7 @@ const NOTIF_CHIP: Record<string, string> = {
   follow: "bg-tile-blue/12 text-tile-blue",
   comment: "bg-accent/12 text-accent",
   comment_reply: "bg-accent/12 text-accent",
+  comment_mention: "bg-accent/12 text-accent",
   message: "bg-tile-green/12 text-tile-green",
   video_rejected: "bg-tile-red/12 text-tile-red",
   video_blocked: "bg-tile-red/12 text-tile-red",
@@ -60,8 +83,18 @@ const NOTIF_CHIP: Record<string, string> = {
   // and the same failure class as a missing describeNotification case.
   video_unblocked: "bg-tile-green/12 text-tile-green",
   report_resolved: "bg-tile-orange/12 text-tile-orange",
+  report_message: "bg-tile-orange/12 text-tile-orange",
   new_report: "bg-tile-red/12 text-tile-red",
   new_video: "bg-accent/12 text-accent",
+  // Staff approval-queue signals: the amber/orange family reads as "needs a
+  // decision", distinct from a report's red.
+  new_registration_request: "bg-tile-orange/12 text-tile-orange",
+  upload_quarantined: "bg-tile-orange/12 text-tile-orange",
+  federation_follower_request: "bg-tile-orange/12 text-tile-orange",
+  // An offer waiting on the reader's decision, but good news rather than a
+  // queue: the accent family, like a comment.
+  video_ownership_request: "bg-accent/12 text-accent",
+  comment_held: "bg-tile-orange/12 text-tile-orange",
 };
 const NOTIF_CHIP_DEFAULT = "bg-surface-muted text-fg-muted";
 
@@ -79,20 +112,28 @@ export function NotificationIconChip({ type }: { type: string }) {
   );
 }
 
+// The reporter's page for a report (My reports), or nowhere when the row
+// carries no report id.
+function myReportHref(n: Notification): string {
+  return n.report_id ? `/settings/reports/${encodeURIComponent(n.report_id)}` : "#";
+}
+
 // describeNotification renders a notification as a human message plus the link
 // to its target. `lead` is the bold opening (actor / "A moderator") and `rest`
 // the remainder — concatenated they read exactly as before. Shared with the
 // header bell popover (NotificationsBell) so the two surfaces never drift.
-export function describeNotification(n: Notification): {
+export function describeNotification(n: Notification, t: Translate): {
   lead: string;
   rest: string;
   href: string;
 } {
-  const actor = n.actor?.display_name || n.actor?.username || "Someone";
+  const actor = n.actor?.display_name || n.actor?.username || t("notifications.item.someone");
+  const moderator = t("notifications.item.moderator");
+  const quoted = (title: string) => t("notifications.item.quoted", { title });
   if (n.type === "comment") {
     return {
       lead: actor,
-      rest: ` commented on ${n.video_title || "your video"}`,
+      rest: ` ${t("notifications.item.comment", { video: n.video_title || t("notifications.item.yourVideo") })}`,
       href: n.video_id ? `/videos/${n.video_id}` : "#",
     };
   }
@@ -103,17 +144,39 @@ export function describeNotification(n: Notification): {
     // goes to that video: comment-level anchors do not exist yet (replies are
     // collapsed behind "View N replies"), so a #comment-… fragment would be a
     // promise the watch page cannot keep.
-    const where = n.video_title ? ` on “${n.video_title}”` : "";
+    const where = n.video_title ? ` ${t("notifications.item.on", { title: n.video_title })}` : "";
     return {
       lead: actor,
-      rest: ` replied to your comment${where}`,
+      rest: ` ${t("notifications.item.reply", { where })}`,
+      href: n.video_id ? `/videos/${n.video_id}` : "#",
+    };
+  }
+  if (n.type === "comment_held") {
+    // A comment on a requires_approval video the recipient manages is waiting
+    // for them (core 0161); the row opens the Studio review queue. A federated
+    // commenter has no local account, hence the "Someone" fallback.
+    const where = n.video_title ? ` ${t("notifications.item.on", { title: n.video_title })}` : "";
+    return {
+      lead: actor,
+      rest: t("notifications.item.held", { where }),
+      href: "/studio/comments",
+    };
+  }
+  if (n.type === "comment_mention") {
+    // A comment @-mentioned the recipient. The actor is absent when the comment
+    // came from another instance, hence the "Someone" fallback. Like the reply
+    // above, the link goes to the video: comment-level anchors do not exist yet.
+    const where = n.video_title ? ` ${t("notifications.item.on", { title: n.video_title })}` : "";
+    return {
+      lead: actor,
+      rest: ` ${t("notifications.item.mention", { where })}`,
       href: n.video_id ? `/videos/${n.video_id}` : "#",
     };
   }
   if (n.type === "message") {
     return {
       lead: actor,
-      rest: " sent you a message",
+      rest: ` ${t("notifications.item.message")}`,
       href: n.conversation_id ? `/messages/${n.conversation_id}` : "#",
     };
   }
@@ -123,11 +186,13 @@ export function describeNotification(n: Notification): {
     // has always collected one and it used to be discarded, so the creator was
     // told their upload was refused and never why. When the moderator wrote
     // nothing the copy is exactly what it was.
-    const upload = n.video_title ? `your upload “${n.video_title}”` : "your upload";
+    const upload = n.video_title
+      ? t("notifications.item.uploadTitled", { title: n.video_title })
+      : t("notifications.item.upload");
     const note = n.moderation_note?.trim();
     return {
-      lead: "A moderator",
-      rest: ` rejected ${upload} — it was not published${note ? `: ${note}` : ""}`,
+      lead: moderator,
+      rest: ` ${t("notifications.item.rejected", { upload, note: note ? `: ${note}` : "" })}`,
       href: "/studio",
     };
   }
@@ -142,11 +207,11 @@ export function describeNotification(n: Notification): {
     // exactly the neutral notice it was. The link goes to the Studio list, the
     // one place the creator can still see the video (badged "blocked"); the
     // watch page 404s for them like it does for everyone else.
-    const what = n.video_title ? `“${n.video_title}”` : "one of your videos";
+    const what = n.video_title ? quoted(n.video_title) : t("notifications.item.oneOfYourVideos");
     const why = n.moderation_note?.trim();
     return {
-      lead: "A moderator",
-      rest: ` blocked ${what} — it is no longer available to viewers${why ? `: ${why}` : ""}`,
+      lead: moderator,
+      rest: ` ${t("notifications.item.blocked", { what, note: why ? `: ${why}` : "" })}`,
       href: "/studio/content",
     };
   }
@@ -155,20 +220,36 @@ export function describeNotification(n: Notification): {
     // second video_blocked would read as a SECOND takedown in an inbox that
     // renders by type. There is no prose — nothing needs explaining about a
     // restoration — and the link goes to the video itself, which works again.
-    const what = n.video_title ? `“${n.video_title}”` : "one of your videos";
+    const what = n.video_title ? quoted(n.video_title) : t("notifications.item.oneOfYourVideos");
     return {
-      lead: "A moderator",
-      rest: ` restored ${what} — it is available to viewers again`,
+      lead: moderator,
+      rest: ` ${t("notifications.item.unblocked", { what })}`,
       href: n.video_id ? `/videos/${n.video_id}` : "/studio/content",
     };
   }
   if (n.type === "report_resolved") {
     const outcome =
-      n.report_status === "accepted" || n.report_status === "rejected"
-        ? n.report_status
-        : "resolved";
-    const target = n.report_target_type ? `${n.report_target_type} report` : "report";
-    return { lead: "A moderator", rest: ` ${outcome} your ${target}`, href: "#" };
+      n.report_status === "accepted"
+        ? "notifications.item.reportAccepted"
+        : n.report_status === "rejected"
+          ? "notifications.item.reportRejected"
+          : "notifications.item.reportResolved";
+    const target = n.report_target_type
+      ? t("notifications.item.reportOf", { type: n.report_target_type })
+      : t("notifications.item.report");
+    return { lead: moderator, rest: ` ${t(outcome, { target })}`, href: myReportHref(n) };
+  }
+  if (n.type === "report_message") {
+    // A new message on a report's thread (core 0163). It has two audiences:
+    // with an actor, the REPORTER wrote and this recipient is staff, so the
+    // row links to the queue that holds the thread; without one, staff wrote
+    // to the reporter, and the server never names which moderator. The body is
+    // never carried — the thread is the only place it is read.
+    const target = n.report_target_type
+      ? t("notifications.item.reportOf", { type: n.report_target_type.replaceAll("_", " ") })
+      : t("notifications.item.report");
+    if (n.actor) return { lead: actor, rest: ` ${t("notifications.item.reportMessageStaff", { target })}`, href: "/moderation" };
+    return { lead: moderator, rest: ` ${t("notifications.item.reportMessageReporter", { target })}`, href: myReportHref(n) };
   }
   if (n.type === "new_report") {
     // Staff-only: a user filed an abuse report (the moderation queue's push
@@ -176,24 +257,79 @@ export function describeNotification(n: Notification): {
     // anyway — and the row links straight to the queue.
     const target = n.report_target_type
       ? n.report_target_type.replaceAll("_", " ")
-      : "piece of content";
-    return { lead: actor, rest: ` reported a ${target}`, href: "/admin" };
+      : t("notifications.item.contentPiece");
+    return { lead: actor, rest: ` ${t("notifications.item.newReport", { target })}`, href: "/admin" };
+  }
+  // The three staff approval-queue signals (core migration 0157). Each links
+  // straight to the queue it announces.
+  if (n.type === "new_registration_request") {
+    return {
+      lead: t("notifications.item.registrationLead"),
+      rest: ` ${t("notifications.item.registration")}`,
+      href: "/admin/registration-requests",
+    };
+  }
+  if (n.type === "upload_quarantined") {
+    const title = n.video_title ? quoted(n.video_title) : t("notifications.item.anUpload");
+    return {
+      lead: actor,
+      rest: ` ${t("notifications.item.quarantined", { title })}`,
+      href: "/moderation/quarantine",
+    };
+  }
+  if (n.type === "federation_follower_request" && !n.channel_handle) {
+    // No channel: a remote INSTANCE asked to follow this one (one unread
+    // notice per admin however many wait — it points at the queue).
+    return {
+      lead: "A remote instance",
+      rest: " asked to follow this instance — it needs your approval",
+      href: "/admin/federation/instances",
+    };
+  }
+  if (n.type === "federation_follower_request") {
+    const channel = n.channel_display_name || n.channel_handle || t("notifications.item.aChannel");
+    return {
+      lead: t("notifications.item.remoteAccount"),
+      rest: ` ${t("notifications.item.followRequest", { channel })}`,
+      href: "/admin/federation/follower-requests",
+    };
+  }
+  if (n.type === "caption_ready") {
+    // Previously unhandled, so it fell through to the follow copy below — the
+    // same failure class as new_video once rendering "started following".
+    const what = n.video_title ? quoted(n.video_title) : t("notifications.item.yourVideo");
+    return {
+      lead: t("notifications.item.captionsLead"),
+      rest: ` ${t("notifications.item.captions", { what })}`,
+      href: n.video_id ? `/videos/${n.video_id}` : "#",
+    };
   }
   if (n.type === "new_video") {
     // A channel the recipient follows published a new public video.
     const channelName = n.channel_display_name || n.channel_handle || actor;
-    const title = n.video_title ? `“${n.video_title}”` : "a new video";
+    const title = n.video_title ? quoted(n.video_title) : t("notifications.item.aNewVideo");
     return {
       lead: channelName,
-      rest: ` published ${title}`,
+      rest: ` ${t("notifications.item.newVideo", { title })}`,
       href: n.video_id ? `/videos/${n.video_id}` : "#",
     };
   }
+  if (n.type === "video_ownership_request") {
+    // Another local user offered the reader one of their videos (core 0165).
+    // The link goes to where it can be answered, not to the watch page: the
+    // offered video may be private, and the reader does not own it yet.
+    const what = n.video_title ? quoted(n.video_title) : t("notifications.item.aVideo");
+    return {
+      lead: actor,
+      rest: ` ${t("notifications.item.ownership", { what })}`,
+      href: "/studio/ownership",
+    };
+  }
   // follow
-  const channel = n.channel_display_name || n.channel_handle || "your channel";
+  const channel = n.channel_display_name || n.channel_handle || t("notifications.item.yourChannel");
   return {
     lead: actor,
-    rest: ` started following ${channel}`,
+    rest: ` ${t("notifications.item.follow", { channel })}`,
     href: n.channel_handle ? `/channels/${n.channel_handle}` : "#",
   };
 }
@@ -202,14 +338,12 @@ export function describeNotification(n: Notification): {
 // bulk "mark read" controls. The session lives in memory, so a hard reload lands
 // here signed out — we prompt to sign in.
 export function NotificationsView() {
+  const t = useT();
   const { status } = useSession();
 
   if (status !== "authed") {
     return (
-      <SignInGate title="Sign in to see your notifications">
-        to see when people follow your channel, comment on your videos, or reply
-        to you.
-      </SignInGate>
+      <SignInGate title={t("notifications.signIn.title")}>{t("notifications.signIn.body")}</SignInGate>
     );
   }
 
@@ -217,71 +351,65 @@ export function NotificationsView() {
 }
 
 function Notifications() {
-  const [status, setStatus] = useState<Status>("loading");
-  const [items, setItems] = useState<Notification[]>([]);
+  const t = useT();
+  const { relativeTime } = useFormat();
+  const autoLoad = useBrowseAutoLoad();
+  // `unread_count` is the account-wide figure and rides on every page, so the
+  // badge always shows the server's number, not a count of the loaded rows.
   const [unread, setUnread] = useState(0);
-  const [reloadKey, setReloadKey] = useState(0);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    api
-      .getNotifications({}, controller.signal)
-      .then((res) => {
-        setItems(res.notifications);
-        setUnread(res.unread_count);
-        setStatus("ready");
-      })
-      .catch((err: unknown) => {
-        void err;
-        if (controller.signal.aborted) return;
-        setStatus("error");
-      });
-    return () => controller.abort();
-  }, [reloadKey]);
+  const list = useAppendingList<Notification>({
+    queryKey: "notifications",
+    getId: (n) => n.id,
+    load: (window, signal) =>
+      api.getNotifications(window, signal).then((res) => {
+        if (!signal.aborted) setUnread(res.unread_count);
+        return { items: res.notifications, total: res.total };
+      }),
+  });
+  const { status, items } = list;
 
   function retry() {
-    setStatus("loading");
-    setReloadKey((k) => k + 1);
+    list.reload();
   }
 
   async function markRead(id: string) {
     const target = items.find((i) => i.id === id);
     if (!target || target.read) return;
-    setItems((list) => list.map((i) => (i.id === id ? { ...i, read: true } : i))); // optimistic
+    list.patch((rows) => rows.map((i) => (i.id === id ? { ...i, read: true } : i))); // optimistic
     setUnread((n) => Math.max(0, n - 1));
     try {
       await api.markNotificationRead(id);
     } catch {
-      setReloadKey((k) => k + 1); // resync on failure
+      list.reload(); // resync on failure
     }
   }
 
   async function markAll() {
     if (unread === 0) return;
-    setItems((list) => list.map((i) => ({ ...i, read: true }))); // optimistic
+    list.patch((rows) => rows.map((i) => ({ ...i, read: true }))); // optimistic
     setUnread(0);
     try {
       await api.markAllNotificationsRead();
     } catch {
-      setReloadKey((k) => k + 1);
+      list.reload();
     }
   }
 
   if (status === "loading") {
     return (
       <div className="flex justify-center py-24">
-        <Spinner label="Loading your notifications" />
+        <Spinner label={t("notifications.loading")} />
       </div>
     );
   }
   if (status === "error") {
-    return <ErrorState message="Could not load your notifications." onRetry={retry} />;
+    return <ErrorState message={t("notifications.error")} onRetry={retry} />;
   }
   if (items.length === 0) {
     return (
       <EmptyState
-        title="No notifications yet"
-        message="When someone follows your channel or comments on your video, you'll see it here."
+        title={t("notifications.page.empty.title")}
+        message={t("notifications.page.empty.message")}
       />
     );
   }
@@ -295,12 +423,12 @@ function Notifications() {
           disabled={unread === 0}
           className="focus-ring rounded-full px-3 py-2 text-[13px] font-semibold text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg disabled:opacity-50"
         >
-          Mark all as read
+          {t("notifications.markAll")}
         </button>
       </div>
       <ul className="flex flex-col">
         {items.map((n) => {
-          const { lead, rest, href } = describeNotification(n);
+          const { lead, rest, href } = describeNotification(n, t);
           return (
             <li
               key={n.id}
@@ -325,10 +453,10 @@ function Notifications() {
                 <button
                   type="button"
                   onClick={() => void markRead(n.id)}
-                  aria-label="Mark as read"
+                  aria-label={t("notifications.markReadLabel")}
                   className="focus-ring mt-1 shrink-0 rounded-full text-xs font-semibold text-fg-muted transition-colors hover:text-fg"
                 >
-                  Mark read
+                  {t("notifications.markRead")}
                 </button>
               )}
               {n.read ? null : (
@@ -341,6 +469,13 @@ function Notifications() {
           );
         })}
       </ul>
+      <ListTail
+        hasMore={list.hasMore}
+        autoLoad={autoLoad}
+        busy={list.moreStatus === "loading"}
+        error={list.moreStatus === "error" ? t("notifications.moreError") : null}
+        onLoadMore={list.loadMore}
+      />
     </div>
   );
 }

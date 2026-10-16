@@ -30,3 +30,20 @@ describe("proxy CSP", () => {
     expect(res.headers.get("content-security-policy-report-only")).toContain("'nonce-");
   });
 });
+
+// Reverting proxy.ts to an /embed-only check blanks every migrated PeerTube
+// iframe (the redirect hop would say frame-ancestors 'self'), and nothing else
+// would notice.
+describe("proxy frame-ancestors on legacy paths", () => {
+  const csp = (path: string) => run(path).headers.get("content-security-policy") ?? "";
+  it("leaves PeerTube's legacy embed paths frameable", () => {
+    for (const p of ["/videos/embed/x", "/video-playlists/embed/x"]) {
+      expect(csp(p), p).not.toContain("frame-ancestors");
+    }
+  });
+  it("keeps other legacy paths self-framing only", () => {
+    for (const p of ["/videos/watch/x", "/w/abc", "/videos/embedx"]) {
+      expect(csp(p), p).toContain("frame-ancestors 'self'");
+    }
+  });
+});

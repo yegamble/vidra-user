@@ -85,6 +85,7 @@ const STATE_OPTIONS: readonly { value: VideoState; label: string }[] = [
 const PRIVACY_OPTIONS: readonly { value: VideoPrivacy; label: string }[] = [
   { value: "public", label: "Public" },
   { value: "unlisted", label: "Unlisted" },
+  { value: "internal", label: "Internal" },
   { value: "private", label: "Private" },
   { value: "password", label: "Password" },
 ];

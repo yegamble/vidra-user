@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
+import { useT } from "@/components/I18nProvider";
+import { SLOT, withSlot } from "@/components/admin/messageSlot";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -28,27 +30,28 @@ import { formatDateTime } from "@/lib/format";
  * the others rather than offering a control that 403s.
  */
 export function PasswordResetLinkCard({ user }: { user: AdminUser }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
 
   if (user.role !== "user" || user.is_owner === true) return null;
 
   return (
     <div className="rounded-2xl border border-border p-4">
-      <h3 className="text-[13.5px] font-semibold text-fg">Password reset link</h3>
+      <h3 className="text-[13.5px] font-semibold text-fg">{t("admin.resetLink.title")}</h3>
       <p className="mt-1.5 text-[12px] leading-relaxed text-fg-muted">
-        When this instance cannot send mail,{" "}
-        <span className="font-medium text-fg">{user.username}</span> cannot request a reset link
-        themselves. Create one here and send it to them yourself. It works once, signs them out
-        everywhere when they use it, and the action is recorded in the audit log.
+        {withSlot(
+          t("admin.resetLink.card.body", { name: SLOT }),
+          <span className="font-medium text-fg">{user.username}</span>,
+        )}
       </p>
       <div className="mt-3">
         <Button
           variant="tonal"
           size="sm"
-          aria-label={`Create password reset link for ${user.username}`}
+          aria-label={t("admin.resetLink.card.aria", { name: user.username })}
           onClick={() => setOpen(true)}
         >
-          Create password reset link
+          {t("admin.resetLink.card.cta")}
         </Button>
       </div>
       {open ? <ResetLinkDialog user={user} onClose={() => setOpen(false)} /> : null}
@@ -57,6 +60,7 @@ export function PasswordResetLinkCard({ user }: { user: AdminUser }) {
 }
 
 function ResetLinkDialog({ user, onClose }: { user: AdminUser; onClose: () => void }) {
+  const t = useT();
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -87,7 +91,7 @@ function ResetLinkDialog({ user, onClose }: { user: AdminUser; onClose: () => vo
       setLink(res);
     } catch (err) {
       if (!alive.current) return;
-      setError(errorMessage(err, "Could not create a reset link. Nothing was issued."));
+      setError(errorMessage(err, t("admin.resetLink.error")));
     } finally {
       if (alive.current) setBusy(false);
     }
@@ -107,15 +111,13 @@ function ResetLinkDialog({ user, onClose }: { user: AdminUser; onClose: () => vo
 
   if (link) {
     return (
-      <Modal title="Password reset link" onClose={onClose} hideClose>
+      <Modal title={t("admin.resetLink.title")} onClose={onClose} hideClose>
         <div className="flex flex-col gap-4">
           <Alert variant="warning">
-            Anyone with this link can set a new password for this account. Send it to the user over
-            a channel you trust. It works once and expires at {formatDateTime(link.expires_at)}.
-            Creating another link cancels this one.
+            {t("admin.resetLink.warning", { expires: formatDateTime(link.expires_at) })}
           </Alert>
           <Input
-            label="Reset link"
+            label={t("admin.resetLink.field")}
             readOnly
             value={link.reset_url}
             autoComplete="off"
@@ -124,19 +126,19 @@ function ResetLinkDialog({ user, onClose }: { user: AdminUser; onClose: () => vo
           />
           <div className="flex flex-wrap items-center gap-2">
             <Button type="button" onClick={() => void copyLink()}>
-              {copy === "copied" ? "Copied" : "Copy link"}
+              {copy === "copied" ? t("admin.link.copied") : t("admin.link.copy")}
             </Button>
             <Button type="button" variant="secondary" onClick={onClose}>
-              Done
+              {t("admin.link.done")}
             </Button>
           </div>
           {copy === "failed" ? (
             <p className="text-sm text-danger">
-              Could not copy automatically. Select the link above and copy it by hand.
+              {t("admin.link.copyFailed")}
             </p>
           ) : null}
           <p className="text-[12px] leading-relaxed text-fg-muted">
-            This is the only time the link is shown. Closing this window discards it.
+            {t("admin.link.shownOnce")}
           </p>
         </div>
       </Modal>
@@ -144,14 +146,16 @@ function ResetLinkDialog({ user, onClose }: { user: AdminUser; onClose: () => vo
   }
 
   return (
-    <Modal title="Create password reset link" onClose={onClose}>
+    <Modal title={t("admin.resetLink.dialogTitle")} onClose={onClose}>
       <form onSubmit={(e) => void submit(e)} className="flex flex-col gap-4">
         <p className="text-[13px] leading-relaxed text-fg-muted">
-          Confirm it is you. Enter your own password to create a one-time link that lets{" "}
-          <strong className="font-semibold text-fg">{user.username}</strong> choose a new password.
+          {withSlot(
+            t("admin.resetLink.confirm", { name: SLOT }),
+            <strong className="font-semibold text-fg">{user.username}</strong>,
+          )}
         </p>
         <Input
-          label="Your password"
+          label={t("admin.resetLink.password")}
           type="password"
           autoComplete="current-password"
           value={password}
@@ -160,10 +164,10 @@ function ResetLinkDialog({ user, onClose }: { user: AdminUser; onClose: () => vo
         {error ? <Alert>{error}</Alert> : null}
         <div className="flex items-center gap-2">
           <Button type="submit" disabled={busy || password === ""}>
-            {busy ? "Creating…" : "Create link"}
+            {busy ? t("admin.resetLink.busy") : t("admin.resetLink.submit")}
           </Button>
           <Button type="button" variant="secondary" onClick={onClose}>
-            Cancel
+            {t("common.cancel")}
           </Button>
         </div>
       </form>

@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { BASE_VIDEO_ACCEPT } from "@/lib/upload-accept";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -180,6 +181,28 @@ describe("UploadSection defaults.publish prefill (W9 race regression)", () => {
     });
   });
 
+  it("keeps an instance default of requires_approval behind the Allow comments switch (core 0161)", async () => {
+    mocks.getInstance.mockResolvedValue({
+      ...instanceWithDefaults,
+      defaults: { publish: { ...instanceWithDefaults.defaults.publish, comment_policy: "requires_approval" } },
+    });
+    mocks.resumableUpload.mockResolvedValue({ video: { id: "v1", state: "published" }, file: { kind: "original" } });
+    mocks.updateVideo.mockResolvedValue({ id: "v1", title: "clip", state: "published" });
+    render(<UploadSection channels={[channel]} config={null} />);
+    await waitFor(() => expect(mocks.getInstance).toHaveBeenCalled());
+    openSheet();
+    pickFile();
+    const allow = () => screen.getByRole("switch", { name: "Allow comments" });
+    await waitFor(() => expect(allow().getAttribute("aria-checked")).toBe("true"));
+    // Off and on again lands back on approval, not on unmoderated comments.
+    fireEvent.click(allow());
+    fireEvent.click(allow());
+    await waitFor(() => expect(mocks.resumableUpload).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+    await waitFor(() => expect(mocks.updateVideo).toHaveBeenCalled());
+    expect(mocks.updateVideo.mock.calls[0][1]).toMatchObject({ comments_policy: "requires_approval" });
+  });
+
   it("narrows the file picker accept list when the extended container set is off (W10)", async () => {
     mocks.getInstance.mockResolvedValue({
       features: { imports: true, upload_additional_extensions: false },
@@ -187,18 +210,16 @@ describe("UploadSection defaults.publish prefill (W9 race regression)", () => {
     render(<UploadSection channels={[channel]} config={null} />);
     openSheet();
     await waitFor(() => {
-      expect(screen.getByLabelText("Video file").getAttribute("accept")).toBe(
-        ".mp4,.webm,.ogv,.ogg,video/mp4,video/webm,video/ogg",
-      );
+      expect(screen.getByLabelText("Video file").getAttribute("accept")).toBe(BASE_VIDEO_ACCEPT);
     });
   });
 
   it("keeps the permissive accept while the flag is on or unknown", async () => {
     render(<UploadSection channels={[channel]} config={null} />);
     openSheet();
-    expect(screen.getByLabelText("Video file").getAttribute("accept")).toBe("video/*");
+    expect(screen.getByLabelText("Video file").getAttribute("accept")).toBe("video/*,audio/*");
     await waitFor(() => expect(mocks.getInstance).toHaveBeenCalled());
-    expect(screen.getByLabelText("Video file").getAttribute("accept")).toBe("video/*");
+    expect(screen.getByLabelText("Video file").getAttribute("accept")).toBe("video/*,audio/*");
   });
 
   it("keeps completed bytes in draft until scheduling metadata saves, including retry", async () => {

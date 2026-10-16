@@ -9,10 +9,12 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Spinner } from "@/components/ui/Spinner";
+import { UserVideosTab } from "@/components/UserVideosTab";
 import { ApiError, api, userAvatarUrl, userBannerUrl } from "@/lib/api";
 import type { PublicUserProfile } from "@/lib/api";
 import { formatMonthYear } from "@/lib/format";
 import { useSettledOptionalSession } from "@/lib/use-settled-session";
+import { UserText } from "@/components/UserText";
 
 export function UserProfileLoader({ username }: { username: string }) {
   const [profile, setProfile] = useState<PublicUserProfile | null>(null);
@@ -46,7 +48,7 @@ export function UserProfileLoader({ username }: { username: string }) {
   return <UserProfileView profile={profile} />;
 }
 
-type ProfileSection = "channels" | "about";
+type ProfileSection = "channels" | "videos" | "about";
 
 export function UserProfileView({ profile }: { profile: PublicUserProfile }) {
   const name = profile.display_name || profile.username;
@@ -94,7 +96,13 @@ export function UserProfileView({ profile }: { profile: PublicUserProfile }) {
             </div>
           </div>
         </div>
-        {profile.bio ? <p className="whitespace-pre-wrap px-2 text-subhead leading-relaxed text-fg-muted sm:max-w-[640px] sm:px-4">{profile.bio}</p> : null}
+        {profile.bio ? (
+          <UserText
+            variant="description"
+            text={profile.bio}
+            className="px-2 text-subhead leading-relaxed text-fg-muted sm:max-w-[640px] sm:px-4"
+          />
+        ) : null}
       </header>
 
       {/* Section switcher in the segmented-control language (not a tab strip);
@@ -106,10 +114,13 @@ export function UserProfileView({ profile }: { profile: PublicUserProfile }) {
           onChange={setSection}
           options={[
             { value: "channels", label: "Channels" },
+            { value: "videos", label: "Videos" },
             { value: "about", label: "About" },
           ]}
         />
-        {section === "channels" ? (
+        {section === "videos" ? (
+          <UserVideosTab username={profile.username} name={name} />
+        ) : section === "channels" ? (
           profile.channels.length === 0 ? (
             <EmptyState title="No channels yet" message="This user has not created a publishing channel." />
           ) : (

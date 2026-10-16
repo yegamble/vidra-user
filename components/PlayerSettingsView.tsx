@@ -3,6 +3,7 @@
 import { useEffect, useId, useState, type ReactNode } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { useT } from "@/components/I18nProvider";
 import { Alert } from "@/components/ui/Alert";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Select } from "@/components/ui/Select";
@@ -25,12 +26,13 @@ type Status = "loading" | "error" | "ready";
 // hydrates the shared settings store to update any open player. Session-gated
 // like the other settings surfaces (signed-out users use the baked defaults).
 export function PlayerSettingsView() {
+  const t = useT();
   const { status } = useSession();
 
   if (status !== "authed") {
     return (
-      <SignInGate title="Sign in to manage playback" restoringLabel="Loading your account">
-        to set your default playback preferences.
+      <SignInGate title={t("settings.playback.gate.title")} restoringLabel={t("settings.playback.gate.restoring")}>
+        {t("settings.playback.gate.body")}
       </SignInGate>
     );
   }
@@ -39,6 +41,7 @@ export function PlayerSettingsView() {
 }
 
 function Settings() {
+  const t = useT();
   const [status, setStatus] = useState<Status>("loading");
   const [settings, setSettings] = useState<PlayerSettings | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -77,21 +80,21 @@ function Settings() {
       hydratePlayerSettings(res);
     } catch (err) {
       setSettings(prev); // revert
-      setError(errorMessage(err, "Could not save that setting. Please try again."));
+      setError(errorMessage(err, t("settings.playback.saveError")));
     }
   }
 
   if (status === "loading") {
     return (
       <div className="flex justify-center py-16">
-        <Spinner label="Loading playback settings" />
+        <Spinner label={t("settings.playback.loading")} />
       </div>
     );
   }
   if (status === "error" || !settings) {
     return (
       <ErrorState
-        message="Could not load your playback settings."
+        message={t("settings.playback.loadError")}
         onRetry={() => {
           setStatus("loading");
           setReloadKey((k) => k + 1);
@@ -109,35 +112,35 @@ function Settings() {
       ) : null}
       <ul className="flex flex-col divide-y divide-border-subtle rounded-2xl border border-border-subtle bg-surface">
         <SettingRow
-          title="Autoplay next"
-          desc="Automatically play the next related video when one ends."
+          title={t("settings.playback.autoplay.title")}
+          desc={t("settings.playback.autoplay.desc")}
           control={
             <Toggle
               checked={settings.autoplay_next}
               onChange={(next) => void save({ autoplay_next: next })}
-              label="Autoplay next"
+              label={t("settings.playback.autoplay.title")}
             />
           }
         />
         <SettingRow
-          title="Inline video previews"
-          desc="Play videos inside cards when you hover. Previews start muted with captions and only work when enabled by the instance administrator. Until you choose, the administrator's instance default applies."
+          title={t("settings.playback.previews.title")}
+          desc={t("settings.playback.previews.desc")}
           control={
             <Toggle
               checked={settings.video_card_previews_enabled ?? false}
               onChange={(next) => void save({ video_card_previews_enabled: next })}
-              label="Inline video previews"
+              label={t("settings.playback.previews.title")}
             />
           }
         />
         <SettingRow
           htmlFor={speedId}
-          title="Default speed"
-          desc="The speed new videos start playing at."
+          title={t("settings.playback.speed.title")}
+          desc={t("settings.playback.speed.desc")}
           control={
             <Select
               id={speedId}
-              aria-label="Default speed"
+              aria-label={t("settings.playback.speed.title")}
               value={String(settings.default_speed)}
               onChange={(e) => void save({ default_speed: Number(e.target.value) })}
               className="w-[7.5rem]"
@@ -152,12 +155,12 @@ function Settings() {
         />
         <SettingRow
           htmlFor={qualityId}
-          title="Default quality"
-          desc="Preferred resolution when a video offers it; otherwise Auto."
+          title={t("settings.playback.quality.title")}
+          desc={t("settings.playback.quality.desc")}
           control={
             <Select
               id={qualityId}
-              aria-label="Default quality"
+              aria-label={t("settings.playback.quality.title")}
               value={settings.default_quality}
               onChange={(e) => void save({ default_quality: e.target.value })}
               className="w-[7.5rem]"
@@ -171,31 +174,30 @@ function Settings() {
           }
         />
         <SettingRow
-          title="Captions on by default"
-          desc="Turn captions on automatically when a video has them."
+          title={t("settings.playback.captions.title")}
+          desc={t("settings.playback.captions.desc")}
           control={
             <Toggle
               checked={settings.captions_default}
               onChange={(next) => void save({ captions_default: next })}
-              label="Captions on by default"
+              label={t("settings.playback.captions.title")}
             />
           }
         />
         <SettingRow
-          title="Theater mode by default"
-          desc="Open the player in the wider theater layout on the watch page."
+          title={t("settings.playback.theater.title")}
+          desc={t("settings.playback.theater.desc")}
           control={
             <Toggle
               checked={settings.theater_default}
               onChange={(next) => void save({ theater_default: next })}
-              label="Theater mode by default"
+              label={t("settings.playback.theater.title")}
             />
           }
         />
       </ul>
       <p className="text-xs text-fg-muted">
-        These defaults apply to new videos you open. Changing the speed or quality while watching
-        only affects that session.
+        {t("settings.playback.footer")}
       </p>
     </div>
   );

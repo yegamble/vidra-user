@@ -3,6 +3,9 @@
 import { useCallback, useMemo, useState } from "react";
 
 import { AdminPagination, RolePill } from "@/components/admin/AdminControls";
+import { UnlockSignInButton } from "@/components/admin/UnlockSignInButton";
+import { BanUserDialog } from "@/components/admin/BanUserDialog";
+import { CreateUserDialog } from "@/components/admin/CreateUserDialog";
 import { PasswordResetLinkCard } from "@/components/admin/PasswordResetLinkCard";
 import { ListBoundary } from "@/components/admin/ListBoundary";
 import { ListSearch } from "@/components/admin/ListToolbar";
@@ -45,9 +48,11 @@ type QuotaFilter = "all" | "staff" | "deactivated";
 type UserPatch = {
   role?: UserRole;
   is_active?: boolean;
+  ban_reason?: string;
   email_verified?: boolean;
   bypass_quarantine?: boolean;
   storage_quota_bytes?: number | null;
+  daily_quota_bytes?: number | null;
 };
 
 /**
@@ -159,11 +164,12 @@ export function AdminUsersView() {
   const { user } = useSession();
 
   return (
-    <RoleGate minRole="admin" action="manage users">
+    <RoleGate minRole="moderator" action="manage users">
       {user ? (
         <ListBoundary label="users">
           <UsersList
             currentUserId={user.id}
+            viewerIsAdmin={user.role === "admin"}
             viewerIsOwner={user.is_owner === true}
           />
         </ListBoundary>
@@ -174,9 +180,13 @@ export function AdminUsersView() {
 
 function UsersList({
   currentUserId,
+  viewerIsAdmin,
   viewerIsOwner,
 }: {
   currentUserId: string;
+  // Moderators share list + ban/unban of ordinary accounts (core enforces it);
+  // everything else here is admin-only and is not offered to them.
+  viewerIsAdmin: boolean;
   viewerIsOwner: boolean;
 }) {
   // Desktop console (DR12): the users table is a master → detail. `selectedId`
@@ -184,6 +194,7 @@ function UsersList({
   // cards, so it stays null there.
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filter, setFilter] = useState<QuotaFilter>("all");
+  const [creating, setCreating] = useState(false);
 
   const list = usePagedList<AdminUser>({
     filterKeys: ["q"],
@@ -288,9 +299,23 @@ function UsersList({
 
   return (
     <div className="flex flex-col gap-4">
+      {creating ? (
+        <CreateUserDialog
+          onClose={() => setCreating(false)}
+          // The new account sorts first (newest first), so refetch from page one.
+          onCreated={() => (pageOffset > 0 ? list.setOffset(0) : list.reload())}
+        />
+      ) : null}
       {/* Toolbar: always on mobile; on desktop it hides while a user detail is
           open (the detail is its own full screen in the design). */}
       <div className={cn("flex flex-col gap-4", selected && "lg:hidden")}>
+        <div className="flex items-center justify-between gap-3">
+          {viewerIsAdmin ? (
+            <Button size="sm" onClick={() => setCreating(true)}>
+              Create user
+            </Button>
+          ) : null}
+        </div>
         <ListSearch
           label="Search users"
           placeholder="Search by username or email"
@@ -380,6 +405,7 @@ function UsersList({
                   <UserRow
                     user={u}
                     isSelf={u.id === currentUserId}
+                    viewerIsAdmin={viewerIsAdmin}
                     guard={guardFor(u)}
                     onUpdated={onUpdated}
                     onDeleted={onDeleted}
@@ -396,6 +422,7 @@ function UsersList({
                 user={selected}
                 isSelf={selected.id === currentUserId}
                 viewerIsOwner={viewerIsOwner}
+                viewerIsAdmin={viewerIsAdmin}
                 guard={guardFor(selected)}
                 onBack={() => setSelectedId(null)}
                 onUpdated={onUpdated}
@@ -498,6 +525,18 @@ function FlagToggles({
         />
       </div>
     </div>
+  );
+}
+
+// BanNote — why a banned account is banned (core 0154), for the staff who
+// banned it and any colleague who meets the row later.
+function BanNote({ user }: { user: AdminUser }) {
+  if (user.is_active || !user.ban_reason) return null;
+  return (
+    <p className="mt-1 text-[12px] leading-relaxed text-fg-muted">
+      <span className="font-semibold text-fg">Ban reason:</span> {user.ban_reason}
+      {user.banned_at ? <> ({formatMonthYear(user.banned_at)})</> : null}
+    </p>
   );
 }
 
@@ -882,6 +921,7 @@ function TransferOwnershipCard({
 function UserDetail({
   user,
   isSelf,
+  viewerIsAdmin,
   viewerIsOwner,
   guard,
   onBack,
@@ -891,6 +931,7 @@ function UserDetail({
 }: {
   user: AdminUser;
   isSelf: boolean;
+  viewerIsAdmin: boolean;
   viewerIsOwner: boolean;
   guard: Gate;
   onBack: () => void;
@@ -905,6 +946,9 @@ function UserDetail({
   );
   const [deleteArmed, setDeleteArmed] = useState(false);
   const [confirmName, setConfirmName] = useState("");
+  const [banOpen, setBanOpen] = useState(false);
+  // A moderator may only ban/unban ordinary accounts (core: 403 otherwise).
+  const canBan = guard.allowed && (viewerIsAdmin || (user.role === "user" && !user.is_owner));
 
   const used = user.storage_used_bytes ?? 0;
   const quota = user.storage_quota_bytes ?? null;
@@ -945,6 +989,7 @@ function UserDetail({
             <span aria-hidden> · </span>
             joined {formatMonthYear(user.created_at)}
           </p>
+          <BanNote user={user} />
         </div>
         <div className="flex max-w-[19rem] flex-wrap items-center gap-2">
           {deleted ? (
@@ -955,12 +1000,14 @@ function UserDetail({
                 variant="tonal"
                 size="sm"
                 aria-label={`${user.is_active ? "Deactivate" : "Reactivate"} ${user.username}`}
-                disabled={!guard.allowed || saving}
-                onClick={() => void save({ is_active: !user.is_active })}
+                disabled={!canBan || saving}
+                onClick={() =>
+                  user.is_active ? setBanOpen(true) : void save({ is_active: true })
+                }
               >
                 {user.is_active ? "Deactivate" : "Reactivate"}
               </Button>
-              {!deleteArmed ? (
+              {viewerIsAdmin && !deleteArmed ? (
                 <Button
                   variant="danger-outline"
                   size="sm"
@@ -982,7 +1029,7 @@ function UserDetail({
           <div className="rounded-2xl bg-surface-muted p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <span className="text-[13.5px] font-semibold text-fg">Role</span>
-              {!guard.allowed || deleted ? (
+              {!viewerIsAdmin || !guard.allowed || deleted ? (
                 <RolePill role={user.role} />
               ) : (
                 <SegmentedControl
@@ -997,16 +1044,29 @@ function UserDetail({
             </div>
           </div>
 
-          <QuotaCard
-            user={user}
-            used={used}
-            quota={quota}
-            saving={saving}
-            onSave={save}
-            boxed
-          />
+          {viewerIsAdmin ? (
+            <>
+              <QuotaCard
+                user={user}
+                used={used}
+                quota={quota}
+                saving={saving}
+                onSave={save}
+                boxed
+              />
+              <QuotaCard
+                kind="daily"
+                user={user}
+                used={user.daily_used_bytes ?? 0}
+                quota={user.daily_quota_bytes ?? null}
+                saving={saving}
+                onSave={save}
+                boxed
+              />
 
-          <FlagToggles user={user} saving={saving} onSave={save} />
+              <FlagToggles user={user} saving={saving} onSave={save} />
+            </>
+          ) : null}
 
           <p className="px-1 text-[11.5px] leading-relaxed text-fg-muted">
             {guard.allowed
@@ -1014,17 +1074,19 @@ function UserDetail({
               : guard.reason}
           </p>
 
-          {!deleted ? (
+          {viewerIsAdmin && !deleted ? (
             <RemoveSecondFactorCard user={user} onUpdated={onUpdated} />
           ) : null}
 
-          {!deleted ? <PasswordResetLinkCard user={user} /> : null}
+          {viewerIsAdmin && !deleted ? <UnlockSignInButton userId={user.id} username={user.username} /> : null}
+
+          {viewerIsAdmin && !deleted ? <PasswordResetLinkCard user={user} /> : null}
 
           {viewerIsOwner && !isSelf ? (
             <TransferOwnershipCard user={user} onTransferred={onTransferred} />
           ) : null}
 
-          {deleteArmed ? (
+          {viewerIsAdmin && deleteArmed ? (
             <div className="flex flex-col gap-2 rounded-2xl border border-danger-border p-3">
               <p className="text-sm text-fg-muted">
                 This permanently deletes{" "}
@@ -1069,6 +1131,17 @@ function UserDetail({
           ) : null}
 
           {error ? <p className="px-1 text-sm text-danger">{error}</p> : null}
+          {banOpen ? (
+            <BanUserDialog
+              username={user.username}
+              busy={saving}
+              onClose={() => setBanOpen(false)}
+              onConfirm={(reason) => {
+                setBanOpen(false);
+                void save({ is_active: false, ban_reason: reason });
+              }}
+            />
+          ) : null}
         </div>
 
         {/* Right column: real facts only. */}
@@ -1140,12 +1213,14 @@ function Fact({ k, v }: { k: string; v: React.ReactNode }) {
 function UserRow({
   user,
   isSelf,
+  viewerIsAdmin,
   guard,
   onUpdated,
   onDeleted,
 }: {
   user: AdminUser;
   isSelf: boolean;
+  viewerIsAdmin: boolean;
   guard: Gate;
   onUpdated: (updated: AdminUser) => void;
   onDeleted: (id: string) => void;
@@ -1159,6 +1234,9 @@ function UserRow({
   // confirmation (the same double-confirm as the self-serve delete).
   const [deleteArmed, setDeleteArmed] = useState(false);
   const [deleteConfirmName, setDeleteConfirmName] = useState("");
+  const [banOpen, setBanOpen] = useState(false);
+  // A moderator may only ban/unban ordinary accounts (core: 403 otherwise).
+  const canBan = guard.allowed && (viewerIsAdmin || (user.role === "user" && !user.is_owner));
 
   // storage_used_bytes/storage_quota_bytes are required in the contract; guard
   // for lean fixtures so a partial mock never crashes the row.
@@ -1193,6 +1271,7 @@ function UserRow({
             <span aria-hidden> · </span>
             <span>{user.email_verified ? "verified" : "unverified"}</span>
           </div>
+          <BanNote user={user} />
         </div>
       </div>
 
@@ -1200,7 +1279,7 @@ function UserRow({
           (the backend forbids self-demote), so the own row shows a static pill. */}
       <div className="mt-3.5 flex items-center justify-between gap-3">
         <span className="text-[13px] font-semibold text-fg">Role</span>
-        {!guard.allowed || deleted ? (
+        {!viewerIsAdmin || !guard.allowed || deleted ? (
           <RolePill role={user.role} />
         ) : (
           <SegmentedControl
@@ -1214,15 +1293,27 @@ function UserRow({
         )}
       </div>
 
-      <QuotaCard
-        user={user}
-        used={used}
-        quota={quota}
-        saving={saving}
-        onSave={save}
-      />
+      {viewerIsAdmin ? (
+        <>
+          <QuotaCard
+            user={user}
+            used={used}
+            quota={quota}
+            saving={saving}
+            onSave={save}
+          />
+          <QuotaCard
+            kind="daily"
+            user={user}
+            used={user.daily_used_bytes ?? 0}
+            quota={user.daily_quota_bytes ?? null}
+            saving={saving}
+            onSave={save}
+          />
 
-      <FlagToggles user={user} saving={saving} onSave={save} />
+          <FlagToggles user={user} saving={saving} onSave={save} />
+        </>
+      ) : null}
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {deleted ? (
@@ -1233,12 +1324,15 @@ function UserRow({
               variant="tonal"
               size="sm"
               aria-label={`${user.is_active ? "Deactivate" : "Reactivate"} ${user.username}`}
-              disabled={!guard.allowed || saving}
-              onClick={() => void save({ is_active: !user.is_active })}
+              disabled={!canBan || saving}
+              onClick={() =>
+                user.is_active ? setBanOpen(true) : void save({ is_active: true })
+              }
             >
               {user.is_active ? "Deactivate" : "Reactivate"}
             </Button>
-            {!deleteArmed ? (
+            {viewerIsAdmin ? <UnlockSignInButton userId={user.id} username={user.username} /> : null}
+            {viewerIsAdmin && !deleteArmed ? (
               <Button
                 variant="danger-outline"
                 size="sm"
@@ -1256,7 +1350,7 @@ function UserRow({
         )}
       </div>
 
-      {deleteArmed ? (
+      {viewerIsAdmin && deleteArmed ? (
         <div className="mt-3 flex flex-col gap-2 rounded-2xl border border-danger-border p-3">
           <p className="text-sm text-fg-muted">
             This permanently deletes{" "}
@@ -1301,6 +1395,17 @@ function UserRow({
       ) : null}
 
       {error ? <p className="mt-2 text-sm text-danger">{error}</p> : null}
+      {banOpen ? (
+        <BanUserDialog
+          username={user.username}
+          busy={saving}
+          onClose={() => setBanOpen(false)}
+          onConfirm={(reason) => {
+            setBanOpen(false);
+            void save({ is_active: false, ban_reason: reason });
+          }}
+        />
+      ) : null}
     </article>
   );
 }
@@ -1311,6 +1416,10 @@ function UserRow({
 // unlimited, null = reset to the instance default). `boxed` gives it the
 // standalone card fill used on the desktop detail (vs the inset border on the
 // mobile card, where it already sits inside a surface-muted card).
+//
+// `kind="daily"` reuses the same card for the per-user rolling-24h upload quota
+// (PeerTube videoQuotaDaily): same tri-state PATCH on daily_quota_bytes, with
+// "used" being the trailing-24h upload ledger rather than stored bytes.
 function QuotaCard({
   user,
   used,
@@ -1318,14 +1427,20 @@ function QuotaCard({
   saving,
   onSave,
   boxed = false,
+  kind = "storage",
 }: {
   user: AdminUser;
   used: number;
   quota: number | null;
   saving: boolean;
-  onSave: (patch: { storage_quota_bytes: number | null }) => Promise<void>;
+  onSave: (patch: UserPatch) => Promise<void>;
   boxed?: boolean;
+  kind?: "storage" | "daily";
 }) {
+  const daily = kind === "daily";
+  const field = daily ? "daily_quota_bytes" : "storage_quota_bytes";
+  const noun = daily ? "daily upload quota" : "storage quota";
+  const title = daily ? "Daily upload quota" : "Storage quota";
   const [editing, setEditing] = useState(false);
   const [gb, setGb] = useState("");
 
@@ -1343,7 +1458,7 @@ function QuotaCard({
   const submit = useCallback(async () => {
     const value = Number(gb);
     if (!Number.isFinite(value) || value < 0) return;
-    await onSave({ storage_quota_bytes: Math.round(value * GIB) });
+    await onSave({ [field]: Math.round(value * GIB) });
     setEditing(false);
     setGb("");
   }, [gb, onSave]);
@@ -1357,7 +1472,7 @@ function QuotaCard({
       )}
     >
       <div className="flex items-center justify-between gap-3 text-[13px]">
-        <span className="font-semibold text-fg">Storage quota</span>
+        <span className="font-semibold text-fg">{title}</span>
         <span className="tabular-nums text-fg-muted">
           {rightLabel}
           {overridden ? (
@@ -1381,7 +1496,7 @@ function QuotaCard({
               min={0}
               step="0.1"
               inputMode="decimal"
-              aria-label={`Storage quota in GB for ${user.username}`}
+              aria-label={`${daily ? "Daily upload quota" : "Storage quota"} in GB for ${user.username}`}
               value={gb}
               onChange={(e) => setGb(e.target.value)}
               className="focus-ring w-24 rounded-lg border border-border bg-surface px-2.5 py-1 text-sm tabular-nums text-fg"
@@ -1391,7 +1506,7 @@ function QuotaCard({
           <Button
             variant="primary"
             size="sm"
-            aria-label={`Save storage quota for ${user.username}`}
+            aria-label={`Save ${noun} for ${user.username}`}
             disabled={saving || gb.trim() === ""}
             onClick={() => void submit()}
           >
@@ -1414,22 +1529,22 @@ function QuotaCard({
           <Button
             variant="tonal"
             size="sm"
-            aria-label={`Change storage quota for ${user.username}`}
+            aria-label={`Change ${noun} for ${user.username}`}
             disabled={saving}
             onClick={() => {
               setEditing(true);
               setGb(finite ? String(Math.round((quota / GIB) * 10) / 10) : "");
             }}
           >
-            Change quota
+            {daily ? "Change daily quota" : "Change quota"}
           </Button>
           {overridden ? (
             <Button
               variant="secondary"
               size="sm"
-              aria-label={`Reset ${user.username} to the instance default quota`}
+              aria-label={`Reset ${user.username} to the instance default${daily ? " daily upload" : ""} quota`}
               disabled={saving}
-              onClick={() => void onSave({ storage_quota_bytes: null })}
+              onClick={() => void onSave({ [field]: null })}
             >
               Reset to default
             </Button>

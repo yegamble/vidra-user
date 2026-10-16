@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { useFormat, useT } from "@/components/I18nProvider";
 import { StatsChart } from "@/components/StatsChart";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -9,10 +10,11 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Select } from "@/components/ui/Select";
 import { Spinner } from "@/components/ui/Spinner";
 import { api } from "@/lib/api";
+import { collectPages } from "@/lib/collect-pages";
 import type { Channel, ChannelStatsResponse, Video, VideoStatsResponse } from "@/lib/api";
-import { formatCount } from "@/lib/format";
 import { useApiResource } from "@/lib/use-api-resource";
 
+import { PlaybackStatsPanel } from "./PlaybackStatsPanel";
 import { type Status } from "./shared";
 import { useStudio } from "./StudioContext";
 import { type AllChannelsStats, getAllChannelsStats, views28d } from "./all-channels-stats";
@@ -26,14 +28,15 @@ type Scope = "channel" | "all";
 // scope. Owner-only endpoints, so the whole surface is session-gated by the
 // studio shell.
 export function AnalyticsView() {
+  const t = useT();
   const { channels, currentHandle, currentChannel, setCurrentHandle } = useStudio();
   const [scope, setScope] = useState<Scope>("channel");
 
   if (channels.length === 0) {
     return (
       <EmptyState
-        title="No channels yet"
-        message="Analytics appear once you publish. Create a channel to get started."
+        title={t("studio.analytics.noChannelsTitle")}
+        message={t("studio.analytics.noChannelsMessage")}
       />
     );
   }
@@ -55,12 +58,12 @@ export function AnalyticsView() {
     <div className="flex flex-col gap-6">
       {showAll ? (
         <SegmentedControl<Scope>
-          label="Analytics scope"
+          label={t("studio.analytics.scope")}
           value={effectiveScope}
           onChange={setScope}
           options={[
-            { value: "channel", label: "This channel" },
-            { value: "all", label: "All my channels", count: owned.length },
+            { value: "channel", label: t("studio.analytics.thisChannel") },
+            { value: "all", label: t("studio.analytics.allMine"), count: owned.length },
           ]}
         />
       ) : null}
@@ -79,10 +82,8 @@ export function AnalyticsView() {
 
       {editorScoped ? (
         <section className="flex flex-col gap-3 border-t border-border-subtle pt-6">
-          <h2 className="text-[15px] font-bold tracking-tight">Per-video stats</h2>
-          <p className="text-sm text-fg-muted">
-            Per-video stats are available to channel owners.
-          </p>
+          <h2 className="text-[15px] font-bold tracking-tight">{t("studio.analytics.perVideo")}</h2>
+          <p className="text-sm text-fg-muted">{t("studio.analytics.ownersOnly")}</p>
         </section>
       ) : (
         <VideoStatsSection
@@ -97,6 +98,7 @@ export function AnalyticsView() {
 
 // ChannelScope — the current channel's aggregated totals + 30-day chart.
 function ChannelScope({ handle, name }: { handle: string; name: string }) {
+  const t = useT();
   // useApiResource derives status from the CURRENT deps instead of storing it, which
   // is load-bearing here: this component gets no `key` from its render site (unlike
   // VideoStatsSection below), so a studio channel switch updates it in place. With a
@@ -119,35 +121,35 @@ function ChannelScope({ handle, name }: { handle: string; name: string }) {
   if (status === "loading") {
     return (
       <div className="flex justify-center py-16">
-        <Spinner label="Loading channel stats" />
+        <Spinner label={t("studio.analytics.loadingChannel")} />
       </div>
     );
   }
   if (status === "error" || !stats) {
     return (
-      <ErrorState message="Could not load this channel's stats." onRetry={retry} />
+      <ErrorState message={t("studio.analytics.channelError")} onRetry={retry} />
     );
   }
 
   return (
-    <section aria-label={`Stats for @${handle}`} className="flex flex-col gap-4">
+    <section aria-label={t("studio.analytics.statsFor", { handle })} className="flex flex-col gap-4">
       <TotalsGrid
         items={[
           // "Views · 28 days" is the design's Studio headline stat, derived
           // honestly from the real 30-entry daily_views series (last 28 days
           // summed). No period-over-period delta — the series carries no prior
           // period, so a "↑ N% vs previous" would be invented.
-          { label: "Views · 28d", value: views28d(stats.daily_views) },
-          { label: "Views", value: stats.views },
-          { label: "Likes", value: stats.likes },
-          { label: "Dislikes", value: stats.dislikes },
-          { label: "Comments", value: stats.comments },
-          { label: "Followers", value: stats.followers },
-          { label: "Videos", value: stats.videos },
+          { label: t("studio.stats.views28d"), value: views28d(stats.daily_views) },
+          { label: t("studio.stats.views"), value: stats.views },
+          { label: t("studio.stats.likes"), value: stats.likes },
+          { label: t("studio.stats.dislikes"), value: stats.dislikes },
+          { label: t("studio.stats.comments"), value: stats.comments },
+          { label: t("studio.stats.followers"), value: stats.followers },
+          { label: t("studio.stats.videos"), value: stats.videos },
         ]}
       />
-      <StatsChart series={stats.daily_views} label={`Daily views for @${handle}`} />
-      <span className="sr-only">Showing analytics for {name}.</span>
+      <StatsChart series={stats.daily_views} label={t("studio.analytics.dailyFor", { handle })} />
+      <span className="sr-only">{t("studio.analytics.showingFor", { name })}</span>
     </section>
   );
 }
@@ -163,6 +165,8 @@ function AllChannelsScope({
   channels: Channel[];
   onPickChannel: (handle: string) => void;
 }) {
+  const t = useT();
+  const { formatCount } = useFormat();
   // Same derived-status reasoning as ChannelScope. Passing the joined handles as the
   // dep also retires the exhaustive-deps suppression this effect used to need.
   const handleKey = channels.map((c) => c.handle).join(",");
@@ -175,51 +179,51 @@ function AllChannelsScope({
   if (status === "loading") {
     return (
       <div className="flex justify-center py-16">
-        <Spinner label="Loading all-channel stats" />
+        <Spinner label={t("studio.analytics.loadingAll")} />
       </div>
     );
   }
   if (status === "error" || !stats) {
     return (
-      <ErrorState message="Could not load your all-channel stats." onRetry={retry} />
+      <ErrorState message={t("studio.analytics.allError")} onRetry={retry} />
     );
   }
 
   return (
-    <section aria-label="Stats across all channels" className="flex flex-col gap-4">
+    <section aria-label={t("studio.analytics.acrossAll")} className="flex flex-col gap-4">
       <TotalsGrid
         items={[
-          { label: "Views · 28d", value: views28d(stats.daily_views) },
-          { label: "Views", value: stats.totals.views },
-          { label: "Likes", value: stats.totals.likes },
-          { label: "Dislikes", value: stats.totals.dislikes },
-          { label: "Comments", value: stats.totals.comments },
-          { label: "Followers", value: stats.totals.followers },
-          { label: "Videos", value: stats.totals.videos },
+          { label: t("studio.stats.views28d"), value: views28d(stats.daily_views) },
+          { label: t("studio.stats.views"), value: stats.totals.views },
+          { label: t("studio.stats.likes"), value: stats.totals.likes },
+          { label: t("studio.stats.dislikes"), value: stats.totals.dislikes },
+          { label: t("studio.stats.comments"), value: stats.totals.comments },
+          { label: t("studio.stats.followers"), value: stats.totals.followers },
+          { label: t("studio.stats.videos"), value: stats.totals.videos },
         ]}
       />
-      <StatsChart series={stats.daily_views} label="Daily views across all channels" />
+      <StatsChart series={stats.daily_views} label={t("studio.analytics.dailyAll")} />
       <div className="relative overflow-x-auto rounded-2xl border border-border-subtle bg-surface">
         <table className="w-full min-w-[32rem] text-sm">
           <caption className="sr-only">
-            Per-channel breakdown — select a channel to view its analytics.
+            {t("studio.analytics.breakdownCaption")}
           </caption>
           <thead>
             <tr className="border-b border-border-subtle text-left text-[12px] font-semibold uppercase tracking-[0.06em] text-fg-muted">
               <th scope="col" className="px-4 py-2.5 font-semibold">
-                Channel
+                {t("studio.analytics.colChannel")}
               </th>
               <th scope="col" className="px-4 py-2.5 text-right font-semibold">
-                Views
+                {t("studio.stats.views")}
               </th>
               <th scope="col" className="px-4 py-2.5 text-right font-semibold">
-                Views · 28d
+                {t("studio.stats.views28d")}
               </th>
               <th scope="col" className="px-4 py-2.5 text-right font-semibold">
-                Followers
+                {t("studio.stats.followers")}
               </th>
               <th scope="col" className="px-4 py-2.5 text-right font-semibold">
-                Videos
+                {t("studio.stats.videos")}
               </th>
             </tr>
           </thead>
@@ -263,8 +267,11 @@ type VideoOption = { id: string; title: string; channelName: string };
 // owned channels) and shows one selected video's stats. Remounted per scope (key)
 // so a stale selection never points into another scope's list.
 function VideoStatsSection({ handles, channels }: { handles: string[]; channels: Channel[] }) {
+  const t = useT();
   const [status, setStatus] = useState<Status>("loading");
   const [options, setOptions] = useState<VideoOption[]>([]);
+  // The picker walks at most DEFAULT_MAX_PAGES pages per channel; say so when it stopped short.
+  const [truncated, setTruncated] = useState(false);
   const [videoId, setVideoId] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const multiChannel = handles.length > 1;
@@ -276,23 +283,31 @@ function VideoStatsSection({ handles, channels }: { handles: string[]; channels:
   useEffect(() => {
     const active = handles.filter((h) => h !== "");
     const controller = new AbortController();
+    // Set in the .then below with the options, never synchronously in the effect.
+    let cut = false;
     // An empty scope resolves to an empty option list in the .then below (setState
     // in a callback, not synchronously in the effect body).
     Promise.all(
       active.map((h) =>
-        api
-          .listChannelVideos(h, undefined, controller.signal)
-          .then((res): VideoOption[] =>
-            res.videos.map((v: Video) => ({
-              id: v.id,
-              title: v.title,
-              channelName: nameByHandle.get(h) ?? `@${h}`,
-            })),
-          ),
+        // The picker offers EVERY video, so it walks the paged list to its end.
+        collectPages<Video>(
+          (window) =>
+            api
+              .listChannelVideos(h, undefined, controller.signal, window)
+              .then((res) => ({ items: res.videos, total: res.total })),
+          { signal: controller.signal, onTruncated: () => (cut = true) },
+        ).then((videos): VideoOption[] =>
+          videos.map((v) => ({
+            id: v.id,
+            title: v.title,
+            channelName: nameByHandle.get(h) ?? `@${h}`,
+          })),
+        ),
       ),
     )
       .then((lists) => {
         setOptions(lists.flat());
+        setTruncated(cut);
         setStatus("ready");
       })
       .catch((err: unknown) => {
@@ -306,37 +321,42 @@ function VideoStatsSection({ handles, channels }: { handles: string[]; channels:
 
   return (
     <section className="flex flex-col gap-3 border-t border-border-subtle pt-6">
-      <h2 className="text-[15px] font-bold tracking-tight">Per-video stats</h2>
+      <h2 className="text-[15px] font-bold tracking-tight">{t("studio.analytics.perVideo")}</h2>
       {status === "loading" ? (
         <div className="flex justify-center py-8">
-          <Spinner label="Loading your videos" />
+          <Spinner label={t("studio.analytics.loadingVideos")} />
         </div>
       ) : status === "error" ? (
         <ErrorState
-          message="Could not load your videos."
+          message={t("studio.analytics.videosError")}
           onRetry={() => {
             setStatus("loading");
             setReloadKey((k) => k + 1);
           }}
         />
       ) : options.length === 0 ? (
-        <p className="text-sm text-fg-muted">No videos yet.</p>
+        <p className="text-sm text-fg-muted">{t("studio.analytics.noVideos")}</p>
       ) : (
         <>
           <div className="max-w-md">
             <Select
-              label="Video"
+              label={t("studio.analytics.videoLabel")}
               value={videoId}
               onChange={(e) => setVideoId(e.target.value)}
-              aria-label="Stats video"
+              aria-label={t("studio.analytics.videoAria")}
             >
-              <option value="">— choose a video —</option>
+              <option value="">{t("studio.analytics.chooseVideo")}</option>
               {options.map((v) => (
                 <option key={v.id} value={v.id}>
-                  {multiChannel ? `${v.channelName} · ${v.title}` : v.title}
+                  {multiChannel ? t("studio.analytics.videoOption", { channel: v.channelName, title: v.title }) : v.title}
                 </option>
               ))}
             </Select>
+            {truncated ? (
+              <p className="mt-1 text-xs text-fg-muted">
+                {t("studio.analytics.truncated")}
+              </p>
+            ) : null}
           </div>
           {videoId ? <VideoStatsPanel key={videoId} videoId={videoId} /> : null}
         </>
@@ -346,6 +366,7 @@ function VideoStatsSection({ handles, channels }: { handles: string[]; channels:
 }
 
 function VideoStatsPanel({ videoId }: { videoId: string }) {
+  const t = useT();
   const [status, setStatus] = useState<Status>("loading");
   const [stats, setStats] = useState<VideoStatsResponse | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -369,14 +390,14 @@ function VideoStatsPanel({ videoId }: { videoId: string }) {
   if (status === "loading") {
     return (
       <div className="flex justify-center py-8">
-        <Spinner label="Loading video stats" />
+        <Spinner label={t("studio.analytics.loadingVideo")} />
       </div>
     );
   }
   if (status === "error" || !stats) {
     return (
       <ErrorState
-        message="Could not load this video's stats."
+        message={t("studio.analytics.videoError")}
         onRetry={() => {
           setStatus("loading");
           setReloadKey((k) => k + 1);
@@ -389,18 +410,20 @@ function VideoStatsPanel({ videoId }: { videoId: string }) {
     <div className="flex flex-col gap-4">
       <TotalsGrid
         items={[
-          { label: "Views", value: stats.views },
-          { label: "Likes", value: stats.likes },
-          { label: "Dislikes", value: stats.dislikes },
-          { label: "Comments", value: stats.comments },
+          { label: t("studio.stats.views"), value: stats.views },
+          { label: t("studio.stats.likes"), value: stats.likes },
+          { label: t("studio.stats.dislikes"), value: stats.dislikes },
+          { label: t("studio.stats.comments"), value: stats.comments },
         ]}
       />
-      <StatsChart series={stats.daily_views} label="Daily views for this video" />
+      <StatsChart series={stats.daily_views} label={t("studio.analytics.dailyVideo")} />
+      <PlaybackStatsPanel videoId={videoId} />
     </div>
   );
 }
 
 function TotalsGrid({ items }: { items: Array<{ label: string; value: number }> }) {
+  const { formatCount } = useFormat();
   return (
     <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
       {items.map((item) => (

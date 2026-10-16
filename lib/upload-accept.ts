@@ -5,23 +5,52 @@
 // honest so users are not offered files the upload would refuse.
 
 /** The always-accepted base containers (vidra-core's baseVideoExts). */
-export const BASE_VIDEO_ACCEPT = ".mp4,.webm,.ogv,.ogg,video/mp4,video/webm,video/ogg";
+export const BASE_VIDEO_ACCEPT =
+  ".mp4,.webm,.ogv,.ogg,.mp3,.m4a,.m4b,.aac,.flac,.wav,.opus," +
+  "video/mp4,video/webm,video/ogg,audio/mpeg,audio/mp4,audio/aac,audio/flac,audio/wav,audio/ogg,audio/opus";
 
 /**
  * videoAcceptAttr maps the /instance features.upload_additional_extensions
  * flag to the file input's accept attribute: while the extended container set
  * is accepted (or the flag is unknown — an older backend, a failed fetch —
- * fail open like the rest of the form), any video/* file may be picked;
+ * fail open like the rest of the form), any video/* or audio/* file may be picked (audio-only
+ * uploads are base containers on the server, never gated);
  * once an admin turns the extended set off, the picker narrows to the base
  * containers the server will actually take.
  */
-export function videoAcceptAttr(additionalExtensions: boolean | undefined | null): string {
-  return additionalExtensions === false ? BASE_VIDEO_ACCEPT : "video/*";
+export function videoAcceptAttr(
+  additionalExtensions: boolean | undefined | null,
+): string {
+  return additionalExtensions === false ? BASE_VIDEO_ACCEPT : "video/*,audio/*";
 }
 
 // The base container extensions the server always takes (mirrors BASE_VIDEO_ACCEPT).
-const BASE_VIDEO_EXTS = [".mp4", ".webm", ".ogv", ".ogg"];
-const BASE_VIDEO_TYPES = ["video/mp4", "video/webm", "video/ogg"];
+const BASE_VIDEO_EXTS = [
+  ".mp4",
+  ".webm",
+  ".ogv",
+  ".ogg",
+  ".mp3",
+  ".m4a",
+  ".m4b",
+  ".aac",
+  ".flac",
+  ".wav",
+  ".opus",
+];
+const BASE_VIDEO_TYPES = [
+  "video/mp4",
+  "video/webm",
+  "video/ogg",
+  "audio/mpeg",
+  "audio/mp4",
+  "audio/aac",
+  "audio/flac",
+  "audio/wav",
+  "audio/x-wav",
+  "audio/ogg",
+  "audio/opus",
+];
 
 /**
  * isAcceptedVideoFile decides whether a dropped file should be routed into the
@@ -39,11 +68,16 @@ export function isAcceptedVideoFile(
   const type = (file.type || "").toLowerCase();
   const name = file.name.toLowerCase();
   if (additionalExtensions === false) {
-    return BASE_VIDEO_TYPES.includes(type) || BASE_VIDEO_EXTS.some((e) => name.endsWith(e));
+    return (
+      BASE_VIDEO_TYPES.includes(type) ||
+      BASE_VIDEO_EXTS.some((e) => name.endsWith(e))
+    );
   }
   // Permissive (matches the "video/*" accept): trust an explicit video MIME, or
   // fall back to a common video extension when the OS reports no type.
-  if (type.startsWith("video/")) return true;
+  if (type.startsWith("video/") || type.startsWith("audio/")) return true;
   if (type !== "") return false;
-  return /\.(mp4|webm|ogv|ogg|mov|mkv|avi|m4v|flv|wmv|mpg|mpeg|3gp)$/i.test(name);
+  return /\.(mp4|webm|ogv|ogg|mov|mkv|avi|m4v|flv|wmv|mpg|mpeg|3gp|mp3|m4a|m4b|aac|flac|wav|opus)$/i.test(
+    name,
+  );
 }

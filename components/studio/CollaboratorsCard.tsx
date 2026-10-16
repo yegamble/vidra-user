@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { useT } from "@/components/I18nProvider";
 import { Button } from "@/components/ui/Button";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Input } from "@/components/ui/Input";
@@ -24,6 +25,7 @@ export function CollaboratorsCard({
   channel: Channel;
   canManage?: boolean;
 }) {
+  const t = useT();
   const [status, setStatus] = useState<Status>("loading");
   const [members, setMembers] = useState<ChannelMember[]>([]);
   const [reloadKey, setReloadKey] = useState(0);
@@ -47,30 +49,27 @@ export function CollaboratorsCard({
   return (
     <section aria-labelledby="collaborators-heading" className="flex flex-col gap-3">
       <h2 id="collaborators-heading" className="text-[15px] font-bold tracking-tight">
-        Collaborators
+        {t("studio.collab.heading")}
       </h2>
       <div className="flex flex-col gap-4 rounded-2xl border border-border-subtle bg-surface p-4">
-        <p className="text-[13px] text-fg-muted">
-          Editors can upload, edit, and manage this channel&rsquo;s videos and live streams. Only you
-          can change channel settings, distribution, and membership.
-        </p>
+        <p className="text-[13px] text-fg-muted">{t("studio.collab.intro")}</p>
 
         {canManage ? <InviteForm channel={channel} onAdded={(m) => setMembers((list) => [...list, m])} /> : null}
 
         {status === "loading" ? (
           <div className="flex justify-center py-6">
-            <Spinner label="Loading collaborators" />
+            <Spinner label={t("studio.collab.loading")} />
           </div>
         ) : status === "error" ? (
           <ErrorState
-            message="Could not load collaborators."
+            message={t("studio.collab.loadError")}
             onRetry={() => {
               setStatus("loading");
               setReloadKey((k) => k + 1);
             }}
           />
         ) : members.length === 0 ? (
-          <p className="text-sm text-fg-muted">No collaborators yet.</p>
+          <p className="text-sm text-fg-muted">{t("studio.collab.empty")}</p>
         ) : (
           <ul className="flex flex-col divide-y divide-border-subtle overflow-hidden rounded-xl bg-surface-muted">
             {members.map((member) => (
@@ -94,6 +93,7 @@ export function CollaboratorsCard({
 // InviteForm — invite a local user by handle as an editor. Surfaces the backend's
 // 404 (no such user) and 409 (already manages the channel) inline.
 function InviteForm({ channel, onAdded }: { channel: Channel; onAdded: (m: ChannelMember) => void }) {
+  const t = useT();
   const [handle, setHandle] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -110,9 +110,9 @@ function InviteForm({ channel, onAdded }: { channel: Channel; onAdded: (m: Chann
       setHandle("");
     } catch (err) {
       setError(
-        errorMessage(err, "Could not add the collaborator.", {
-          "404": "No such user.",
-          "409": "That user already manages this channel.",
+        errorMessage(err, t("studio.collab.addError"), {
+          "404": t("studio.collab.noUser"),
+          "409": t("studio.collab.alreadyManages"),
         }),
       );
     } finally {
@@ -125,16 +125,16 @@ function InviteForm({ channel, onAdded }: { channel: Channel; onAdded: (m: Chann
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
         <div className="flex-1">
           <Input
-            label="Invite an editor"
+            label={t("studio.collab.invite")}
             value={handle}
             onChange={(e) => setHandle(e.target.value)}
-            placeholder="username"
-            aria-label="Collaborator handle"
+            placeholder={t("studio.collab.placeholder")}
+            aria-label={t("studio.collab.handleAria")}
             maxLength={30}
           />
         </div>
         <Button type="submit" disabled={busy || handle.trim() === ""}>
-          Add editor
+          {t("studio.collab.addEditor")}
         </Button>
       </div>
       {error ? <p className="text-sm text-danger">{error}</p> : null}
@@ -154,6 +154,7 @@ function MemberRow({
   canManage: boolean;
   onRemoved: () => void;
 }) {
+  const t = useT();
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -165,7 +166,7 @@ function MemberRow({
       await api.removeChannelMember(channel.handle, member.user_id);
       onRemoved();
     } catch (err) {
-      setError(errorMessage(err, "Could not remove this collaborator."));
+      setError(errorMessage(err, t("studio.collab.removeError")));
       setBusy(false);
       setConfirming(false);
     }
@@ -184,14 +185,14 @@ function MemberRow({
       {canManage ? (
         confirming ? (
           <div className="flex shrink-0 items-center gap-1 text-sm">
-            <span className="text-[13px] text-fg-muted">Remove?</span>
+            <span className="text-[13px] text-fg-muted">{t("studio.collab.removeAsk")}</span>
             <button
               type="button"
               disabled={busy}
               onClick={() => void remove()}
               className={`${ROW_ACTION} text-danger hover:bg-danger-surface`}
             >
-              Confirm
+              {t("studio.channel.confirm")}
             </button>
             <button
               type="button"
@@ -199,7 +200,7 @@ function MemberRow({
               onClick={() => setConfirming(false)}
               className={`${ROW_ACTION} text-fg-muted hover:bg-surface-strong hover:text-fg`}
             >
-              Cancel
+              {t("studio.channel.cancel")}
             </button>
           </div>
         ) : (
@@ -207,9 +208,9 @@ function MemberRow({
             variant="danger-outline"
             size="sm"
             onClick={() => setConfirming(true)}
-            aria-label={`Remove ${member.username}`}
+            aria-label={t("studio.collab.removeAria", { username: member.username })}
           >
-            Remove
+            {t("studio.collab.remove")}
           </Button>
         )
       ) : null}

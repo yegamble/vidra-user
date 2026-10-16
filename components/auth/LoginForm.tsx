@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { useT } from "@/components/I18nProvider";
 import { AuthWordmark } from "@/components/auth/AuthPage";
 import { useSession } from "@/components/auth/AuthProvider";
 import { BlueskyLoginButton } from "@/components/auth/BlueskyLoginButton";
@@ -69,6 +70,7 @@ export function LoginForm({
   returnTo?: string;
 }) {
   const router = useRouter();
+  const t = useT();
   const destination = safeLoginReturn(returnTo);
   const loginPath = destination === "/" ? "/login" : `/login?return_to=${encodeURIComponent(destination)}`;
   const { status, login, completeMfaChallenge } = useSession();
@@ -79,7 +81,7 @@ export function LoginForm({
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(
-    oauthError ? oauthErrorMessage(oauthError) : null,
+    oauthError ? oauthErrorMessage(oauthError, t) : null,
   );
   const [submitting, setSubmitting] = useState(false);
   // Set once login answers mfa_required: the form swaps to the code entry.
@@ -177,7 +179,11 @@ export function LoginForm({
       setError(
         errorMessage(err, "Something went wrong. Please try again.", {
           // Identifier-neutral: the attempt may have used a username.
-          "401": "Invalid email/username or password.",
+          // Deliberately generic, exactly like the API: a wrong password, an
+          // unknown account and a temporarily locked account are one answer,
+          // so the lockout hint is always shown and never says which applies.
+          "401":
+            "Invalid email/username or password. If you have tried several times, wait a few minutes before trying again.",
           // Server-side validation reject (too short/long identifier, missing
           // password) — the raw backend string is "validation failed", which
           // tells a person nothing.

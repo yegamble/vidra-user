@@ -2,12 +2,17 @@ import { apiBaseUrl } from "@/lib/config";
 import { clientSearchEventHeaders, searchSessionHeaders } from "@/lib/search-session";
 
 import { getAccessToken } from "./auth-store";
-import { ApiError, apiRequest } from "./client";
+import { ApiError, apiRequest, restoreSession } from "./client";
 import { pageQuery, type PageParams } from "./pagination";
 import { uploadWithProgress, type UploadProgress } from "./upload";
 import type { SearchEventInput } from "./types";
 import type {
   AdminCommentListResponse,
+  BulkVideosRequest,
+  BulkVideosResponse,
+  AdminCreateUserRequest,
+  AdminCreateUserResponse,
+  BulkRemoveCommentsResponse,
   AdminPasswordResetLink,
   AdminStats,
   AdminUser,
@@ -20,6 +25,10 @@ import type {
   InfrastructureStatus,
   MailConfigPutRequest,
   MailConfigState,
+  OIDCProvider,
+  OIDCProviderCreateRequest,
+  OIDCProviderList,
+  OIDCProviderUpdateRequest,
   MailTestResult,
   UpdateInstanceSettingsRequest,
   InstanceAboutResponse,
@@ -29,6 +38,7 @@ import type {
   JobRunsResponse,
   JobRunState,
   IPFSReconcileResult,
+  IPFSRepinStatus,
   IPFSStatus,
   IPFSConfigDocument,
   IPFSConfigUpdate,
@@ -60,6 +70,9 @@ import type {
   ChannelSyncResponse,
   CreateChannelSyncRequest,
   FederationFollowerRequestListResponse,
+  InstanceFollow,
+  InstanceFollowListResponse,
+  InstanceFollowState,
   FollowedChannelsResponse,
   FollowNotificationsResponse,
   NotificationSetting,
@@ -70,6 +83,7 @@ import type {
   VerifyDonationAddressRequest,
   Comment,
   CommentListResponse,
+  ManagedCommentListResponse,
   BlockedUserListResponse,
   Conversation,
   ConversationListResponse,
@@ -93,6 +107,7 @@ import type {
   LiveTerminationResult,
   TerminateLiveStreamRequest,
   LivePublicListResponse,
+  LiveUpcomingListResponse,
   UpdateLiveStreamRequest,
   MessageListResponse,
   Message,
@@ -101,16 +116,27 @@ import type {
   UploadAttachmentResponse,
   MutedAccountListResponse,
   MutedInstanceListResponse,
+  VideoOwnershipChangeListResponse,
   BlockInstanceRequest,
   BlockedInstanceListResponse,
+  BlocklistAllowRequest,
+  BlocklistAllowlistResponse,
+  BlocklistSubscription,
+  BlocklistSubscriptionListResponse,
+  BlocklistSyncResult,
+  CreateBlocklistSubscriptionRequest,
+  UpdateBlocklistSubscriptionRequest,
   CreateRemoteFollowRequest,
   RemoteFollow,
   RemoteFollowListResponse,
   ATProtoLinkRequest,
   ATProtoStatus,
   RemoteBlockListResponse,
+  BlockedRemoteActorListResponse,
+  AdminRemoteBlockRequest,
   RemoteVideo,
   RemoteVideoCommentListResponse,
+  RemoteVideoRating,
   AuthoredRemoteComment,
   FeedScope,
   CreateChannelRequest,
@@ -141,7 +167,9 @@ import type {
   CreatePlaylistRequest,
   NotificationListResponse,
   NotificationPrefsResponse,
+  ContentPreferences,
   PlayerSettings,
+  UpdateContentPreferencesRequest,
   UpdatePlayerSettingsRequest,
   Playlist,
   QuarantinedVideoListResponse,
@@ -152,7 +180,13 @@ import type {
   RegistrationRequestFilter,
   RegistrationRequestListResponse,
   RejectRegistrationRequest,
+  MyReport,
+  MyReportListResponse,
+  ReportReason,
+  CreateReportRequest,
   ReportListResponse,
+  ReportMessage,
+  ReportMessageListResponse,
   ReportStatusFilter,
   ResolveReportRequest,
   UnreadCountResponse,
@@ -172,16 +206,25 @@ import type {
   VideoFile,
   VideoRating,
   VideoStatsResponse,
+  PlaybackStatsResponse,
+  PlaybackBeaconRequest,
   VideoSearchResponse,
+  RemoteInteractionResolution,
   AccountSearchResponse,
   ChannelSearchResponse,
   SearchSuggestionsResponse,
   RecommendationsResponse,
+  FeedTokenIssued,
+  FeedTokenStatus,
   SearchHistoryResponse,
   SuggestionBanListResponse,
   SuggestionBanResponse,
   WatchedWord,
   WatchedWordListResponse,
+  WatchedWordList,
+  WatchedWordListsPage,
+  CreateWatchedWordListRequest,
+  UpdateWatchedWordListRequest,
   WatchedWordMatchListResponse,
   WatchedWordMatchStatusFilter,
   ResolveWatchedWordMatchRequest,
@@ -262,6 +305,34 @@ export interface JobRunListParams {
   limit?: number;
   offset?: number;
 }
+
+/**
+ * Named watched-word lists (core 0172) exist at two scopes with the same shape:
+ * `/admin/watched-word-lists` (instance lists; moderator/admin) and
+ * `/me/watched-word-lists` (a creator's own lists, applied to comments on their
+ * videos). One factory so the two can never drift apart.
+ */
+function watchedWordListEndpoints(base: string) {
+  const one = (id: string) => `${base}/${encodeURIComponent(id)}`;
+  return {
+    /** GET — one page of lists, default list first; word_count only (no words). */
+    list: (params: PageParams = {}, signal?: AbortSignal) =>
+      apiRequest<WatchedWordListsPage>(base, { query: pageQuery(params), signal }),
+    /** GET — one list WITH its words (the default list's words are paged elsewhere). */
+    get: (id: string, signal?: AbortSignal) => apiRequest<WatchedWordList>(one(id), { signal }),
+    /** POST — create a list (409 on a name already used in this scope). */
+    create: (body: CreateWatchedWordListRequest) =>
+      apiRequest<WatchedWordList>(base, { method: "POST", body }),
+    /** PATCH — rename / change action; `words` REPLACES the terms when present. */
+    update: (id: string, body: UpdateWatchedWordListRequest) =>
+      apiRequest<WatchedWordList>(one(id), { method: "PATCH", body }),
+    /** DELETE — remove a list and its terms (409 for the default list). */
+    remove: (id: string) => apiRequest<void>(one(id), { method: "DELETE" }),
+  };
+}
+
+export const adminWatchedWordLists = watchedWordListEndpoints("/api/v1/admin/watched-word-lists");
+export const myWatchedWordLists = watchedWordListEndpoints("/api/v1/me/watched-word-lists");
 
 /** Typed wrappers for the public vidra-core read endpoints. */
 export const api = {
@@ -541,6 +612,18 @@ export const api = {
   clearSearchHistory: () =>
     apiRequest<void>("/api/v1/me/search-history", { method: "DELETE" }),
 
+  /** GET /api/v1/me/feed-token — whether a private subscriptions-feed token exists (auth). */
+  getFeedToken: () => apiRequest<FeedTokenStatus>("/api/v1/me/feed-token"),
+
+  /**
+   * POST /api/v1/me/feed-token — create or rotate the token. The raw token and
+   * ready-made feed URL are returned ONCE; the old URL dies immediately (auth).
+   */
+  rotateFeedToken: () => apiRequest<FeedTokenIssued>("/api/v1/me/feed-token", { method: "POST" }),
+
+  /** DELETE /api/v1/me/feed-token — revoke the token (auth). */
+  revokeFeedToken: () => apiRequest<void>("/api/v1/me/feed-token", { method: "DELETE" }),
+
   /**
    * DELETE /api/v1/me/search-history/{query} — remove one normalized query from
    * the caller's history (auth). The query is path-escaped.
@@ -562,11 +645,83 @@ export const api = {
       { signal },
     ),
 
-  /** GET /api/v1/channels/{handle}/videos — a channel's videos (cards). */
-  listChannelVideos: (handle: string, token?: string, signal?: AbortSignal) =>
+  /**
+   * GET /api/v1/channels/{handle}/videos — a channel's videos (cards). Paginated
+   * (limit 1–100, default 20, plus offset) and sortable server-side: `sort` is
+   * `-published_at` (newest first, the default) or `published_at` (oldest first).
+   */
+  listChannelVideos: (
+    handle: string,
+    token?: string,
+    signal?: AbortSignal,
+    params: PageParams & { sort?: "-published_at" | "published_at" } = {},
+  ) =>
     apiRequest<VideoListResponse>(
       `/api/v1/channels/${encodeURIComponent(handle)}/videos`,
-      { token, signal },
+      { token, signal, query: { sort: params.sort, ...pageQuery(params) } },
+    ),
+
+  /**
+   * GET /api/v1/me/videos — every video on the channels the caller OWNS, with
+   * optional title search (`q`), `privacy`, `state` and `channel_id` filters and
+   * the usual sort / limit / offset. Another account's `channel_id` yields an
+   * empty page, never their videos. Powers the Studio "My videos" list.
+   */
+  listMyVideos: (
+    params: PageParams & {
+      q?: string;
+      privacy?: VideoPrivacy;
+      state?: VideoState;
+      channel_id?: string;
+      sort?: "-published_at" | "published_at";
+    } = {},
+    signal?: AbortSignal,
+  ) =>
+    apiRequest<VideoListResponse>("/api/v1/me/videos", {
+      signal,
+      query: {
+        q: params.q,
+        privacy: params.privacy,
+        state: params.state,
+        channel_id: params.channel_id,
+        sort: params.sort,
+        ...pageQuery(params),
+      },
+    }),
+
+  /**
+   * POST /api/v1/me/videos/bulk — delete or change the privacy of up to 100 of
+   * the caller's own videos. One foreign/unknown id is a 404 for the whole
+   * request (nothing changes); otherwise the per-id `results` say which items
+   * failed and why.
+   */
+  bulkMyVideos: (body: BulkVideosRequest) =>
+    apiRequest<BulkVideosResponse>("/api/v1/me/videos/bulk", { method: "POST", body }),
+
+  /**
+   * GET /api/v1/users/{username}/videos — an account's public videos across ALL
+   * its channels (the profile Videos tab). Same paging and sort as
+   * listChannelVideos; 404 when the profile is private or unknown.
+   */
+  listUserVideos: (
+    username: string,
+    signal?: AbortSignal,
+    params: PageParams & { sort?: "-published_at" | "published_at" } = {},
+  ) =>
+    apiRequest<VideoListResponse>(
+      `/api/v1/users/${encodeURIComponent(username)}/videos`,
+      { signal, query: { sort: params.sort, ...pageQuery(params) } },
+    ),
+
+  /**
+   * GET /api/v1/channels/{handle}/playlists — a channel's playlists (the
+   * Playlists tab), newest first, paginated. Public ones for everyone; the
+   * playlist owner also gets their own unlisted/private ones.
+   */
+  listChannelPlaylists: (handle: string, signal?: AbortSignal, params: PageParams = {}) =>
+    apiRequest<PlaylistListResponse>(
+      `/api/v1/channels/${encodeURIComponent(handle)}/playlists`,
+      { signal, query: pageQuery(params) },
     ),
 
   /**
@@ -575,6 +730,16 @@ export const api = {
    */
   getVideoStats: (id: string, signal?: AbortSignal) =>
     apiRequest<VideoStatsResponse>(`/api/v1/videos/${encodeURIComponent(id)}/stats`, { signal }),
+
+  /**
+   * GET /api/v1/videos/{id}/playback-stats — watch time, retention curve and
+   * device split for a video (auth; owner or channel editor, else 404).
+   */
+  getVideoPlaybackStats: (id: string, signal?: AbortSignal) =>
+    apiRequest<PlaybackStatsResponse>(
+      `/api/v1/videos/${encodeURIComponent(id)}/playback-stats`,
+      { signal },
+    ),
 
   /**
    * GET /api/v1/channels/{handle}/stats — aggregated creator statistics for a
@@ -610,9 +775,12 @@ export const api = {
       { method: "PUT", body: { notification_setting: notificationSetting } },
     ),
 
-  /** GET /api/v1/me/channels — the caller's own channels (auth). */
-  getMyChannels: (signal?: AbortSignal) =>
-    apiRequest<ChannelListResponse>("/api/v1/me/channels", { signal }),
+  /**
+   * GET /api/v1/me/channels — the caller's channels (owned + editor-shared),
+   * paginated by core (default 20); pass a window to read past the first page.
+   */
+  getMyChannels: (signal?: AbortSignal, params: PageParams = {}) =>
+    apiRequest<ChannelListResponse>("/api/v1/me/channels", { signal, query: pageQuery(params) }),
 
   /**
    * GET /api/v1/me/quota — the caller's storage usage + effective quota (auth):
@@ -649,6 +817,24 @@ export const api = {
    */
   updatePlayerSettings: (patch: UpdatePlayerSettingsRequest) =>
     apiRequest<PlayerSettings>("/api/v1/me/player-settings", {
+      method: "PUT",
+      body: patch,
+    }),
+
+  /**
+   * GET /api/v1/me/content-preferences — the caller's per-flag sensitive-content
+   * policy overrides (auth). A flag with no entry inherits the base policy.
+   */
+  getContentPreferences: (signal?: AbortSignal) =>
+    apiRequest<ContentPreferences>("/api/v1/me/content-preferences", { signal }),
+
+  /**
+   * PUT /api/v1/me/content-preferences — MERGE update (auth): the supplied
+   * sensitive_flag_policies REPLACES the overrides (an empty-string value
+   * inherits); an omitted field is kept. 400 on an unknown flag or policy.
+   */
+  updateContentPreferences: (patch: UpdateContentPreferencesRequest) =>
+    apiRequest<ContentPreferences>("/api/v1/me/content-preferences", {
       method: "PUT",
       body: patch,
     }),
@@ -1018,6 +1204,20 @@ export const api = {
    * contract deliberately carries NO viewer/concurrent count and NO thumbnail
    * (neither exists server-side yet — W4 dependencies), so neither is surfaced.
    */
+  /**
+   * GET /api/v1/live/upcoming — PUBLIC, not-yet-live streams with a planned
+   * start, soonest first. `channel` (a handle) narrows it to one channel for the
+   * channel page. Auth optional (a muted/blocked owner drops out for the viewer).
+   */
+  listUpcomingLiveStreams: (
+    params: PageParams & { channel?: string } = {},
+    signal?: AbortSignal,
+  ) =>
+    apiRequest<LiveUpcomingListResponse>("/api/v1/live/upcoming", {
+      query: { ...pageQuery(params), channel: params.channel },
+      signal,
+    }),
+
   listLivePublicStreams: (
     params: PageParams = {},
     signal?: AbortSignal,
@@ -1115,6 +1315,33 @@ export const api = {
       `/api/v1/videos/${encodeURIComponent(videoId)}/captions/${encodeURIComponent(language)}`,
       { method: "DELETE" },
     ),
+
+  /**
+   * GET /api/v1/videos/{id}/captions/{lang} — a caption track's raw WebVTT, as
+   * text, with the bearer token so an owner can read a private video's track.
+   * Feeds the cue editor; saving goes back through uploadCaption (replace-by-language).
+   */
+  downloadCaptionText: async (videoId: string, language: string, signal?: AbortSignal) => {
+    const url = `${apiBaseUrl}/api/v1/videos/${encodeURIComponent(videoId)}/captions/${encodeURIComponent(language)}`;
+    const get = (bearer: string | null) =>
+      fetch(url, { headers: bearer ? { authorization: `Bearer ${bearer}` } : {}, signal });
+    const stored = getAccessToken();
+    let res = await get(stored);
+    // Same one-shot silent refresh apiRequest does: an expired access token must
+    // not strand an owner who has been editing for a while.
+    if (res.status === 401 && stored) {
+      const restored = await restoreSession();
+      if (restored) res = await get(restored.token);
+    }
+    if (!res.ok) {
+      throw new ApiError({
+        status: res.status,
+        code: "caption_unavailable",
+        message: "could not load this caption track",
+      });
+    }
+    return res.text();
+  },
 
   /**
    * GET /api/v1/videos/{id}/chapters — a video's seek-bar chapters (CORE-15),
@@ -1312,6 +1539,28 @@ export const api = {
   unheartComment: (id: string) =>
     apiRequest<Comment>(`/api/v1/comments/${encodeURIComponent(id)}/heart`, { method: "DELETE" }),
 
+  /**
+   * POST /api/v1/videos/{id}/comments/{commentId}/approve — publish a comment
+   * held for review (auth; the video's owner/editors/staff). `updatedAt` is the
+   * version the reviewer saw: an edit since then answers 409. Idempotent.
+   * Rejecting a held comment is `deleteComment`.
+   */
+  approveComment: (videoId: string, commentId: string, updatedAt: string) =>
+    apiRequest<Comment>(
+      `/api/v1/videos/${encodeURIComponent(videoId)}/comments/${encodeURIComponent(commentId)}/approve`,
+      { method: "POST", body: { updated_at: updatedAt } },
+    ),
+
+  /**
+   * GET /api/v1/me/videos/comments — the review queue: comments on every video
+   * the caller manages, newest first. `held: true` = awaiting approval only.
+   */
+  listManagedComments: (params: PageParams & { held?: boolean } = {}, signal?: AbortSignal) =>
+    apiRequest<ManagedCommentListResponse>("/api/v1/me/videos/comments", {
+      query: { held: params.held, ...pageQuery(params) },
+      signal,
+    }),
+
   /** POST /api/v1/me/mutes/accounts/{id} — mute an account (auth; idempotent 204). */
   muteAccount: (userId: string) =>
     apiRequest<void>(`/api/v1/me/mutes/accounts/${encodeURIComponent(userId)}`, {
@@ -1322,6 +1571,48 @@ export const api = {
   unmuteAccount: (userId: string) =>
     apiRequest<void>(`/api/v1/me/mutes/accounts/${encodeURIComponent(userId)}`, {
       method: "DELETE",
+    }),
+
+  /**
+   * GET /api/v1/me/video-ownership-changes — the videos other local users
+   * offered the caller, newest first, any status (auth).
+   */
+  getVideoOwnershipChanges: (params: PageParams = {}, signal?: AbortSignal) =>
+    apiRequest<VideoOwnershipChangeListResponse>("/api/v1/me/video-ownership-changes", {
+      query: pageQuery(params),
+      signal,
+    }),
+
+  /**
+   * POST /api/v1/videos/{id}/give-ownership — offer the caller's video to
+   * another local user, who must accept it (204; owner only).
+   */
+  giveVideoOwnership: (videoId: string, username: string) =>
+    apiRequest<void>(`/api/v1/videos/${encodeURIComponent(videoId)}/give-ownership`, {
+      method: "POST",
+      body: { username },
+    }),
+
+  /**
+   * DELETE /api/v1/videos/{id}/give-ownership — withdraw the caller's pending
+   * offer of the video (204; 404 when there is none).
+   */
+  cancelVideoOwnership: (videoId: string) =>
+    apiRequest<void>(`/api/v1/videos/${encodeURIComponent(videoId)}/give-ownership`, {
+      method: "DELETE",
+    }),
+
+  /** POST …/{id}/accept — take the offered video into one of the caller's channels (204). */
+  acceptVideoOwnershipChange: (id: string, channelId: string) =>
+    apiRequest<void>(`/api/v1/me/video-ownership-changes/${encodeURIComponent(id)}/accept`, {
+      method: "POST",
+      body: { channel_id: channelId },
+    }),
+
+  /** POST …/{id}/refuse — decline an offered video; it stays with its owner (204). */
+  refuseVideoOwnershipChange: (id: string) =>
+    apiRequest<void>(`/api/v1/me/video-ownership-changes/${encodeURIComponent(id)}/refuse`, {
+      method: "POST",
     }),
 
   /** GET /api/v1/me/mutes/accounts — the accounts the caller has muted, newest first (auth). */
@@ -1392,6 +1683,17 @@ export const api = {
     apiRequest<RemoteVideo>(`/api/v1/remote-videos/${encodeURIComponent(id)}`, { signal }),
 
   /**
+   * POST /api/v1/remote-videos/{id}/view — report a view of a federated video to
+   * its origin instance (anonymous allowed, 204; 429 when rate-limited). Fired
+   * once per page view from the player's first play; best-effort, so callers
+   * swallow failures.
+   */
+  recordRemoteVideoView: (id: string) =>
+    apiRequest<void>(`/api/v1/remote-videos/${encodeURIComponent(id)}/view`, {
+      method: "POST",
+    }),
+
+  /**
    * GET /api/v1/remote-videos/{id}/comments — the comments for a federated
    * video. Two disjoint arrays: `comments` is the paginated MIRRORED origin
    * thread (each `local:false`), `authored` is the complete set of comments
@@ -1443,6 +1745,23 @@ export const api = {
       method: "DELETE",
     }),
 
+  /** GET /api/v1/remote-videos/{id}/rating — the caller's own vote (auth). */
+  getRemoteVideoRating: (id: string, signal?: AbortSignal) =>
+    apiRequest<RemoteVideoRating>(`/api/v1/remote-videos/${encodeURIComponent(id)}/rating`, { signal }),
+
+  /** PUT /api/v1/remote-videos/{id}/rating — like/dislike a federated video (auth). */
+  setRemoteVideoRating: (id: string, rating: RatingValue) =>
+    apiRequest<RemoteVideoRating>(`/api/v1/remote-videos/${encodeURIComponent(id)}/rating`, {
+      method: "PUT",
+      body: { rating },
+    }),
+
+  /** DELETE /api/v1/remote-videos/{id}/rating — clear your vote (auth). */
+  clearRemoteVideoRating: (id: string) =>
+    apiRequest<RemoteVideoRating>(`/api/v1/remote-videos/${encodeURIComponent(id)}/rating`, {
+      method: "DELETE",
+    }),
+
   /**
    * POST /api/v1/remote-videos/{id}/report — file an abuse report against a
    * federated remote video (auth; target_type remote_video; idempotent per
@@ -1462,6 +1781,31 @@ export const api = {
    */
   createRemoteFollow: (body: CreateRemoteFollowRequest) =>
     apiRequest<RemoteFollow>("/api/v1/me/remote-follows", { method: "POST", body }),
+
+  /**
+   * GET /api/v1/remote-interaction/resolve — anonymous. WebFingers the
+   * visitor's own server for its subscribe template and returns the URL to
+   * send them to for `target` (an id on this instance). Malformed handle or a
+   * server we refuse to contact → 422; no subscribe support → 404; server
+   * unreachable → 502; federation disabled → 503; throttled → 429.
+   */
+  resolveRemoteInteraction: (handle: string, target: string) =>
+    apiRequest<RemoteInteractionResolution>("/api/v1/remote-interaction/resolve", {
+      query: { handle, target },
+    }),
+
+  /**
+   * GET /api/v1/videos/search?q=<uri> — resolve a remote URI (the inbound
+   * /remote-interaction page). The same route searchVideos uses, WITHOUT the
+   * client-emits-its-own-event header: this is a lookup, not a results page,
+   * so nothing client-side follows it with a search.submitted of its own and
+   * core should not be told to expect one.
+   */
+  lookupRemoteUri: (uri: string, signal?: AbortSignal) =>
+    apiRequest<VideoSearchResponse>("/api/v1/videos/search", {
+      query: { q: uri, limit: 1 },
+      signal,
+    }),
 
   /** GET /api/v1/me/remote-follows — the caller's remote-channel follows, newest first (auth). */
   listRemoteFollows: (params: PageParams = {}, signal?: AbortSignal) =>
@@ -1536,6 +1880,86 @@ export const api = {
   unblockInstance: (domain: string) =>
     apiRequest<void>(`/api/v1/admin/instances/blocked/${encodeURIComponent(domain)}`, {
       method: "DELETE",
+    }),
+
+  /** GET /api/v1/admin/instances/blocklist-subscriptions — shared denylists synced into the blocklist (admin). */
+  getBlocklistSubscriptions: (params: PageParams = {}, signal?: AbortSignal) =>
+    apiRequest<BlocklistSubscriptionListResponse>("/api/v1/admin/instances/blocklist-subscriptions", {
+      query: pageQuery(params),
+      signal,
+    }),
+
+  /** POST /api/v1/admin/instances/blocklist-subscriptions — subscribe to a list (admin; 409 duplicate URL, 422 bad URL/format). */
+  createBlocklistSubscription: (body: CreateBlocklistSubscriptionRequest) =>
+    apiRequest<BlocklistSubscription>("/api/v1/admin/instances/blocklist-subscriptions", {
+      method: "POST",
+      body,
+    }),
+
+  /** PATCH /api/v1/admin/instances/blocklist-subscriptions/{id} — label / enabled (admin). */
+  updateBlocklistSubscription: (id: string, body: UpdateBlocklistSubscriptionRequest) =>
+    apiRequest<BlocklistSubscription>(
+      `/api/v1/admin/instances/blocklist-subscriptions/${encodeURIComponent(id)}`,
+      { method: "PATCH", body },
+    ),
+
+  /** DELETE /api/v1/admin/instances/blocklist-subscriptions/{id} — remove it AND only the blocks it created (admin; 204). */
+  deleteBlocklistSubscription: (id: string) =>
+    apiRequest<void>(`/api/v1/admin/instances/blocklist-subscriptions/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
+
+  /** POST /api/v1/admin/instances/blocklist-subscriptions/{id}/sync — sync now (admin; 429 when over 6/min). */
+  syncBlocklistSubscription: (id: string, confirm = false) =>
+    apiRequest<BlocklistSyncResult>(
+      `/api/v1/admin/instances/blocklist-subscriptions/${encodeURIComponent(id)}/sync`,
+      { method: "POST", ...(confirm ? { body: { confirm: true } } : {}) },
+    ),
+
+  /** GET /api/v1/admin/instances/blocklist-allowlist — domains exempt from every subscription (admin). */
+  getBlocklistAllowlist: (params: PageParams = {}, signal?: AbortSignal) =>
+    apiRequest<BlocklistAllowlistResponse>("/api/v1/admin/instances/blocklist-allowlist", {
+      query: pageQuery(params),
+      signal,
+    }),
+
+  /** POST /api/v1/admin/instances/blocklist-allowlist — exempt a domain (admin; idempotent 204; 422 bad domain). */
+  addBlocklistAllow: (body: BlocklistAllowRequest) =>
+    apiRequest<void>("/api/v1/admin/instances/blocklist-allowlist", { method: "POST", body }),
+
+  /** DELETE /api/v1/admin/instances/blocklist-allowlist/{domain} — lift an exemption (admin; idempotent 204). */
+  removeBlocklistAllow: (domain: string) =>
+    apiRequest<void>(`/api/v1/admin/instances/blocklist-allowlist/${encodeURIComponent(domain)}`, {
+      method: "DELETE",
+    }),
+
+  /**
+   * GET /api/v1/admin/federation/blocked-actors — the REMOTE accounts blocked
+   * for everyone on this instance, newest first (admin/moderator).
+   */
+  getBlockedRemoteActors: (params: PageParams = {}, signal?: AbortSignal) =>
+    apiRequest<BlockedRemoteActorListResponse>("/api/v1/admin/federation/blocked-actors", {
+      query: pageQuery(params),
+      signal,
+    }),
+
+  /**
+   * POST /api/v1/admin/federation/blocked-actors — block one remote account
+   * instance-wide by handle or actor URL (admin/moderator; idempotent 204;
+   * local or unresolvable identity → 422).
+   */
+  blockRemoteActorInstanceWide: (body: AdminRemoteBlockRequest) =>
+    apiRequest<void>("/api/v1/admin/federation/blocked-actors", { method: "POST", body }),
+
+  /**
+   * DELETE /api/v1/admin/federation/blocked-actors?actor= — lift the block. The
+   * actor is the actor_url exactly as the list returned it (matched verbatim,
+   * no handle resolution; idempotent 204).
+   */
+  unblockRemoteActorInstanceWide: (actorUrl: string) =>
+    apiRequest<void>("/api/v1/admin/federation/blocked-actors", {
+      method: "DELETE",
+      query: { actor: actorUrl },
     }),
 
   /**
@@ -1798,10 +2222,14 @@ export const api = {
     }),
 
   /** POST /api/v1/videos/{id}/report — file an abuse report on a video (auth; idempotent 204). */
-  reportVideo: (id: string, reason: string) =>
+  reportVideo: (
+    id: string,
+    reason: string,
+    detail: Pick<CreateReportRequest, "reasons" | "start_seconds" | "end_seconds"> = {},
+  ) =>
     apiRequest<void>(`/api/v1/videos/${encodeURIComponent(id)}/report`, {
       method: "POST",
-      body: { reason },
+      body: { reason, ...detail },
     }),
 
   /** POST /api/v1/comments/{id}/report — file an abuse report on a comment (auth; idempotent 204). */
@@ -1886,6 +2314,17 @@ export const api = {
       method: "POST",
     }),
 
+  /**
+   * POST /api/v1/videos/{id}/playback — anonymous watch-time sample (about every
+   * 10 s of playback). Carries no identifier; best-effort, callers swallow errors.
+   */
+  recordPlaybackBeacon: (id: string, body: PlaybackBeaconRequest, opts?: { keepalive?: boolean }) =>
+    apiRequest<void>(`/api/v1/videos/${encodeURIComponent(id)}/playback`, {
+      method: "POST",
+      body,
+      keepalive: opts?.keepalive,
+    }),
+
   /** DELETE /api/v1/me/history/{id} — remove one video from history (auth, idempotent). */
   deleteHistoryEntry: (id: string) =>
     apiRequest<void>(`/api/v1/me/history/${encodeURIComponent(id)}`, { method: "DELETE" }),
@@ -1933,17 +2372,38 @@ export const api = {
       body: { prefs },
     }),
 
+  /**
+   * PATCH /api/v1/me/notification-prefs with only the `email` map: turn email
+   * delivery on or off per type (auth). Only email-capable types are accepted
+   * (others are 422, nothing written); the in-app map is untouched. Returns
+   * the full updated maps.
+   */
+  updateNotificationEmailPrefs: (email: Record<string, boolean>) =>
+    apiRequest<NotificationPrefsResponse>("/api/v1/me/notification-prefs", {
+      method: "PATCH",
+      body: { email },
+    }),
+
   /** GET /api/v1/me/playlists — the caller's playlists, newest first (auth). */
-  getMyPlaylists: (signal?: AbortSignal) =>
-    apiRequest<PlaylistListResponse>("/api/v1/me/playlists", { signal }),
+  getMyPlaylists: (signal?: AbortSignal, params: PageParams = {}) =>
+    apiRequest<PlaylistListResponse>("/api/v1/me/playlists", {
+      query: pageQuery(params),
+      signal,
+    }),
 
   /** POST /api/v1/playlists — create a playlist (auth). */
   createPlaylist: (body: CreatePlaylistRequest) =>
     apiRequest<Playlist>("/api/v1/playlists", { method: "POST", body }),
 
-  /** GET /api/v1/playlists/{id} — a playlist + its ordered video cards. */
-  getPlaylist: (id: string, signal?: AbortSignal) =>
-    apiRequest<PlaylistDetail>(`/api/v1/playlists/${encodeURIComponent(id)}`, { signal }),
+  /**
+   * GET /api/v1/playlists/{id} — a playlist + ONE PAGE of its ordered video
+   * cards (backend default 20); total/limit/offset describe the videos.
+   */
+  getPlaylist: (id: string, params: PageParams = {}, signal?: AbortSignal) =>
+    apiRequest<PlaylistDetail>(`/api/v1/playlists/${encodeURIComponent(id)}`, {
+      query: pageQuery(params),
+      signal,
+    }),
 
   /** PATCH /api/v1/playlists/{id} — update a playlist (auth, owner). */
   updatePlaylist: (id: string, body: UpdatePlaylistRequest) =>
@@ -1968,15 +2428,17 @@ export const api = {
     ),
 
   /**
-   * PUT /api/v1/playlists/{id}/videos — reorder items (auth, owner). videoIds must
-   * be exactly the playlist's current video ids in the desired order; a mismatch
-   * (missing/extra/duplicate) is 422.
+   * POST /api/v1/playlists/{id}/videos/{videoId}/move — move one item to
+   * directly after `afterVideoId`, or to the front when it is null (auth,
+   * owner). It needs no copy of the full list, so it works on a playlist the
+   * client has only paged part of — which is why it replaced the full-list PUT
+   * here. 409 when either video is no longer an item (the copy is stale).
    */
-  reorderPlaylist: (id: string, videoIds: string[]) =>
-    apiRequest<void>(`/api/v1/playlists/${encodeURIComponent(id)}/videos`, {
-      method: "PUT",
-      body: { video_ids: videoIds },
-    }),
+  movePlaylistItem: (id: string, videoId: string, afterVideoId: string | null) =>
+    apiRequest<void>(
+      `/api/v1/playlists/${encodeURIComponent(id)}/videos/${encodeURIComponent(videoId)}/move`,
+      { method: "POST", body: { after_video_id: afterVideoId } },
+    ),
 
   // Private playlist covers require bearer-authenticated bytes, like DM attachments.
   fetchPlaylistThumbnail: async (id: string, signal?: AbortSignal): Promise<Blob> => {
@@ -2023,12 +2485,13 @@ export const api = {
    * rejects an unrecognised value with a 400 instead of quietly widening it.
    */
   getReports: (
-    params: PageParams & { status?: ReportStatusFilter } = {},
+    params: PageParams & { status?: ReportStatusFilter; reason?: ReportReason } = {},
     signal?: AbortSignal,
   ) =>
     apiRequest<ReportListResponse>("/api/v1/admin/reports", {
       query: {
         status: params.status,
+        reason: params.reason,
         ...pageQuery(params),
       },
       signal,
@@ -2048,6 +2511,33 @@ export const api = {
    */
   deleteReport: (id: string) =>
     apiRequest<void>(`/api/v1/admin/reports/${encodeURIComponent(id)}`, { method: "DELETE" }),
+
+  /**
+   * GET /api/v1/reports/{id}/messages — a report's reporter↔staff thread, oldest
+   * first. Open to the report's reporter and to staff; anyone else gets the same
+   * 404 as an unknown report. `can_reply` is false for a report another instance
+   * filed (no local reporter to write to).
+   */
+  getReportMessages: (id: string, params: PageParams = {}, signal?: AbortSignal) =>
+    apiRequest<ReportMessageListResponse>(`/api/v1/reports/${encodeURIComponent(id)}/messages`, {
+      query: pageQuery(params),
+      signal,
+    }),
+
+  /** GET /api/v1/me/reports — the caller's own reports, most recently active first. */
+  getMyReports: (params: PageParams = {}, signal?: AbortSignal) =>
+    apiRequest<MyReportListResponse>("/api/v1/me/reports", { query: pageQuery(params), signal }),
+
+  /** GET /api/v1/me/reports/{id} — one of the caller's own reports (anyone else's is 404). */
+  getMyReport: (id: string, signal?: AbortSignal) =>
+    apiRequest<MyReport>(`/api/v1/me/reports/${encodeURIComponent(id)}`, { signal }),
+
+  /** POST /api/v1/reports/{id}/messages — add to the thread (1–3000 chars; 409 when read-only). */
+  postReportMessage: (id: string, body: string) =>
+    apiRequest<ReportMessage>(`/api/v1/reports/${encodeURIComponent(id)}/messages`, {
+      method: "POST",
+      body: { body },
+    }),
 
   /**
    * GET /api/v1/admin/users — accounts newest first (admin only). Optional `q`
@@ -2086,6 +2576,12 @@ export const api = {
       body,
     }),
 
+  /** Clears failed-login counters; core returns 204 even if no lock existed. */
+  clearUserLoginLockout: (id: string) =>
+    apiRequest<void>(`/api/v1/admin/users/${encodeURIComponent(id)}/login-lockout`, {
+      method: "DELETE",
+    }),
+
   /**
    * DELETE /api/v1/admin/users/{id}/mfa — remove a user's second factor
    * (admin). The operator answer to a lost authenticator AND lost recovery
@@ -2103,6 +2599,19 @@ export const api = {
       method: "DELETE",
       body,
     }),
+
+  /**
+   * POST /api/v1/admin/users — create an account on the user's behalf (admin).
+   * No account password: the holder sets one through a one-time link, which is
+   * either emailed (`link_emailed`) or returned ONCE in `reset_url` (no-store).
+   * `password` is the CALLER's own (step-up).
+   *
+   * 403 wrong password, 409 username/email taken (or no origin for the link),
+   * 422 validation, 429 rate limited, 502/503 account created but no link
+   * could be issued (mail failed / audit write failed).
+   */
+  createAdminUser: (body: AdminCreateUserRequest) =>
+    apiRequest<AdminCreateUserResponse>("/api/v1/admin/users", { method: "POST", body }),
 
   /**
    * POST /api/v1/admin/users/{id}/password-reset-link — mint a one-time reset
@@ -2209,6 +2718,65 @@ export const api = {
       `/api/v1/admin/federation/follower-requests/${encodeURIComponent(id)}/reject`,
       { method: "POST" },
     ),
+
+  /**
+   * GET /api/v1/admin/federation/instance-followers — remote instances that
+   * follow this instance's actor, newest first, optionally one state (admin).
+   */
+  getInstanceFollowers: (
+    params: PageParams & { state?: InstanceFollowState } = {},
+    signal?: AbortSignal,
+  ) =>
+    apiRequest<InstanceFollowListResponse>("/api/v1/admin/federation/instance-followers", {
+      query: { state: params.state, ...pageQuery(params) },
+      signal,
+    }),
+
+  /** POST …/instance-followers/{id}/accept — accept a pending instance follower (admin, 204). */
+  acceptInstanceFollower: (id: string) =>
+    apiRequest<void>(
+      `/api/v1/admin/federation/instance-followers/${encodeURIComponent(id)}/accept`,
+      { method: "POST" },
+    ),
+
+  /** POST …/instance-followers/{id}/reject — reject an instance follower; it stays rejected (admin, 204). */
+  rejectInstanceFollower: (id: string) =>
+    apiRequest<void>(
+      `/api/v1/admin/federation/instance-followers/${encodeURIComponent(id)}/reject`,
+      { method: "POST" },
+    ),
+
+  /** DELETE …/instance-followers/{id} — remove an instance follower in any state (admin, 204). */
+  removeInstanceFollower: (id: string) =>
+    apiRequest<void>(`/api/v1/admin/federation/instance-followers/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
+
+  /** GET /api/v1/admin/federation/instance-following — instances this one follows (admin). */
+  getInstanceFollowing: (
+    params: PageParams & { state?: InstanceFollowState } = {},
+    signal?: AbortSignal,
+  ) =>
+    apiRequest<InstanceFollowListResponse>("/api/v1/admin/federation/instance-following", {
+      query: { state: params.state, ...pageQuery(params) },
+      signal,
+    }),
+
+  /**
+   * POST /api/v1/admin/federation/instance-following — follow a remote instance
+   * by host as this instance's actor (admin; 201, pending until it Accepts).
+   */
+  followInstance: (host: string) =>
+    apiRequest<InstanceFollow>("/api/v1/admin/federation/instance-following", {
+      method: "POST",
+      body: { host },
+    }),
+
+  /** DELETE …/instance-following/{id} — stop following a remote instance (admin, 204). */
+  unfollowInstance: (id: string) =>
+    apiRequest<void>(`/api/v1/admin/federation/instance-following/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
 
   /** GET /api/v1/admin/audit-log — the security audit trail, newest first (admin). */
   getAuditLog: (
@@ -2427,6 +2995,46 @@ export const api = {
   resetMailConfig: () =>
     apiRequest<void>("/api/v1/admin/mail-config", { method: "DELETE" }),
 
+  /**
+   * GET /api/v1/admin/oidc-providers — the stored sign-in providers plus the
+   * environment ones they may override (admin only). Never returns a client
+   * secret: rows report `secret_configured` / `secret_status`.
+   */
+  listOIDCProviders: (signal?: AbortSignal) =>
+    apiRequest<OIDCProviderList>("/api/v1/admin/oidc-providers", { signal }),
+
+  /**
+   * POST /api/v1/admin/oidc-providers — add a provider. Needs ONE fresh
+   * credential in the body (`current_password` or `step_up_token`). 409
+   * `oidc_secrets_key_missing` = no KEK; 422 `fields` binds to the inputs
+   * (a name that matches an environment provider must reuse its issuer); 429 =
+   * the strict credential limiter.
+   */
+  createOIDCProvider: (body: OIDCProviderCreateRequest) =>
+    apiRequest<OIDCProvider>("/api/v1/admin/oidc-providers", { method: "POST", body }),
+
+  /**
+   * PUT /api/v1/admin/oidc-providers/{name} — replace the mutable fields. The
+   * issuer cannot change; OMIT `client_secret` to keep the stored one (never
+   * send ""). Same fresh-credential rule as create.
+   */
+  updateOIDCProvider: (name: string, body: OIDCProviderUpdateRequest) =>
+    apiRequest<OIDCProvider>(`/api/v1/admin/oidc-providers/${encodeURIComponent(name)}`, {
+      method: "PUT",
+      body,
+    }),
+
+  /**
+   * DELETE /api/v1/admin/oidc-providers/{name} — remove a stored provider and
+   * its sealed secret. Needs a fresh credential; 422 (`fields` names `name`)
+   * when the row shadows an environment provider — disable or edit it instead.
+   */
+  deleteOIDCProvider: (name: string, body: { current_password?: string; step_up_token?: string }) =>
+    apiRequest<void>(`/api/v1/admin/oidc-providers/${encodeURIComponent(name)}`, {
+      method: "DELETE",
+      body,
+    }),
+
   /** GET /api/v1/ipfs/status — effective public/private mirror health and pin counts (admin). */
   getIPFSStatus: (signal?: AbortSignal) =>
     apiRequest<IPFSStatus>("/api/v1/ipfs/status", { signal }),
@@ -2452,6 +3060,21 @@ export const api = {
       method: "POST",
       query: { network },
     }),
+
+  /**
+   * POST /api/v1/admin/ipfs/repin-playback-only — start the bulk re-pin of pinned
+   * HLS trees to the playback-only set (409 if one is already running).
+   */
+  startIPFSRepin: () =>
+    apiRequest<IPFSRepinStatus>("/api/v1/admin/ipfs/repin-playback-only", { method: "POST" }),
+
+  /** DELETE /api/v1/admin/ipfs/repin-playback-only — stop arming rows; armed rows finish (409 if none runs). */
+  cancelIPFSRepin: () =>
+    apiRequest<IPFSRepinStatus>("/api/v1/admin/ipfs/repin-playback-only", { method: "DELETE" }),
+
+  /** GET /api/v1/admin/ipfs/repin-playback-only — progress of the current or last run. */
+  getIPFSRepin: (signal?: AbortSignal) =>
+    apiRequest<IPFSRepinStatus>("/api/v1/admin/ipfs/repin-playback-only", { signal }),
 
   /**
    * GET /api/v1/admin/stats — instance-wide overview counts for the admin
@@ -2571,15 +3194,27 @@ export const api = {
 
   /**
    * GET /api/v1/admin/comments — all comments newest first, each with its author
-   * and the video it's on (moderator/admin). Optional `q` filters by body.
+   * and the video it's on (moderator/admin). Optional `q` filters by body;
+   * `auto_tag` keeps comments carrying that automatic tag (case-insensitive).
    */
   getAdminComments: (
-    params: PageParams & { q?: string } = {},
+    params: PageParams & { q?: string; auto_tag?: string } = {},
     signal?: AbortSignal,
   ) =>
     apiRequest<AdminCommentListResponse>("/api/v1/admin/comments", {
-      query: { q: params.q, ...pageQuery(params) },
+      query: { q: params.q, auto_tag: params.auto_tag, ...pageQuery(params) },
       signal,
+    }),
+
+  /**
+   * POST /api/v1/admin/comments/bulk-remove — hard-delete every comment by one
+   * local username (or remote actor URL), instance-wide (moderator/admin).
+   * Resolves with how many were removed; an unknown username is a 404.
+   */
+  bulkRemoveAdminComments: (account: string) =>
+    apiRequest<BulkRemoveCommentsResponse>("/api/v1/admin/comments/bulk-remove", {
+      method: "POST",
+      body: { account },
     }),
 
   /** GET /api/v1/admin/watched-words — the watched-words list, newest first (moderator/admin). */

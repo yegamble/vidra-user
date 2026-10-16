@@ -5,13 +5,16 @@ import { useState } from "react";
 import { useSession } from "@/components/auth/AuthProvider";
 import { PlaylistIcon } from "@/components/icons";
 import { PlaylistCard } from "@/components/PlaylistCard";
+import { PlaylistChannelSelect } from "@/components/PlaylistChannelSelect";
 import { Button, Input, Select } from "@/components/ui";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { ListTail } from "@/components/ui/ListTail";
 import { Spinner } from "@/components/ui/Spinner";
 import { api } from "@/lib/api";
 import type { Playlist, PlaylistVisibility } from "@/lib/api";
-import { useApiResource } from "@/lib/use-api-resource";
+import { useAppendingList } from "@/lib/use-appending-list";
+import { useBrowseAutoLoad } from "@/lib/use-browse-auto-load";
 import { SignInGate } from "@/components/SignInGate";
 
 // PlaylistsView lists the signed-in user's playlists and offers an inline create
@@ -31,18 +34,19 @@ export function PlaylistsView() {
 }
 
 function Playlists() {
-  const {
-    status,
-    data,
-    retry,
-    setData: setPlaylists,
-  } = useApiResource<Playlist[]>((signal) =>
-    api.getMyPlaylists(signal).then((res) => res.playlists),
-  );
-  const playlists = data ?? [];
+  const autoLoad = useBrowseAutoLoad();
+  // Paged from the server: the list used to stop at the first 20 playlists.
+  const list = useAppendingList<Playlist>({
+    queryKey: "my-playlists",
+    getId: (p) => p.id,
+    load: (window, signal) =>
+      api.getMyPlaylists(signal, window).then((res) => ({ items: res.playlists, total: res.total })),
+  });
+  const { status, items: playlists } = list;
 
   const [title, setTitle] = useState("");
   const [visibility, setVisibility] = useState<PlaylistVisibility>("private");
+  const [channelId, setChannelId] = useState("");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -53,10 +57,11 @@ function Playlists() {
     setCreating(true);
     setCreateError(null);
     try {
-      const pl = await api.createPlaylist({ title: t, visibility });
-      setPlaylists((list) => [pl, ...(list ?? [])]);
+      const pl = await api.createPlaylist({ title: t, visibility, ...(channelId ? { channel_id: channelId } : {}) });
+      list.prepend(pl);
       setTitle("");
       setVisibility("private");
+      setChannelId("");
     } catch {
       setCreateError("Could not create the playlist.");
     } finally {
@@ -72,7 +77,7 @@ function Playlists() {
     );
   }
   if (status === "error") {
-    return <ErrorState message="Could not load your playlists." onRetry={retry} />;
+    return <ErrorState message="Could not load your playlists." onRetry={list.reload} />;
   }
 
   return (
@@ -101,6 +106,7 @@ function Playlists() {
           <option value="unlisted">Unlisted</option>
           <option value="public">Public</option>
         </Select>
+        <PlaylistChannelSelect value={channelId} onChange={setChannelId} />
         <Button type="submit" disabled={creating || title.trim() === ""}>
           Create
         </Button>
@@ -122,6 +128,13 @@ function Playlists() {
           ))}
         </ul>
       )}
+      <ListTail
+        hasMore={list.hasMore}
+        autoLoad={autoLoad}
+        busy={list.moreStatus === "loading"}
+        error={list.moreStatus === "error" ? "Could not load more playlists." : null}
+        onLoadMore={list.loadMore}
+      />
     </div>
   );
 }

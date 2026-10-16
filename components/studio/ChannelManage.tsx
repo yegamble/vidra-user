@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { useT } from "@/components/I18nProvider";
 import { ChannelSyncSection } from "@/components/ChannelSyncSection";
 import { ProfileImageManager } from "@/components/ProfileImageManager";
 import { Button } from "@/components/ui/Button";
@@ -24,6 +25,7 @@ import { ROW_ACTION } from "./shared";
 import { ChannelProtocolBadges } from "./ChannelProtocolBadges";
 import { CollaboratorsCard } from "./CollaboratorsCard";
 import { DistributionCard } from "./DistributionCard";
+import { SupportTextField } from "./SupportTextField";
 import { useStudio } from "./StudioContext";
 
 // CreateChannelForm — the shared handle + display-name create form used both for
@@ -37,6 +39,7 @@ function CreateChannelForm({
   onCreated: (ch: Channel) => void;
   autoFocus?: boolean;
 }) {
+  const t = useT();
   const [handle, setHandle] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -58,8 +61,8 @@ function CreateChannelForm({
       setDisplayName("");
     } catch (err) {
       setError(
-        errorMessage(err, "Could not create the channel.", {
-          "409": "That handle is already taken.",
+        errorMessage(err, t("studio.channel.createError"), {
+          "409": t("studio.channel.handleTaken"),
         }),
       );
     } finally {
@@ -72,11 +75,11 @@ function CreateChannelForm({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
         <div className="sm:w-48">
           <Input
-            label="Handle"
+            label={t("studio.channel.handle")}
             value={handle}
             onChange={(e) => setHandle(e.target.value)}
             placeholder="ada_makes"
-            aria-label="Channel handle"
+            aria-label={t("studio.channel.handleAria")}
             autoFocus={autoFocus}
             minLength={3}
             maxLength={30}
@@ -84,16 +87,16 @@ function CreateChannelForm({
         </div>
         <div className="flex-1">
           <Input
-            label="Display name"
+            label={t("studio.channel.displayName")}
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
             placeholder="Ada Makes"
-            aria-label="Channel display name"
+            aria-label={t("studio.channel.displayNameAria")}
             maxLength={50}
           />
         </div>
         <Button type="submit" disabled={busy || handle.trim() === "" || displayName.trim() === ""}>
-          Create channel
+          {t("studio.channel.create")}
         </Button>
       </div>
       {error ? <p className="text-sm text-danger">{error}</p> : null}
@@ -118,18 +121,19 @@ function CurrentChannelPanel({ channel }: { channel: Channel }) {
 // managers, sync section, distribution toggles, or danger zone — those are
 // owner-only. The editor still has full Content/Live/Analytics/Dashboard access.
 function EditorChannelPanel({ channel }: { channel: Channel }) {
+  const t = useT();
   return (
     <div className="flex flex-col gap-6">
       <section aria-labelledby="channel-details-heading" className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 id="channel-details-heading" className="text-[15px] font-bold tracking-tight">
-            Channel details
+            {t("studio.channel.details")}
           </h2>
           <Link
             href={`/channels/${channel.handle}`}
             className="focus-ring rounded-full text-[13px] font-semibold text-accent-text hover:underline"
           >
-            View public page
+            {t("studio.channel.viewPublic")}
           </Link>
         </div>
         <div className="flex flex-col gap-3 rounded-2xl border border-border-subtle bg-surface p-4">
@@ -142,7 +146,7 @@ function EditorChannelPanel({ channel }: { channel: Channel }) {
             <p className="whitespace-pre-line text-sm text-fg">{channel.description}</p>
           ) : null}
           <p className="text-[12.5px] text-fg-muted">
-            You&rsquo;re an editor of this channel. Only the owner can change its settings.
+            {t("studio.channel.editorNote")}
           </p>
         </div>
       </section>
@@ -159,9 +163,11 @@ function EditorChannelPanel({ channel }: { channel: Channel }) {
 // (which cascades to its videos). The server result is the source of truth (fed
 // back into the studio context).
 function OwnerChannelPanel({ channel }: { channel: Channel }) {
+  const t = useT();
   const { updateChannel, removeChannel } = useStudio();
   const [displayName, setDisplayName] = useState(channel.display_name);
   const [description, setDescription] = useState(channel.description);
+  const [support, setSupport] = useState(channel.support ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -176,10 +182,11 @@ function OwnerChannelPanel({ channel }: { channel: Channel }) {
       const updated = await api.updateChannel(channel.handle, {
         display_name: displayName.trim(),
         description: description.trim(),
+        support: support.trim(),
       });
       updateChannel(updated);
     } catch (err) {
-      setError(errorMessage(err, "Could not save the channel."));
+      setError(errorMessage(err, t("studio.channel.saveError")));
     } finally {
       setBusy(false);
     }
@@ -193,7 +200,7 @@ function OwnerChannelPanel({ channel }: { channel: Channel }) {
       invalidateVideoActionPermissionCache();
       removeChannel(channel.id);
     } catch (err) {
-      setError(errorMessage(err, "Could not delete the channel."));
+      setError(errorMessage(err, t("studio.channel.deleteError")));
       setBusy(false);
       setConfirmingDelete(false);
     }
@@ -204,36 +211,41 @@ function OwnerChannelPanel({ channel }: { channel: Channel }) {
       <section aria-labelledby="channel-details-heading" className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 id="channel-details-heading" className="text-[15px] font-bold tracking-tight">
-            Channel details
+            {t("studio.channel.details")}
           </h2>
           <Link
             href={`/channels/${channel.handle}`}
             className="focus-ring rounded-full text-[13px] font-semibold text-accent-text hover:underline"
           >
-            View public page
+            {t("studio.channel.viewPublic")}
           </Link>
         </div>
         <div className="flex flex-col gap-4 rounded-2xl border border-border-subtle bg-surface p-4">
           <Input
-            label="Display name"
+            label={t("studio.channel.displayName")}
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
-            aria-label="Edit channel name"
+            aria-label={t("studio.channel.editNameAria")}
             maxLength={50}
           />
           <Textarea
-            label="Description"
+            label={t("studio.channel.description")}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            aria-label="Edit channel description"
+            aria-label={t("studio.channel.editDescriptionAria")}
             rows={3}
             maxLength={1000}
             className="resize-y"
           />
+          <SupportTextField
+            value={support}
+            onChange={setSupport}
+            ariaLabel={t("studio.channel.editSupportAria")}
+          />
           <p className="text-[13px] text-fg-muted">@{channel.handle}</p>
           <ProfileImageManager
             kind="avatar"
-            label="Channel avatar"
+            label={t("studio.channel.avatar")}
             name={channel.display_name || channel.handle}
             has={channel.has_avatar ?? false}
             src={channelAvatarUrl(channel.handle)}
@@ -243,7 +255,7 @@ function OwnerChannelPanel({ channel }: { channel: Channel }) {
           />
           <ProfileImageManager
             kind="banner"
-            label="Channel banner"
+            label={t("studio.channel.banner")}
             name={channel.display_name || channel.handle}
             has={channel.has_banner ?? false}
             src={channelBannerUrl(channel.handle)}
@@ -258,7 +270,7 @@ function OwnerChannelPanel({ channel }: { channel: Channel }) {
               disabled={busy || displayName.trim() === ""}
               onClick={() => void save()}
             >
-              Save changes
+              {t("studio.channel.save")}
             </Button>
           </div>
         </div>
@@ -272,25 +284,25 @@ function OwnerChannelPanel({ channel }: { channel: Channel }) {
 
       <section aria-labelledby="channel-danger-heading" className="flex flex-col gap-3">
         <h2 id="channel-danger-heading" className="text-[15px] font-bold tracking-tight">
-          Danger zone
+          {t("studio.channel.danger")}
         </h2>
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-danger-border bg-surface p-4">
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-fg">Delete this channel</p>
+            <p className="text-sm font-semibold text-fg">{t("studio.channel.deleteTitle")}</p>
             <p className="text-[13px] text-fg-muted">
-              Permanently removes @{channel.handle} and all of its videos. This cannot be undone.
+              {t("studio.channel.deleteWarning", { handle: channel.handle })}
             </p>
           </div>
           {confirmingDelete ? (
             <div className="flex shrink-0 items-center gap-1 text-sm">
-              <span className="text-[13px] text-fg-muted">Delete channel?</span>
+              <span className="text-[13px] text-fg-muted">{t("studio.channel.deleteAsk")}</span>
               <button
                 type="button"
                 disabled={busy}
                 onClick={() => void remove()}
                 className={`${ROW_ACTION} text-danger hover:bg-danger-surface`}
               >
-                Confirm
+                {t("studio.channel.confirm")}
               </button>
               <button
                 type="button"
@@ -298,7 +310,7 @@ function OwnerChannelPanel({ channel }: { channel: Channel }) {
                 onClick={() => setConfirmingDelete(false)}
                 className={`${ROW_ACTION} text-fg-muted hover:bg-surface-strong hover:text-fg`}
               >
-                Cancel
+                {t("studio.channel.cancel")}
               </button>
             </div>
           ) : (
@@ -306,9 +318,9 @@ function OwnerChannelPanel({ channel }: { channel: Channel }) {
               variant="danger-outline"
               size="sm"
               onClick={() => setConfirmingDelete(true)}
-              aria-label={`Delete ${channel.handle}`}
+              aria-label={t("studio.channel.deleteAria", { handle: channel.handle })}
             >
-              Delete channel
+              {t("studio.channel.delete")}
             </Button>
           )}
         </div>
@@ -328,6 +340,7 @@ export function ChannelManageView({
   autoCreate?: boolean;
   onAutoCreateConsumed?: () => void;
 }) {
+  const t = useT();
   const { channels, currentChannel, addChannel } = useStudio();
   const [manualOpen, setManualOpen] = useState(false);
   // The create-channel dialog is a bottom sheet on phones (matchMedia guarded for
@@ -354,12 +367,12 @@ export function ChannelManageView({
       <section aria-labelledby="channel-onboarding-heading" className="flex flex-col gap-4">
         <EmptyState
           icon={<VideoIcon size={24} />}
-          title="Create your first channel"
-          message="A channel is where your videos and live streams live. Create one to start publishing."
+          title={t("studio.channel.firstTitle")}
+          message={t("studio.channel.firstMessage")}
         />
         <div className="rounded-2xl border border-border-subtle bg-surface p-4">
           <h2 id="channel-onboarding-heading" className="mb-3 text-[15px] font-bold tracking-tight">
-            New channel
+            {t("studio.channel.newHeading")}
           </h2>
           <CreateChannelForm autoFocus onCreated={addChannel} />
         </div>
@@ -375,13 +388,13 @@ export function ChannelManageView({
 
       <div className="border-t border-border-subtle pt-5">
         <Button variant="tonal" size="sm" onClick={() => setManualOpen(true)}>
-          Create another channel
+          {t("studio.channel.createAnother")}
         </Button>
       </div>
 
       {dialogOpen ? (
         <Modal
-          title="Create a channel"
+          title={t("studio.channel.createCta")}
           onClose={closeDialog}
           variant={sheet ? "sheet" : "dialog"}
           className="sm:max-w-lg"

@@ -26,6 +26,7 @@ import {
   apiOriginOf,
   buildContentSecurityPolicy,
   cspHeaderName,
+  isFrameablePath,
   shouldSendHsts,
 } from "@/lib/security-headers";
 
@@ -35,7 +36,7 @@ export function proxy(request: NextRequest) {
   const policy = buildContentSecurityPolicy({
     nonce,
     apiOrigin: apiOriginOf(apiBaseUrl),
-    frameable: pathname === "/embed" || pathname.startsWith("/embed/"),
+    frameable: isFrameablePath(pathname),
     isDev: process.env.NODE_ENV === "development",
   });
   const header = cspHeaderName(process.env.CSP_REPORT_ONLY);

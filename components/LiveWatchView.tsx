@@ -8,9 +8,12 @@ import { LiveTerminateDialog } from "@/components/LiveTerminateDialog";
 import { InfoIcon } from "@/components/icons";
 import { QualityMenu } from "@/components/QualityMenu";
 import { Button, EmptyState, ErrorState, Spinner } from "@/components/ui";
+import { UserText } from "@/components/UserText";
 import { ApiError, api } from "@/lib/api";
 import type { LiveStream } from "@/lib/api";
+import { formatCountdown, formatDateTime } from "@/lib/format";
 import { terminationHeadline } from "@/lib/live/termination";
+import { useNow } from "@/lib/live/use-now";
 import { useLivePlayback } from "@/lib/use-playback-engine";
 import { useSettledOptionalSession } from "@/lib/use-settled-session";
 
@@ -34,6 +37,10 @@ const OFFLINE_POLL_MS = 15_000;
 // player's ~2 s playlist refresh on purpose — this read is the page's metadata,
 // not the video, and the video is what has to be timely.
 const LIVE_POLL_MS = 10_000;
+
+// How long past its planned start a stream still reads as upcoming (core's
+// Upcoming listing uses the same one-hour window).
+const UPCOMING_GRACE_MS = 3_600_000;
 
 // LiveWatchView is the /live/[id] watch surface. It loads a single live stream
 // and, when it is live with an HLS playlist available, plays it via the shared
@@ -143,6 +150,13 @@ export function LiveWatchView({ id }: { id: string }) {
   }
 
   const channelName = stream.channel_display_name || stream.channel_handle;
+  // A scheduled start is an ANNOUNCEMENT: only an offline stream shows it, and
+  // it never replaces the real state — when the encoder connects the poll above
+  // flips the page to the player on its own.
+  const upcoming =
+    stream.state === "offline" && !stream.termination && stream.scheduled_start_at
+      ? stream.scheduled_start_at
+      : null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -172,6 +186,8 @@ export function LiveWatchView({ id }: { id: string }) {
           message={endedMessage(stream)}
           onRefresh={() => void load()}
         />
+      ) : upcoming ? (
+        <UpcomingState at={upcoming} />
       ) : (
         <StreamState
           title="Not live yet"
@@ -182,6 +198,7 @@ export function LiveWatchView({ id }: { id: string }) {
       <div className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-2">
           {stream.state === "live" ? <LiveBadge /> : null}
+          {upcoming ? <UpcomingBadge at={upcoming} /> : null}
           {stream.state === "live" && typeof stream.viewer_count === "number" ? (
             <ViewerCount count={stream.viewer_count} />
           ) : null}
@@ -214,9 +231,11 @@ export function LiveWatchView({ id }: { id: string }) {
           </p>
         ) : null}
         {stream.description ? (
-          <p className="whitespace-pre-wrap text-sm leading-relaxed text-fg-muted">
-            {stream.description}
-          </p>
+          <UserText
+            variant="description"
+            text={stream.description}
+            className="text-sm leading-relaxed text-fg-muted"
+          />
         ) : null}
       </div>
 
@@ -298,6 +317,42 @@ function StreamState({
         </Button>
       ) : null}
     </div>
+  );
+}
+
+// UpcomingState is the offline watch surface of a stream with a planned start:
+// the start time in the viewer's locale and a coarse countdown. The countdown is
+// a courtesy — the stream starts when the broadcaster connects, so a start time
+// that passes just reads "Starting soon" and the page keeps waiting.
+function UpcomingState({ at }: { at: string }) {
+  const now = useNow(true);
+  // Core stops listing a start once it is more than an hour stale; match that
+  // window here, then fall back to the plain not-live state instead of reading
+  // "Starting soon" for days.
+  if (now.getTime() - new Date(at).getTime() > UPCOMING_GRACE_MS) {
+    return (
+      <StreamState
+        title="Not live yet"
+        message="This stream hasn't started. It will begin playing here automatically once it goes live."
+      />
+    );
+  }
+  const countdown = formatCountdown(at, now);
+  return (
+    <StreamState
+      title="Upcoming live"
+      message={`Scheduled for ${formatDateTime(at)}${countdown ? ` · ${countdown}` : ""}. This page will start playing automatically once the stream goes live.`}
+    />
+  );
+}
+
+function UpcomingBadge({ at }: { at: string }) {
+  const now = useNow(true);
+  if (now.getTime() - new Date(at).getTime() > UPCOMING_GRACE_MS) return null;
+  return (
+    <span className="inline-flex items-center rounded-full bg-surface-strong px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-[0.04em] text-fg-muted">
+      Upcoming
+    </span>
   );
 }
 
