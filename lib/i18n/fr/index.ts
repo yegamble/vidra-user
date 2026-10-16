@@ -1,6 +1,7 @@
 import type { Messages } from "../index";
 
 import { a11y } from "./a11y";
+import { auth } from "./auth";
 import { common } from "./common";
 import { home } from "./home";
 import { report } from "./report";
@@ -17,6 +18,6 @@ import { theme } from "./theme";
  * AI model (2026-10-12) and has not been read by a native speaker. A reviewer
  * moves each string they approve ABOVE that rule.
  */
-export const FR_NAMESPACES = { a11y, common, home, report, search, state, theme };
+export const FR_NAMESPACES = { a11y, auth, common, home, report, search, state, theme };
 
-export const fr = { ...a11y, ...common, ...home, ...report, ...search, ...state, ...theme } satisfies Messages;
+export const fr = { ...a11y, ...auth, ...common, ...home, ...report, ...search, ...state, ...theme } satisfies Messages;
