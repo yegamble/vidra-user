@@ -7,6 +7,7 @@ import { Alert } from "@/components/ui/Alert";
 import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, authApi, errorMessage, getInstanceCached } from "@/lib/api";
 import type { AccountArchive, AccountExportStatus, AccountImportSummary } from "@/lib/api";
+import { PeerTubeImportCard } from "./PeerTubeImportCard";
 
 // How often the export card re-reads GET /me/export while the job is
 // pending/running. The archive is assembled by a background job, so the UI
@@ -70,6 +71,7 @@ export function AccountDataSection() {
       </h2>
       {flags.exportEnabled ? <ExportCard /> : null}
       {flags.importEnabled ? <ImportCard /> : null}
+      {flags.importEnabled ? <PeerTubeImportCard /> : null}
     </section>
   );
 }

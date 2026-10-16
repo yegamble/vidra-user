@@ -5,7 +5,7 @@ import { getAccessToken } from "./auth-store";
 import { ApiError, apiRequest, restoreSession } from "./client";
 import { pageQuery, type PageParams } from "./pagination";
 import { uploadWithProgress, type UploadProgress } from "./upload";
-import type { SearchEventInput } from "./types";
+import type { PeerTubeArchiveImportSummary, PeerTubeFollowImportStatus, SearchEventInput } from "./types";
 import type {
   AdminCommentListResponse,
   BulkVideosRequest,
@@ -231,6 +231,19 @@ import type {
   WatchHistoryResponse,
   WatchProgress,
 } from "./types";
+
+/** Import a PeerTube user export using the archive multipart field. */
+export function importPeerTubeArchive(file: File | Blob, signal?: AbortSignal) {
+  const form = new FormData();
+  form.append("archive", file);
+  return apiRequest<PeerTubeArchiveImportSummary>("/api/v1/me/import/peertube", {
+    method: "POST", body: form, signal,
+  });
+}
+
+export function getPeerTubeFollowImport(id: string, signal?: AbortSignal) {
+  return apiRequest<PeerTubeFollowImportStatus>(`/api/v1/me/import/peertube/follows/${encodeURIComponent(id)}`, { signal });
+}
 
 /**
  * The typed instance logo slots (config-parity W4; PeerTube LogoType parity).

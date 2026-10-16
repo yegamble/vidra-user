@@ -1,6 +1,7 @@
 import { apiBaseUrl } from "@/lib/config";
 
 import { apiRequest } from "./client";
+import { getPeerTubeFollowImport, importPeerTubeArchive } from "./endpoints";
 import type {
   AccountArchive,
   AccountExportStatus,
@@ -468,6 +469,8 @@ export const authApi = {
    */
   importAccountArchive: (archive: AccountArchive) =>
     apiRequest<AccountImportSummary>("/api/v1/me/import", { method: "POST", body: archive }),
+  importPeerTubeArchive,
+  getPeerTubeFollowImport,
 };
 
 /**
