@@ -25,6 +25,10 @@ import type {
   InfrastructureStatus,
   MailConfigPutRequest,
   MailConfigState,
+  OIDCProvider,
+  OIDCProviderCreateRequest,
+  OIDCProviderList,
+  OIDCProviderUpdateRequest,
   MailTestResult,
   UpdateInstanceSettingsRequest,
   InstanceAboutResponse,
@@ -2585,6 +2589,12 @@ export const api = {
       body,
     }),
 
+  /** Clears failed-login counters; core returns 204 even if no lock existed. */
+  clearUserLoginLockout: (id: string) =>
+    apiRequest<void>(`/api/v1/admin/users/${encodeURIComponent(id)}/login-lockout`, {
+      method: "DELETE",
+    }),
+
   /**
    * DELETE /api/v1/admin/users/{id}/mfa — remove a user's second factor
    * (admin). The operator answer to a lost authenticator AND lost recovery
@@ -2997,6 +3007,46 @@ export const api = {
    */
   resetMailConfig: () =>
     apiRequest<void>("/api/v1/admin/mail-config", { method: "DELETE" }),
+
+  /**
+   * GET /api/v1/admin/oidc-providers — the stored sign-in providers plus the
+   * environment ones they may override (admin only). Never returns a client
+   * secret: rows report `secret_configured` / `secret_status`.
+   */
+  listOIDCProviders: (signal?: AbortSignal) =>
+    apiRequest<OIDCProviderList>("/api/v1/admin/oidc-providers", { signal }),
+
+  /**
+   * POST /api/v1/admin/oidc-providers — add a provider. Needs ONE fresh
+   * credential in the body (`current_password` or `step_up_token`). 409
+   * `oidc_secrets_key_missing` = no KEK; 422 `fields` binds to the inputs
+   * (a name that matches an environment provider must reuse its issuer); 429 =
+   * the strict credential limiter.
+   */
+  createOIDCProvider: (body: OIDCProviderCreateRequest) =>
+    apiRequest<OIDCProvider>("/api/v1/admin/oidc-providers", { method: "POST", body }),
+
+  /**
+   * PUT /api/v1/admin/oidc-providers/{name} — replace the mutable fields. The
+   * issuer cannot change; OMIT `client_secret` to keep the stored one (never
+   * send ""). Same fresh-credential rule as create.
+   */
+  updateOIDCProvider: (name: string, body: OIDCProviderUpdateRequest) =>
+    apiRequest<OIDCProvider>(`/api/v1/admin/oidc-providers/${encodeURIComponent(name)}`, {
+      method: "PUT",
+      body,
+    }),
+
+  /**
+   * DELETE /api/v1/admin/oidc-providers/{name} — remove a stored provider and
+   * its sealed secret. Needs a fresh credential; 422 (`fields` names `name`)
+   * when the row shadows an environment provider — disable or edit it instead.
+   */
+  deleteOIDCProvider: (name: string, body: { current_password?: string; step_up_token?: string }) =>
+    apiRequest<void>(`/api/v1/admin/oidc-providers/${encodeURIComponent(name)}`, {
+      method: "DELETE",
+      body,
+    }),
 
   /** GET /api/v1/ipfs/status — effective public/private mirror health and pin counts (admin). */
   getIPFSStatus: (signal?: AbortSignal) =>
