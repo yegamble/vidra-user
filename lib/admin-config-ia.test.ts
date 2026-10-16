@@ -167,10 +167,11 @@ const SERVER_REGISTRY: Array<[string, ConfigPageId, string]> = [
 ];
 
 describe("config pages", () => {
-  it("exposes the nine-page IA in order", () => {
+  it("exposes the ten-page IA in order", () => {
     expect(CONFIG_PAGES.map((p) => p.id)).toEqual([
       "general",
       "email",
+      "signin",
       "vod",
       "live",
       "federation",

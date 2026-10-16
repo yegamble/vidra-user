@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/Input";
 import { OtpInput } from "@/components/ui/OtpInput";
 import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, api, errorMessage } from "@/lib/api";
+import type { InstanceResponse } from "@/lib/api";
 import { loginCredentials, looksLikeEmail } from "@/lib/login-identifier";
 import { safeLoginReturn } from "@/lib/login-return";
 import { brandName } from "@/lib/software-brand";
@@ -40,6 +41,7 @@ export function LoginForm({
   oauthError = "",
   mfaPending = false,
   initialProviders,
+  initialProviderDetails,
   initialAtprotoLogin,
   instanceName,
   returnTo,
@@ -58,6 +60,8 @@ export function LoginForm({
   mfaPending?: boolean;
   /** SSR snapshot; undefined means the server could not reach the instance API. */
   initialProviders?: string[];
+  /** Configured button labels from the same server snapshot. */
+  initialProviderDetails?: InstanceResponse["oauth_provider_details"];
   /** SSR snapshot of GET /instance atproto_login (Bluesky / any PDS handle login). */
   initialAtprotoLogin?: boolean;
   /**
@@ -114,6 +118,7 @@ export function LoginForm({
   const completingOAuth = oauthLanding && !landingDismissed && status === "restoring";
   const oauthSilentFailure = oauthLanding && !landingDismissed && status === "anon";
   const [providers, setProviders] = useState<string[]>(initialProviders ?? []);
+  const [providerDetails, setProviderDetails] = useState<InstanceResponse["oauth_provider_details"]>(initialProviderDetails ?? []);
   const [atprotoEnabled, setAtprotoEnabled] = useState(initialAtprotoLogin ?? false);
 
   // Clean the one-shot OAuth markers out of the URL (they must not survive a
@@ -141,13 +146,14 @@ export function LoginForm({
       .getInstance(controller.signal)
       .then((instance) => {
         setProviders(instance.oauth_providers ?? []);
+        setProviderDetails(instance.oauth_provider_details ?? []);
         setAtprotoEnabled(instance.atproto_login ?? false);
       })
       .catch(() => {
         // No instance document — the password form still works without buttons.
       });
     return () => controller.abort();
-  }, [initialProviders]);
+  }, [initialProviders, initialProviderDetails]);
 
   async function submit() {
     setError(null);
@@ -404,7 +410,7 @@ export function LoginForm({
           here instead. ATProto adds its own oauth marker while preserving
           return_to; OIDC expects the marker in the callback URL we supply. */}
       {providers.length === 0 && atprotoEnabled ? <AuthOrDivider /> : null}
-      <OAuthButtons providers={providers} returnTo={`${loginPath}${destination === "/" ? "?" : "&"}oauth=1`} />
+      <OAuthButtons providers={providers} details={providerDetails} returnTo={`${loginPath}${destination === "/" ? "?" : "&"}oauth=1`} />
       <BlueskyLoginButton enabled={atprotoEnabled} returnTo={loginPath} />
 
       <p className="text-center text-subhead text-fg-muted">

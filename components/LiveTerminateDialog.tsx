@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { useT } from "@/components/I18nProvider";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
@@ -44,6 +45,7 @@ export function LiveTerminateDialog({
   /** Called after a successful termination so the caller can reload the stream. */
   onTerminated: () => void;
 }) {
+  const t = useT();
   const [reasonCode, setReasonCode] = useState<LiveTerminationReason>("policy_violation");
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
@@ -70,7 +72,7 @@ export function LiveTerminateDialog({
         onClose();
       }
     } catch (err) {
-      setError(errorMessage(err, "Could not end this stream."));
+      setError(errorMessage(err, t("live.terminate.error")));
     } finally {
       setBusy(false);
     }
@@ -78,11 +80,11 @@ export function LiveTerminateDialog({
 
   if (outcome) {
     return (
-      <Modal title="Stream ended, with a warning" onClose={onClose}>
+      <Modal title={t("live.terminate.warnTitle")} onClose={onClose}>
         <div className="flex flex-col gap-4">
           <p className="text-sm leading-relaxed text-fg-muted">{outcome}</p>
           <div>
-            <Button onClick={onClose}>Close</Button>
+            <Button onClick={onClose}>{t("common.close")}</Button>
           </div>
         </div>
       </Modal>
@@ -90,18 +92,18 @@ export function LiveTerminateDialog({
   }
 
   return (
-    <Modal title="End this stream" onClose={onClose}>
+    <Modal title={t("live.terminate.title")} onClose={onClose}>
       <form onSubmit={(e) => void submit(e)} className="flex flex-col gap-4">
         <p className="text-[13px] leading-relaxed text-fg-muted">
-          Ends <strong className="font-semibold text-fg">{streamTitle}</strong> for everyone
-          watching, rotates its stream key so the broadcaster cannot restart it, and disconnects
-          them from the ingest server. The stream and any replay are kept.
+          {t("live.terminate.intro.before")}{" "}
+          <strong className="font-semibold text-fg">{streamTitle}</strong>{" "}
+          {t("live.terminate.intro.after")}
         </p>
         <Select
-          label="Reason"
+          label={t("live.terminate.reason")}
           value={reasonCode}
           onChange={(e) => setReasonCode(e.target.value as LiveTerminationReason)}
-          aria-label="Termination reason"
+          aria-label={t("live.terminate.reasonAria")}
         >
           {TERMINATION_REASONS.map((code) => (
             <option key={code} value={code}>
@@ -110,23 +112,22 @@ export function LiveTerminateDialog({
           ))}
         </Select>
         <Input
-          label="Note to the creator (optional)"
+          label={t("live.terminate.noteLabel")}
           value={reason}
           onChange={(e) => setReason(e.target.value)}
-          placeholder="What happened, in your words"
-          aria-label="Note to the creator"
+          placeholder={t("live.terminate.notePlaceholder")}
+          aria-label={t("live.terminate.noteAria")}
           maxLength={1000}
         />
         <p className="text-[12px] leading-relaxed text-fg-muted">
-          The creator sees the reason and your note on the stream page and in their Studio. Nobody
-          else does.
+          {t("live.terminate.visibility")}
         </p>
         <div className="flex items-center gap-2">
           <Button type="submit" variant="danger" disabled={busy}>
-            {busy ? "Ending…" : "End stream"}
+            {busy ? t("live.terminate.ending") : t("live.watch.endStream")}
           </Button>
           <Button type="button" variant="secondary" onClick={onClose} disabled={busy}>
-            Cancel
+            {t("common.cancel")}
           </Button>
         </div>
         {error ? <p className="text-sm text-danger">{error}</p> : null}
