@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { useT } from "@/components/I18nProvider";
 import { AuthWordmark } from "@/components/auth/AuthPage";
 import { useSession } from "@/components/auth/AuthProvider";
 import { BlueskyLoginButton } from "@/components/auth/BlueskyLoginButton";
@@ -69,6 +70,7 @@ export function LoginForm({
   returnTo?: string;
 }) {
   const router = useRouter();
+  const t = useT();
   const destination = safeLoginReturn(returnTo);
   const loginPath = destination === "/" ? "/login" : `/login?return_to=${encodeURIComponent(destination)}`;
   const { status, login, completeMfaChallenge } = useSession();
@@ -79,7 +81,7 @@ export function LoginForm({
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(
-    oauthError ? oauthErrorMessage(oauthError) : null,
+    oauthError ? oauthErrorMessage(oauthError, t) : null,
   );
   const [submitting, setSubmitting] = useState(false);
   // Set once login answers mfa_required: the form swaps to the code entry.
