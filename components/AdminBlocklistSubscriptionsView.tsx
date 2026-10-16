@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { useT } from "@/components/I18nProvider";
 import { ListBoundary } from "@/components/admin/ListBoundary";
 import { PagedListShell } from "@/components/admin/PagedListShell";
 import { ServerIcon } from "@/components/icons";
@@ -12,23 +13,26 @@ import { Select } from "@/components/ui/Select";
 import { ApiError, api } from "@/lib/api";
 import type { BlocklistSubscription, BlocklistSyncResult } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
+import type { PlainMessageKey, Translate } from "@/lib/i18n";
 import { useAsyncAction } from "@/lib/use-async-action";
 import { usePagedList } from "@/lib/use-paged-list";
 
 const FORMATS = [
-  { value: "mastodon_csv", label: "Mastodon CSV" },
-  { value: "domain_list", label: "Plain domain list" },
-  { value: "json", label: "JSON" },
-] as const;
+  { value: "mastodon_csv", labelKey: "admin.blocklists.format.mastodonCsv" },
+  { value: "domain_list", labelKey: "admin.blocklists.format.domainList" },
+  { value: "json", labelKey: "admin.blocklists.format.json" },
+] as const satisfies readonly { value: string; labelKey: PlainMessageKey }[];
 
 /** One sentence for the outcome of a sync, for the row's live region. */
-export function syncSummary(r: BlocklistSyncResult): string {
+export function syncSummary(r: BlocklistSyncResult, t: Translate): string {
   if (r.status === "needs_confirmation")
-    return `Held: this list would remove ${r.pending_removals ?? "many"} blocks, so nothing was changed.`;
-  if (r.status === "error") return `Sync failed: ${r.error ?? "unknown error"}.`;
-  if (r.status === "not_modified") return "Already up to date.";
-  const ignored = r.ignored_severity > 0 ? `, ${r.ignored_severity} ignored (silence/limit)` : "";
-  return `Synced: ${r.added} added, ${r.removed} removed${ignored}.`;
+    return t("admin.blocklists.sync.held", { count: String(r.pending_removals ?? t("admin.blocklists.sync.many")) });
+  if (r.status === "error")
+    return t("admin.blocklists.sync.failed", { error: r.error ?? t("admin.blocklists.sync.unknownError") });
+  if (r.status === "not_modified") return t("admin.blocklists.sync.upToDate");
+  const ignored =
+    r.ignored_severity > 0 ? t("admin.blocklists.sync.ignored", { count: String(r.ignored_severity) }) : "";
+  return t("admin.blocklists.sync.done", { added: r.added, removed: r.removed, ignored });
 }
 
 // AdminBlocklistSubscriptionsView: admin-only management of shared blocklists
@@ -51,6 +55,7 @@ export function AdminBlocklistSubscriptionsView() {
 }
 
 function SubscriptionList() {
+  const t = useT();
   const list = usePagedList<BlocklistSubscription>({
     load: (query, signal) =>
       api
@@ -67,10 +72,10 @@ function SubscriptionList() {
       list={list}
       noun="subscription"
       toolbar={<AddForm onAdded={list.prepend} />}
-      errorMessage="Could not load blocklist subscriptions."
+      errorMessage={t("admin.blocklists.loadError")}
       emptyIcon={<ServerIcon size={24} />}
-      emptyTitle="No blocklist subscriptions"
-      emptyMessage="Add the URL of a shared blocklist above to keep this server's instance blocklist in step with it."
+      emptyTitle={t("admin.blocklists.emptyTitle")}
+      emptyMessage={t("admin.blocklists.emptyMessage")}
     >
       <ul className="flex flex-col gap-2">
         {list.items.map((sub) => (
@@ -90,6 +95,7 @@ function SubscriptionList() {
 }
 
 function AddForm({ onAdded }: { onAdded: (sub: BlocklistSubscription) => void }) {
+  const t = useT();
   const [url, setUrl] = useState("");
   const [label, setLabel] = useState("");
   const [format, setFormat] = useState<string>("mastodon_csv");
@@ -104,11 +110,11 @@ function AddForm({ onAdded }: { onAdded: (sub: BlocklistSubscription) => void })
       setLabel("");
       onAdded(created);
     },
-    "Could not add this subscription.",
+    t("admin.blocklists.addError"),
     (err) => {
       if (!(err instanceof ApiError)) return null;
-      if (err.status === 409) return "You are already subscribed to that URL.";
-      if (err.status === 422) return "Enter a public http(s) URL and pick the list's format.";
+      if (err.status === 409) return t("admin.blocklists.alreadySubscribed");
+      if (err.status === 422) return t("admin.blocklists.invalidUrl");
       return null;
     },
   );
@@ -124,7 +130,7 @@ function AddForm({ onAdded }: { onAdded: (sub: BlocklistSubscription) => void })
       <div className="flex flex-wrap items-end gap-2">
         <input
           type="url"
-          aria-label="Blocklist URL"
+          aria-label={t("admin.blocklists.urlLabel")}
           placeholder="https://example.org/blocklist.csv"
           value={url}
           onChange={(e) => {
@@ -135,26 +141,26 @@ function AddForm({ onAdded }: { onAdded: (sub: BlocklistSubscription) => void })
         />
         <input
           type="text"
-          aria-label="Name (optional)"
-          placeholder="Name (optional)"
+          aria-label={t("admin.blocklists.nameLabel")}
+          placeholder={t("admin.blocklists.nameLabel")}
           maxLength={200}
           value={label}
           onChange={(e) => setLabel(e.target.value)}
           className="focus-ring w-full max-w-[12rem] rounded-xl border border-border bg-surface px-3.5 py-2 text-sm text-fg placeholder:text-fg-muted"
         />
         <Select
-          label="List format"
+          label={t("admin.blocklists.formatLabel")}
           value={format}
           onChange={(e) => setFormat(e.target.value)}
         >
           {FORMATS.map((f) => (
             <option key={f.value} value={f.value}>
-              {f.label}
+              {t(f.labelKey)}
             </option>
           ))}
         </Select>
         <Button type="submit" size="sm" disabled={busy || url.trim() === ""}>
-          {busy ? "Adding…" : "Add list"}
+          {busy ? t("admin.blocklists.adding") : t("admin.blocklists.add")}
         </Button>
       </div>
       {error ? (
@@ -166,18 +172,18 @@ function AddForm({ onAdded }: { onAdded: (sub: BlocklistSubscription) => void })
   );
 }
 
-function statusBadge(sub: BlocklistSubscription) {
+function statusBadge(sub: BlocklistSubscription, t: Translate) {
   switch (sub.last_status) {
     case "ok":
-      return <Badge variant="success">Synced</Badge>;
+      return <Badge variant="success">{t("admin.blocklists.status.synced")}</Badge>;
     case "not_modified":
-      return <Badge variant="success">Up to date</Badge>;
+      return <Badge variant="success">{t("admin.blocklists.status.upToDate")}</Badge>;
     case "error":
-      return <Badge variant="danger">Last sync failed</Badge>;
+      return <Badge variant="danger">{t("admin.blocklists.status.failed")}</Badge>;
     case "needs_confirmation":
-      return <Badge variant="warning">Held for review</Badge>;
+      return <Badge variant="warning">{t("admin.blocklists.status.held")}</Badge>;
     default:
-      return <Badge variant="neutral">Not synced yet</Badge>;
+      return <Badge variant="neutral">{t("admin.blocklists.status.never")}</Badge>;
   }
 }
 
@@ -190,6 +196,7 @@ function SubscriptionRow({
   onChanged: (next: BlocklistSubscription) => void;
   onRemoved: (id: string) => void;
 }) {
+  const t = useT();
   const [message, setMessage] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const name = sub.label || sub.url;
@@ -199,7 +206,7 @@ function SubscriptionRow({
     async (confirm?: boolean) => {
       const res = await api.syncBlocklistSubscription(sub.id, confirm === true);
       setHeld(res.status === "needs_confirmation");
-      setMessage(syncSummary(res));
+      setMessage(syncSummary(res, t));
       // Fold the outcome into the row in place; a reload would blank the list
       // and take the outcome message with it.
       const ok = res.status === "ok";
@@ -215,24 +222,25 @@ function SubscriptionRow({
         block_count: ok ? Math.max(0, sub.block_count + res.added - res.removed) : sub.block_count,
       });
     },
-    "Could not sync this list.",
+    t("admin.blocklists.syncError"),
     (err) =>
       err instanceof ApiError && err.status === 429
-        ? "Too many sync requests. Wait a minute and try again."
+        ? t("admin.blocklists.rateLimited")
         : null,
   );
   const toggle = useAsyncAction(async () => {
     const next = await api.updateBlocklistSubscription(sub.id, { enabled: !sub.enabled });
     // PATCH returns the row without the owned-block count; keep ours.
     onChanged({ ...next, block_count: sub.block_count });
-  }, "Could not update this subscription.");
+  }, t("admin.blocklists.updateError"));
   const remove = useAsyncAction(async () => {
     await api.deleteBlocklistSubscription(sub.id);
     onRemoved(sub.id);
-  }, "Could not remove this subscription.");
+  }, t("admin.blocklists.removeError"));
 
   const error = sync.error ?? toggle.error ?? remove.error;
   const busy = sync.busy || toggle.busy || remove.busy;
+  const blocks = t("admin.blocklists.blockCount", { count: String(sub.block_count) });
 
   return (
     <div className="flex flex-col gap-3 rounded-2xl bg-surface-muted p-4">
@@ -241,12 +249,12 @@ function SubscriptionRow({
           <p className="truncate text-sm font-semibold tracking-tight text-fg">{name}</p>
           {sub.label ? <p className="truncate text-[13px] text-fg-muted">{sub.url}</p> : null}
           <div className="mt-1 flex flex-wrap items-center gap-2 text-[13px] text-fg-muted">
-            {statusBadge(sub)}
-            {!sub.enabled ? <Badge variant="neutral">Paused</Badge> : null}
+            {statusBadge(sub, t)}
+            {!sub.enabled ? <Badge variant="neutral">{t("admin.blocklists.paused")}</Badge> : null}
             <span>
-              {sub.block_count} {sub.block_count === 1 ? "block" : "blocks"} from this list
+              {t("admin.blocklists.fromList", { blocks })}
             </span>
-            {sub.last_synced_at ? <span>synced {relativeTime(sub.last_synced_at)}</span> : null}
+            {sub.last_synced_at ? <span>{t("admin.blocklists.syncedAgo", { when: relativeTime(sub.last_synced_at) })}</span> : null}
           </div>
           {(sub.last_status === "error" || sub.last_status === "needs_confirmation") && sub.last_error ? (
             <p className="mt-1 text-[13px] text-danger">{sub.last_error}</p>
@@ -257,42 +265,41 @@ function SubscriptionRow({
             variant="secondary"
             size="sm"
             disabled={busy}
-            aria-label={`Sync ${name} now`}
+            aria-label={t("admin.blocklists.syncAria", { name })}
             onClick={() => void sync.run(false)}
           >
-            {sync.busy ? "Syncing…" : "Sync now"}
+            {sync.busy ? t("admin.blocklists.syncing") : t("admin.blocklists.syncNow")}
           </Button>
           <Button
             variant="secondary"
             size="sm"
             disabled={busy}
-            aria-label={`${sub.enabled ? "Pause" : "Resume"} ${name}`}
+            aria-label={t(sub.enabled ? "admin.blocklists.pauseAria" : "admin.blocklists.resumeAria", { name })}
             onClick={() => void toggle.run()}
           >
-            {sub.enabled ? "Pause" : "Resume"}
+            {sub.enabled ? t("admin.blocklists.pause") : t("admin.blocklists.resume")}
           </Button>
           <Button
             variant="secondary"
             size="sm"
             disabled={busy}
-            aria-label={`Remove ${name}`}
+            aria-label={t("admin.blocklists.removeAria", { name })}
             onClick={() => setConfirming(true)}
           >
-            Remove
+            {t("admin.blocklists.remove")}
           </Button>
         </div>
       </div>
       {confirming ? (
-        <div role="alertdialog" aria-label={`Confirm removing ${name}`} className="flex flex-wrap items-center gap-2 text-[13px] text-fg">
+        <div role="alertdialog" aria-label={t("admin.blocklists.confirmRemoveAria", { name })} className="flex flex-wrap items-center gap-2 text-[13px] text-fg">
           <span>
-            This removes the list and the {sub.block_count} {sub.block_count === 1 ? "block" : "blocks"} it
-            created. Blocks you added by hand stay.
+            {t("admin.blocklists.confirmRemove", { blocks })}
           </span>
           <Button size="sm" disabled={remove.busy} onClick={() => void remove.run()}>
-            {remove.busy ? "Removing…" : "Remove list and its blocks"}
+            {remove.busy ? t("admin.blocklists.removing") : t("admin.blocklists.removeConfirm")}
           </Button>
           <Button variant="secondary" size="sm" onClick={() => setConfirming(false)}>
-            Keep
+            {t("admin.blocklists.keep")}
           </Button>
         </div>
       ) : null}
@@ -301,9 +308,9 @@ function SubscriptionRow({
       </p>
       {held || sub.last_status === "needs_confirmation" ? (
         <div className="flex flex-wrap items-center gap-2 text-[13px] text-fg">
-          <span>A list that suddenly drops most of its entries is usually a bad download.</span>
+          <span>{t("admin.blocklists.heldHint")}</span>
           <Button size="sm" disabled={busy} onClick={() => void sync.run(true)}>
-            Apply anyway
+            {t("admin.blocklists.applyAnyway")}
           </Button>
         </div>
       ) : null}
@@ -317,6 +324,7 @@ function SubscriptionRow({
 }
 
 function AllowList() {
+  const t = useT();
   const list = usePagedList<{ domain: string; added_at: string }>({
     load: (query, signal) =>
       api
@@ -329,22 +337,21 @@ function AllowList() {
         })),
   });
   return (
-    <section aria-label="Allowlist" className="flex flex-col gap-3">
+    <section aria-label={t("admin.allowlist.title")} className="flex flex-col gap-3">
       <div>
-        <h2 className="text-base font-semibold tracking-tight text-fg">Allowlist</h2>
+        <h2 className="text-base font-semibold tracking-tight text-fg">{t("admin.allowlist.title")}</h2>
         <p className="text-[13px] text-fg-muted">
-          Domains here are never blocked by a subscription, and a block a list already added is lifted.
-          Blocks you added by hand are not affected.
+          {t("admin.allowlist.intro")}
         </p>
       </div>
       <PagedListShell
         list={list}
         noun="allowed domain"
         toolbar={<AllowForm onAdded={list.prepend} />}
-        errorMessage="Could not load the allowlist."
+        errorMessage={t("admin.allowlist.loadError")}
         emptyIcon={<ServerIcon size={24} />}
-        emptyTitle="Nothing exempt"
-        emptyMessage="Exempt a domain above if a shared list blocks an instance you want to keep."
+        emptyTitle={t("admin.allowlist.emptyTitle")}
+        emptyMessage={t("admin.allowlist.emptyMessage")}
       >
         <ul className="flex flex-col gap-2">
           {list.items.map((d) => (
@@ -359,6 +366,7 @@ function AllowList() {
 }
 
 function AllowForm({ onAdded }: { onAdded: (row: { domain: string; added_at: string }) => void }) {
+  const t = useT();
   const [domain, setDomain] = useState("");
   const { run, busy, error, clearError } = useAsyncAction(
     async (d: string) => {
@@ -366,10 +374,10 @@ function AllowForm({ onAdded }: { onAdded: (row: { domain: string; added_at: str
       setDomain("");
       onAdded({ domain: d, added_at: new Date().toISOString() });
     },
-    "Could not add this domain.",
+    t("admin.allowlist.addError"),
     (err) =>
       err instanceof ApiError && err.status === 422
-        ? "Enter a valid instance domain (a bare hostname, optionally host:port)."
+        ? t("admin.instances.invalidDomain")
         : null,
   );
   return (
@@ -385,8 +393,8 @@ function AllowForm({ onAdded }: { onAdded: (row: { domain: string; added_at: str
       <div className="flex flex-wrap gap-2">
         <input
           type="text"
-          aria-label="Domain to exempt from blocklists"
-          placeholder="Domain to exempt, e.g. friend.example"
+          aria-label={t("admin.allowlist.domainLabel")}
+          placeholder={t("admin.allowlist.domainPlaceholder")}
           value={domain}
           onChange={(e) => {
             setDomain(e.target.value);
@@ -395,7 +403,7 @@ function AllowForm({ onAdded }: { onAdded: (row: { domain: string; added_at: str
           className="focus-ring w-full max-w-sm rounded-xl border border-border bg-surface px-3.5 py-2 text-sm text-fg placeholder:text-fg-muted"
         />
         <Button type="submit" size="sm" disabled={busy || domain.trim() === ""}>
-          {busy ? "Adding…" : "Exempt"}
+          {busy ? t("admin.blocklists.adding") : t("admin.allowlist.exempt")}
         </Button>
       </div>
       {error ? (
@@ -408,10 +416,11 @@ function AllowForm({ onAdded }: { onAdded: (row: { domain: string; added_at: str
 }
 
 function AllowRow({ domain, onRemoved }: { domain: string; onRemoved: () => void }) {
+  const t = useT();
   const { run, busy, error } = useAsyncAction(async () => {
     await api.removeBlocklistAllow(domain);
     onRemoved();
-  }, "Could not remove this exemption.");
+  }, t("admin.allowlist.removeError"));
   return (
     <div className="flex items-center justify-between gap-3 rounded-2xl bg-surface-muted p-4">
       <div className="min-w-0">
@@ -423,10 +432,10 @@ function AllowRow({ domain, onRemoved }: { domain: string; onRemoved: () => void
         size="sm"
         className="shrink-0"
         disabled={busy}
-        aria-label={`Stop exempting ${domain}`}
+        aria-label={t("admin.allowlist.stopAria", { domain })}
         onClick={() => void run()}
       >
-        Remove
+        {t("admin.blocklists.remove")}
       </Button>
     </div>
   );
