@@ -36,6 +36,8 @@ vi.mock("@/lib/api", async () => {
 import { ApiError } from "@/lib/api";
 
 import { SoftwareBrandProvider } from "@/components/SoftwareBrandProvider";
+import { I18nProvider } from "@/components/I18nProvider";
+import { fr } from "@/lib/i18n/fr";
 
 import { AuthPage } from "./AuthPage";
 import { LoginForm } from "./LoginForm";
@@ -56,6 +58,17 @@ afterEach(() => {
 // the URL would sit in history, in same-origin Referer headers and in proxy
 // logs, and unlike the step-up assertion an mfa_token is bound to no session.
 describe("LoginForm provider two-factor landing", () => {
+  it("uses French labels and recovery-code errors without changing the pending challenge", async () => {
+    getInstanceMock.mockResolvedValue({ oauth_providers: [], atproto_login: false });
+    challengeMock.mockRejectedValue(new ApiError({ status: 401, code: "unauthorized", message: "invalid code" }));
+    render(<I18nProvider locale="fr" messages={fr}><LoginForm mfaPending /></I18nProvider>);
+    expect(await screen.findByRole("heading", { name: "Authentification à deux facteurs" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Utiliser plutôt un code de récupération" }));
+    fireEvent.change(screen.getByLabelText("Code de récupération"), { target: { value: "a1b2c-3d4e5" } });
+    fireEvent.click(screen.getByRole("button", { name: "Vérifier le code" }));
+    expect((await screen.findByRole("alert")).textContent).toMatch(/Ce code n’a pas fonctionné/);
+    expect(challengeMock).toHaveBeenCalledWith(null, "a1b2c-3d4e5");
+  });
   it("shows the existing challenge for ?mfa=required and submits with no token", async () => {
     getInstanceMock.mockResolvedValue({ oauth_providers: ["google"], atproto_login: false });
     challengeMock.mockResolvedValue(undefined);

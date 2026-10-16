@@ -183,20 +183,20 @@ export function LoginForm({
         setVerificationBlocked(identifier.trim());
       }
       setError(
-        errorMessage(err, "Something went wrong. Please try again.", {
+        errorMessage(err, t("auth.error.generic"), {
           // Identifier-neutral: the attempt may have used a username.
           // Deliberately generic, exactly like the API: a wrong password, an
           // unknown account and a temporarily locked account are one answer,
           // so the lockout hint is always shown and never says which applies.
           "401":
-            "Invalid email/username or password. If you have tried several times, wait a few minutes before trying again.",
+            t("auth.login.invalid"),
           // Server-side validation reject (too short/long identifier, missing
           // password) — the raw backend string is "validation failed", which
           // tells a person nothing.
-          "422": "Enter your email or username, and your password.",
+          "422": t("auth.login.required"),
           // W7 verification hold: valid credentials, account not yet verified.
           email_verification_required:
-            "Verify your email address first — check your inbox for the verification link, then sign in again.",
+            t("auth.login.verifyEmail"),
         }),
       );
       setSubmitting(false);
@@ -217,12 +217,12 @@ export function LoginForm({
       setSubmitting(false);
       if (err instanceof ApiError && err.status === 401) {
         setError(
-          "That code didn't work, or this sign-in attempt has expired. Enter a fresh code, or go back and sign in again.",
+          t("auth.mfa.invalid"),
         );
       } else if (err instanceof ApiError && err.status === 429) {
-        setError("Too many attempts — wait a moment and try again.");
+        setError(t("auth.mfa.rateLimited"));
       } else {
-        setError(errorMessage(err));
+        setError(errorMessage(err, t("auth.error.generic")));
       }
     }
   }
@@ -230,7 +230,7 @@ export function LoginForm({
   if (completingOAuth && !challenging) {
     return (
       <div className="flex justify-center py-12">
-        <Spinner label="Completing sign-in" />
+        <Spinner label={t("auth.login.completing")} />
       </div>
     );
   }
@@ -238,7 +238,7 @@ export function LoginForm({
   const displayError =
     error ??
     (oauthSilentFailure
-      ? "Could not complete the sign-in with the provider. Please try again."
+      ? t("auth.login.providerIncomplete")
       : null);
   const errorBanner = displayError ? (
     <Alert>
@@ -263,11 +263,11 @@ export function LoginForm({
           >
             <LockIcon size={24} className="text-accent" />
           </div>
-          <h1 className="text-title text-fg">Two-factor authentication</h1>
+          <h1 className="text-title text-fg">{t("auth.mfa.title")}</h1>
           <p className="text-subhead text-fg-muted">
             {recoveryMode
-              ? "Enter one of your recovery codes."
-              : "Enter the 6-digit code from your authenticator app."}
+              ? t("auth.mfa.recoveryHint")
+              : t("auth.mfa.appHint")}
           </p>
         </div>
 
@@ -278,7 +278,7 @@ export function LoginForm({
             id="mfa-code"
             name="mfa-code"
             type="text"
-            label="Recovery code"
+            label={t("auth.mfa.recoveryCode")}
             autoComplete="one-time-code"
             autoFocus
             required
@@ -289,7 +289,7 @@ export function LoginForm({
         ) : (
           <OtpInput
             key={otpKey}
-            label="Authentication code"
+            label={t("auth.mfa.code")}
             autoFocus
             onChange={setCode}
           />
@@ -301,7 +301,7 @@ export function LoginForm({
           className="w-full"
           disabled={submitting || (recoveryMode ? code.trim() === "" : code.length < 6)}
         >
-          {submitting ? "Verifying…" : "Verify code"}
+          {submitting ? t("auth.mfa.verifying") : t("auth.mfa.verify")}
         </Button>
 
         <button
@@ -316,7 +316,7 @@ export function LoginForm({
           }}
           className="focus-ring self-center rounded-sm text-subhead font-semibold text-accent-text transition-opacity hover:opacity-80"
         >
-          {recoveryMode ? "Enter a code from your app instead" : "Use a recovery code instead"}
+          {recoveryMode ? t("auth.mfa.useApp") : t("auth.mfa.useRecovery")}
         </button>
 
         <button
@@ -334,7 +334,7 @@ export function LoginForm({
           }}
           className="focus-ring self-center rounded-sm text-subhead font-semibold text-fg-muted transition-colors hover:text-fg"
         >
-          Back to sign in
+          {t("auth.login.back")}
         </button>
       </form>
     );
@@ -358,7 +358,7 @@ export function LoginForm({
         {/* White-labelled with no instance name: "Sign in" is the whole
             heading — there is nothing this screen may honestly name. */}
         <p className="text-title2 text-fg">
-          {signInBrand !== null ? `Sign in to ${signInBrand}` : "Sign in"}
+          {signInBrand !== null ? t("auth.login.named", { name: signInBrand }) : t("auth.signIn")}
         </p>
       </div>
 
@@ -373,7 +373,7 @@ export function LoginForm({
         id="login-identifier"
         name="identifier"
         type="text"
-        label="Email or username"
+        label={t("auth.login.identifier")}
         autoComplete="username"
         required
         value={identifier}
@@ -386,7 +386,7 @@ export function LoginForm({
           id="login-password"
           name="password"
           type="password"
-          label="Password"
+          label={t("auth.password")}
           autoComplete="current-password"
           required
           value={password}
@@ -397,12 +397,12 @@ export function LoginForm({
           href="/reset-password"
           className="focus-ring self-start rounded-sm text-footnote font-semibold text-accent-text transition-opacity hover:opacity-80"
         >
-          Forgot your password?
+          {t("auth.login.forgot")}
         </Link>
       </div>
 
       <Button type="submit" size="lg" className="w-full" disabled={submitting}>
-        {submitting ? "Signing in…" : "Sign in"}
+        {submitting ? t("auth.signingIn") : t("auth.signIn")}
       </Button>
 
       {/* One "or" rule for the whole alternative-auth group: OAuthButtons draws
@@ -414,12 +414,12 @@ export function LoginForm({
       <BlueskyLoginButton enabled={atprotoEnabled} returnTo={loginPath} />
 
       <p className="text-center text-subhead text-fg-muted">
-        No account?{" "}
+        {t("auth.login.noAccount")}{" "}
         <Link
           href="/signup"
           className="focus-ring rounded-sm font-semibold text-accent-text transition-opacity hover:opacity-80"
         >
-          Create one
+          {t("auth.login.create")}
         </Link>
       </p>
     </form>
