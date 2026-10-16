@@ -2,7 +2,7 @@
 // three interim session stores (lib/player-{rates,theater,autoplay}): when a
 // user is signed in, the server-backed defaults (GET/PUT /api/v1/me/player-
 // settings, vidra-core W1.C3) are the *effective defaults* the bespoke player
-// starts from. An in-session control change (the SpeedMenu, the shell's theater
+// starts from. An in-session control change (the player settings menu, the shell's theater
 // toggle, the end card's autoplay switch) still writes the session store, which
 // wins for the rest of that browsing session; only when a session store is unset
 // does the effective per-user default apply. Signed-out users keep the baked

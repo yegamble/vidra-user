@@ -10,7 +10,7 @@ import { TextLink } from "@/components/ui/TextLink";
 /**
  * SignInGate wraps a signed-in-only surface's prompt: the shared "Sign in to
  * …" `EmptyState`, with the /login link already in it. The sibling of
- * `RoleGate` (which prompts an under-privileged viewer) and of `RoleNavLink`
+ * `RoleGate` (which prompts an under-privileged viewer) and of role-filtered navigation
  * (which self-hides instead) — this is the one for "signed out at all".
  *
  * Call sites keep their own `status !== "authed"` test, because they need it

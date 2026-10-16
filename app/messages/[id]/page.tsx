@@ -4,7 +4,7 @@ import { ConversationView } from "@/components/ConversationView";
 // (route-mockable, refetchable); this server component resolves the dynamic id.
 // The <main> landmark + the persistent conversation rail live in the shared
 // messaging layout (MessagingShell); this route renders only the thread pane.
-// `to` is the encrypted-thread recipient hint (see StartEncryptedButton) so the
+// `to` is the encrypted-thread recipient hint (see NewMessageButton) so the
 // encrypted composer can fan out to the peer without a participant lookup;
 // `unread` is a contract-free hint from the inbox row for the NEW-messages
 // divider (absent → no divider).

@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { PlayerMenu } from "./PlayerMenu";
 
-// The rate ladder is rebuilt on every render by the real callers (SpeedMenu maps
+// The rate ladder is rebuilt on every render by the real callers (speed menus map
 // PLAYBACK_RATES, QualityMenu maps levels), so `items` is a NEW array identity
 // each time. This harness reproduces that faithfully — the bug below only
 // appears when the array identity churns.
