@@ -635,7 +635,7 @@ export function ReplaceVideoManager({
         setState("cancelled");
         return;
       }
-      setError(replaceErrorMessage(err));
+      setError(replaceErrorMessage(err, t));
       setState("error");
     } finally {
       abortRef.current = null;
