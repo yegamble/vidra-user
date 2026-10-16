@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useId, useState } from "react";
 
+import { useT } from "@/components/I18nProvider";
 import { Alert } from "@/components/ui/Alert";
 import { ApiError, authApi, errorMessage } from "@/lib/api";
 
@@ -24,6 +25,7 @@ const MIN_PASSWORD_LENGTH = 8;
  * endpoint.
  */
 export function ChangePasswordSection() {
+  const t = useT();
   const titleId = useId();
   const currentId = useId();
   const nextId = useId();
@@ -45,15 +47,15 @@ export function ChangePasswordSection() {
     // Confirmation is a client-only field — the API never sees it — so its
     // mismatch is caught here rather than spent on a request.
     if (next !== confirm) {
-      setError("The new passwords do not match.");
+      setError(t("account.password.mismatch"));
       return;
     }
     if (next.length < MIN_PASSWORD_LENGTH) {
-      setError(`Your new password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
+      setError(t("account.password.tooShort", { min: MIN_PASSWORD_LENGTH }));
       return;
     }
     if (next === current) {
-      setError("Your new password must be different from your current one.");
+      setError(t("account.password.unchanged"));
       return;
     }
 
@@ -69,17 +71,17 @@ export function ChangePasswordSection() {
       setDone(true);
     } catch (err) {
       if (err instanceof ApiError && err.status === 403) {
-        setError("That is not your current password.");
+        setError(t("account.password.wrongCurrent"));
       } else if (err instanceof ApiError && err.status === 409) {
         // The OAuth/ATProto-only shape: there is no current password to supply,
         // so the honest answer is the flow that CAN set one.
         setError(
           <>
-            This account signs in without a password, so there is none to change. Use{" "}
+            {t("account.password.noPassword.before")}{" "}
             <Link href="/reset-password" className="focus-ring rounded-sm font-semibold underline">
-              password reset
+              {t("account.password.reset")}
             </Link>{" "}
-            to set one.
+            {t("account.password.noPassword.after")}
           </>,
         );
       } else {
@@ -101,17 +103,17 @@ export function ChangePasswordSection() {
     >
       <div className="flex flex-col gap-1">
         <h2 id={titleId} className="text-base font-semibold tracking-tight text-fg">
-          Password
+          {t("auth.password")}
         </h2>
         <p className="text-sm text-fg-muted">
-          Changing your password signs you out of every other device. This one stays signed in.
+          {t("account.password.intro")}
         </p>
       </div>
 
       {error ? <Alert as="div">{error}</Alert> : null}
       {done ? (
         <Alert variant="success">
-          Your password was changed, and every other device was signed out.
+          {t("account.password.changed")}
         </Alert>
       ) : null}
 
@@ -125,22 +127,22 @@ export function ChangePasswordSection() {
       >
         <Field
           id={currentId}
-          label="Current password"
+          label={t("settings.deactivate.password")}
           autoComplete="current-password"
           value={current}
           onChange={setCurrent}
         />
         <Field
           id={nextId}
-          label="New password"
+          label={t("account.password.new")}
           autoComplete="new-password"
           value={next}
           onChange={setNext}
-          hint={`At least ${MIN_PASSWORD_LENGTH} characters.`}
+          hint={t("account.password.hint", { min: MIN_PASSWORD_LENGTH })}
         />
         <Field
           id={confirmId}
-          label="Confirm new password"
+          label={t("account.password.confirm")}
           autoComplete="new-password"
           value={confirm}
           onChange={setConfirm}
@@ -150,7 +152,7 @@ export function ChangePasswordSection() {
           disabled={busy || !filled}
           className="focus-ring self-start rounded-full bg-accent px-4 py-2 text-sm font-semibold text-accent-fg transition-colors hover:bg-accent/90 disabled:opacity-60"
         >
-          {busy ? "Changing…" : "Change password"}
+          {busy ? t("account.password.changing") : t("account.password.change")}
         </button>
       </form>
     </section>

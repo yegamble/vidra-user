@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useState } from "react";
 
+import { useT } from "@/components/I18nProvider";
 import { Alert } from "@/components/ui/Alert";
 import { Spinner } from "@/components/ui/Spinner";
 import { authApi, errorMessage } from "@/lib/api";
@@ -19,6 +20,7 @@ import type { RecognisedDevice } from "@/lib/api";
  * because sessions carry no device link.
  */
 export function RecognisedDevicesSection() {
+  const t = useT();
   const titleId = useId();
   const switchId = useId();
   const [devices, setDevices] = useState<RecognisedDevice[] | null>(null);
@@ -72,21 +74,19 @@ export function RecognisedDevicesSection() {
     >
       <div className="flex flex-col gap-1">
         <h2 id={titleId} className="text-base font-semibold tracking-tight text-fg">
-          Recognised devices
+          {t("account.devices.title")}
         </h2>
         <p className="text-sm text-fg-muted">
-          Browsers you have signed in from. Signing in from one that is not on this list sends you
-          an email. Forgetting a device only removes it from this list; to end its session use
-          &ldquo;Sign out of all devices&rdquo; below.
+          {t("account.devices.intro")}
         </p>
       </div>
       {error ? <Alert>{error}</Alert> : null}
       {loadFailed ? (
-        <Alert>Your recognised devices could not be loaded. Try again later.</Alert>
+        <Alert>{t("account.devices.loadError")}</Alert>
       ) : devices === null ? (
         <Spinner />
       ) : devices.length === 0 ? (
-        <p className="text-sm text-fg-muted">No devices recorded yet.</p>
+        <p className="text-sm text-fg-muted">{t("account.devices.empty")}</p>
       ) : (
         <ul className="flex flex-col divide-y divide-border-subtle">
           {devices.map((d) => (
@@ -96,22 +96,22 @@ export function RecognisedDevicesSection() {
                   {d.label}
                   {d.current ? (
                     <span className="ml-2 rounded-full bg-surface-strong px-2 py-0.5 text-xs font-semibold text-fg-muted">
-                      This device
+                      {t("account.devices.current")}
                     </span>
                   ) : null}
                 </span>
                 <span className="text-xs text-fg-muted">
-                  Last signed in {new Date(d.last_seen_at).toLocaleDateString()}
+                  {t("account.devices.lastSeen", { date: new Date(d.last_seen_at).toLocaleDateString() })}
                 </span>
               </div>
               <button
                 type="button"
                 disabled={busyId === d.id}
                 onClick={() => void forget(d.id)}
-                aria-label={`Forget device ${d.label}`}
+                aria-label={t("account.devices.forgetLabel", { label: d.label })}
                 className="focus-ring rounded-full border border-border-subtle px-3 py-1.5 text-sm font-semibold text-fg transition-colors hover:bg-surface-strong disabled:opacity-60"
               >
-                {busyId === d.id ? "Forgetting…" : "Forget"}
+                {busyId === d.id ? t("account.devices.forgetting") : t("account.devices.forget")}
               </button>
             </li>
           ))}
@@ -126,7 +126,7 @@ export function RecognisedDevicesSection() {
           onChange={(e) => void toggleEmail(e.target.checked)}
           className="focus-ring h-4 w-4"
         />
-        Email me when my account is signed in from a new device
+        {t("account.devices.email")}
       </label>
     </section>
   );

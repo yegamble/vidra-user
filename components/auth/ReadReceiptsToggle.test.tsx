@@ -16,6 +16,8 @@ vi.mock("@/lib/api", () => ({
 }));
 
 import { setInstanceFeaturesForTests } from "@/lib/instance-features";
+import { I18nProvider } from "@/components/I18nProvider";
+import { fr } from "@/lib/i18n/fr";
 
 import { ReadReceiptsToggle } from "./ReadReceiptsToggle";
 
@@ -39,6 +41,16 @@ afterEach(() => {
 });
 
 describe("ReadReceiptsToggle", () => {
+  it("recovers a failed load and opts out in French", async () => {
+    getMessagingPrefs.mockRejectedValueOnce(new Error("boom"));
+    render(<I18nProvider locale="fr" messages={fr}><ReadReceiptsToggle /></I18nProvider>);
+    fireEvent.click(await screen.findByRole("button", { name: "Réessayer" }));
+    const checkbox = await screen.findByLabelText("Indiquer aux autres quand j’ai lu leurs messages");
+    expect(screen.getByText(/masque uniquement vos propres heures de lecture/)).toBeTruthy();
+    fireEvent.click(checkbox);
+    expect((await screen.findByRole("status")).textContent).toBe("Enregistré.");
+    expect(updateMessagingPrefs).toHaveBeenCalledWith({ read_receipts: false });
+  });
   it("reflects the stored preference (core defaults it on)", async () => {
     render(<ReadReceiptsToggle />);
     const checkbox = (await screen.findByLabelText(LABEL)) as HTMLInputElement;

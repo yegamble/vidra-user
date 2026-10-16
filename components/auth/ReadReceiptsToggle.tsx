@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { useT } from "@/components/I18nProvider";
 import { Spinner } from "@/components/ui/Spinner";
 import { api, errorMessage } from "@/lib/api";
 import { useMessagingAvailable } from "@/lib/messaging/availability";
@@ -14,6 +15,7 @@ import { useMessagingAvailable } from "@/lib/messaging/availability";
 // (MessageBubble). The flip is optimistic and REVERTS on failure: a switch that
 // looked off while the watermark kept flowing would be worse than none.
 export function ReadReceiptsToggle() {
+  const t = useT();
   const [checked, setChecked] = useState<boolean | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,7 +63,7 @@ export function ReadReceiptsToggle() {
       {loadError ? (
         <div className="flex flex-wrap items-center gap-3">
           <p role="alert" className="text-sm text-fg-muted">
-            Could not load your read-receipt setting.
+            {t("account.receipts.loadError")}
           </p>
           <button
             type="button"
@@ -71,12 +73,12 @@ export function ReadReceiptsToggle() {
             }}
             className="focus-ring rounded-full border border-border bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-muted"
           >
-            Retry
+            {t("account.retry")}
           </button>
         </div>
       ) : checked === null ? (
         <div className="flex justify-center py-1">
-          <Spinner label="Loading your read-receipt setting" />
+          <Spinner label={t("account.receipts.loading")} />
         </div>
       ) : (
         <div className="flex items-start gap-2">
@@ -91,16 +93,14 @@ export function ReadReceiptsToggle() {
           />
           <div className="flex min-w-0 flex-col">
             <label htmlFor="settings-read-receipts" className="text-sm font-medium text-fg">
-              Show others when I&rsquo;ve read their messages
+              {t("account.receipts.label")}
             </label>
             <span id="settings-read-receipts-help" className="text-xs text-fg-muted">
-              While on, the person you are messaging sees a &ldquo;Seen&rdquo; marker once you open
-              their message. Turning it off hides only your own read times &mdash; you still see
-              theirs when they leave this on.
+              {t("account.receipts.help")}
             </span>
             {saved ? (
               <span role="status" className="mt-1 text-xs text-success">
-                Saved.
+                {t("settings.content.saved")}
               </span>
             ) : null}
             {error ? (

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { useT } from "@/components/I18nProvider";
 import { useSession } from "@/components/auth/AuthProvider";
 import { ApiError, authApi, errorMessage } from "@/lib/api";
 
@@ -11,6 +12,7 @@ import { ApiError, authApi, errorMessage } from "@/lib/api";
 // profile_public toggle). It renders only when a Bluesky account is actually
 // linked, and shows which handle would be revealed. Default: hidden (off).
 export function BlueskyVisibilityToggle() {
+  const t = useT();
   const { user, updateProfile } = useSession();
   const [handle, setHandle] = useState<string | null>(null);
   const [checked, setChecked] = useState<boolean>(user?.show_bluesky ?? false);
@@ -64,15 +66,15 @@ export function BlueskyVisibilityToggle() {
         />
         <div className="flex min-w-0 flex-col">
           <label htmlFor="settings-show-bluesky" className="text-sm font-medium text-fg">
-            Show my Bluesky handle on my public profile
+            {t("account.blueskyVisibility.label")}
           </label>
           <span id="settings-show-bluesky-help" className="text-xs text-fg-muted">
-            Visitors to your public profile will see{" "}
-            <span className="font-medium text-fg">@{handle}</span> linking to your Bluesky account.
+            {t("account.blueskyVisibility.before")}{" "}
+            <span className="font-medium text-fg">@{handle}</span> {t("account.blueskyVisibility.after")}
           </span>
           {state === "saved" ? (
             <span role="status" className="mt-1 text-xs text-success">
-              Saved.
+              {t("settings.content.saved")}
             </span>
           ) : null}
           {error ? (

@@ -21,6 +21,8 @@ vi.mock("@/lib/api", () => ({
 }));
 
 import { ApiError } from "@/lib/api";
+import { I18nProvider } from "@/components/I18nProvider";
+import { fr } from "@/lib/i18n/fr";
 
 import { ChangePasswordSection } from "./ChangePasswordSection";
 
@@ -51,6 +53,17 @@ afterEach(() => {
 });
 
 describe("ChangePasswordSection", () => {
+  it("changes a password in French and explains the device consequence", async () => {
+    render(<I18nProvider locale="fr" messages={fr}><ChangePasswordSection /></I18nProvider>);
+    const fields = ["Mot de passe actuel", "Nouveau mot de passe", "Confirmer le nouveau mot de passe"];
+    ["supersecret", "evenmoresecret", "evenmoresecret"].forEach((value, i) =>
+      fireEvent.change(screen.getByLabelText(fields[i]), { target: { value } }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Modifier le mot de passe" }));
+    expect((await screen.findByRole("status")).textContent).toContain("tous les autres appareils ont été déconnectés");
+    expect(changePassword).toHaveBeenCalledWith({ current_password: "supersecret", new_password: "evenmoresecret" });
+    expect((screen.getByLabelText(fields[0]) as HTMLInputElement).value).toBe("");
+  });
   it("sends the current and new password and says the other devices were signed out", async () => {
     render(<ChangePasswordSection />);
     fill({ current: "supersecret", next: "evenmoresecret", confirm: "evenmoresecret" });
