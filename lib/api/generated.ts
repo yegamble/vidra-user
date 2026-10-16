@@ -1444,7 +1444,7 @@ export interface paths {
         put?: never;
         /**
          * Import the metadata of a PeerTube user-export archive
-         * @description Accepts a PeerTube (>= 6.1) user-export zip as multipart field `archive` and imports its METADATA into the caller's own account: channels (created when the handle is free and valid here; a handle the caller already owns counts as existing, another owner's is skipped), regular playlists (matched by title, so a re-import never duplicates; items are not resolved and are counted in playlist_items_skipped), and the autoplay-next setting. Videos, likes, dislikes, comments, watch history, blocklists and followers are NOT imported yet and are counted under skipped_sections. The accounts in following.json (up to 1000) are queued and followed in the background through the same path as POST /me/remote-follows; the response carries follows_job_id. Synchronous: the work is bounded and touches no network or media. The body cap for this route is PEERTUBE_IMPORT_MAX_SIZE, which defaults to the global HTTP body limit (8 MB), enough for an export trimmed to its peertube/*.json entries; an instance that raises it also accepts the full export including its video files. A Content-Length is required (411 without one). The upload is streamed to a temporary file that is always removed, and only the peertube/*.json entries are ever read; media entries are never opened. The archive is refused whole on traversal, symlink, encrypted, duplicate or oversize JSON entries, or an oversized or ambiguous central directory (more than 20000 entries or 4 MiB). An upload that stops sending for 60 s is abandoned with 408. 403 feature_disabled when user_import_enabled is off. At most 3 imports per user per hour. At most 50 channels may be owned after an import, existing ones included. If the import stops part-way on a server error, the answer is the standard error envelope with an added `summary` (PeerTubeImportSummary) of what was done first; rows already created are kept and re-uploading the same archive is safe.
+         * @description Accepts a PeerTube (>= 6.1) user-export zip as multipart field `archive` and imports its METADATA into the caller's own account: channels (created when the handle is free and valid here; a handle the caller already owns counts as existing, another owner's is skipped), regular playlists (matched by title, so a re-import never duplicates; each exported item is resolved WITHOUT network access to a video this instance already holds - by uuid (its own, or an imported video's PeerTube source uuid) or /v/ short code - and added through the playlist service when that video is public, published and not blocked; everything else is counted in playlist_items_skipped with its reason in skipped_sections, and a re-import fills items into an existing playlist without duplicating), the autoplay-next setting, and channel avatars/banners referenced by channels.json archiveFiles (only the referenced image entries are read; each goes through the avatar upload type allowlist plus content sniffing, the 8 MiB cap, dimension bounds and the instance scan policy, and never replaces an existing image). Videos, likes, dislikes, comments, watch history, blocklists and followers are NOT imported yet and are counted under skipped_sections. The accounts in following.json (up to 1000) are queued and followed in the background through the same path as POST /me/remote-follows; the response carries follows_job_id. Synchronous: the work is bounded and touches no network or media. The body cap for this route is PEERTUBE_IMPORT_MAX_SIZE, which defaults to the global HTTP body limit (8 MB), enough for an export trimmed to its peertube/*.json entries; an instance that raises it also accepts the full export including its video files. A Content-Length is required (411 without one). The upload is streamed to a temporary file that is always removed, and only the peertube/*.json entries are ever read; media entries are never opened. The archive is refused whole on traversal, symlink, encrypted, duplicate or oversize JSON entries, or an oversized or ambiguous central directory (more than 20000 entries or 4 MiB). An upload that stops sending for 60 s is abandoned with 408. 403 feature_disabled when user_import_enabled is off. At most 3 imports per user per hour. At most 50 channels may be owned after an import, existing ones included. If the import stops part-way on a server error, the answer is the standard error envelope with an added `summary` (PeerTubeImportSummary) of what was done first; rows already created are kept and re-uploading the same archive is safe.
          */
         post: operations["importPeerTubeArchive"];
         delete?: never;
@@ -5610,6 +5610,64 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/oidc-providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List admin-managed OIDC login providers (admin)
+         * @description The OpenID Connect providers stored in the database, plus the environment providers (OAUTH_PROVIDERS) they may override — name and issuer only. A stored row REPLACES the environment provider of the same name; a disabled row switches that name off.
+         *
+         *     NEVER RETURNS A CLIENT SECRET: each row reports `secret_configured` and `secret_status` (`undecryptable` when the KEK changed; such a provider is offered to nobody). `secrets_available` is false when this deployment has no key-encryption key, in which case a save carrying a secret is refused with 409.
+         *
+         *     Restricted to admins (moderators get 403).
+         */
+        get: operations["listOIDCProviders"];
+        put?: never;
+        /**
+         * Add an OIDC login provider (admin)
+         * @description Adds a provider. `name` is the URL segment (`/api/v1/auth/oauth/{name}`) and the key linked accounts are matched by, so it is immutable, and it is refused when accounts are already linked through that name from a different issuer (only the issuer of an environment provider of the same name may be re-used). Discovery, JWKS and token calls for this provider go through the SSRF guard; `issuer_url` must be https on a public host, and every endpoint the discovery document names must be https, unless OIDC_ALLOW_PRIVATE_ISSUERS is on. A name configured in the environment may be overridden only with that provider's issuer. `client_secret` is required and stored sealed.
+         *
+         *     Takes effect immediately here and within one settings-poll interval across the rest of the fleet. Audited as `admin.oidc_provider.create` with the provider name; never a value.
+         *
+         *     Restricted to admins, and requires a FRESH credential — exactly one of `current_password` or `step_up_token` — because a login provider decides who can sign in.
+         */
+        post: operations["createOIDCProvider"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/oidc-providers/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update an OIDC login provider (admin)
+         * @description Replaces the mutable fields. `issuer_url` cannot change (subjects are only unique within one issuer): omit it or repeat the stored value, anything else is 422. `client_secret` is write-only: omit it to keep the stored secret, send a value to replace it. `enabled` and `auto_provision` keep their stored values when omitted. Audited as `admin.oidc_provider.update` with the changed field NAMES and whether the secret was replaced. Same fresh-credential rule as create.
+         */
+        put: operations["updateOIDCProvider"];
+        post?: never;
+        /**
+         * Remove an OIDC login provider (admin)
+         * @description Removes a stored provider and its sealed secret. Linked identities are kept. A provider whose name is also configured in the environment (OAUTH_PROVIDERS) cannot be deleted — disable or edit it instead — because deleting it would restore the environment provider without the stored row's restrictions. Requires a fresh credential, like the other writes. Audited as `admin.oidc_provider.delete`.
+         */
+        delete: operations["deleteOIDCProvider"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/mail/test": {
         parameters: {
             query?: never;
@@ -6920,6 +6978,11 @@ export interface components {
              *     ]
              */
             oauth_providers: string[];
+            /** @description The same providers as `oauth_providers`, in the same order, with the label a sign-in button shows (admin-managed providers can set one; otherwise it is the name). */
+            oauth_provider_details: {
+                name: string;
+                display_name: string;
+            }[];
             /** @description Whether ATProto identity login (Bluesky / any self-hosted PDS) is enabled (ATPROTO_LOGIN_ENABLED). When true, render a "sign in with a handle" affordance that POSTs to /api/v1/auth/atproto/start. Independent of oauth_providers above. */
             atproto_login?: boolean;
             /** @description Whether ActivityPub federation is enabled on this instance (gates remote-content surfaces such as remote follows and remote videos). */
@@ -9839,7 +9902,14 @@ export interface components {
             playlists_created: number;
             playlists_existing: number;
             playlists_skipped: number;
+            /** @description Items not added; skipped_sections.playlist_items_not_addable (no such video, or one that is not public and published, deliberately indistinguishable) and playlist_items_over_cap give the reasons. */
             playlist_items_skipped: number;
+            /** @description Items resolved to a local video and present in the playlist (a re-import re-confirms them). */
+            playlist_items_added: number;
+            /** @description Channel avatars/banners from the export applied to channels that had none. */
+            channel_images_set: number;
+            /** @description Avatars/banners the export names but that were refused (not a usable files/ image entry, wrong or mismatched type, over 8 MiB, out-of-bounds dimensions, scan policy, no storage). */
+            channel_images_skipped: number;
             settings_applied: number;
             skipped_sections: {
                 [key: string]: number;
@@ -10757,6 +10827,56 @@ export interface components {
                 /** @description True for the process that served this request, so an operator reading a three-row list knows which one is answering. */
                 self: boolean;
             }[];
+        };
+        /** @description An admin-managed OIDC provider. Carries no secret. */
+        OIDCProvider: {
+            /** @example corp-sso */
+            name: string;
+            /** @description Sign-in button label; empty means the name. */
+            display_name: string;
+            /** Format: uri */
+            issuer_url: string;
+            client_id: string;
+            /** @description Requested scopes; empty means openid email profile. openid is always added. */
+            scopes: string[];
+            enabled: boolean;
+            /** @description false: only already-linked identities sign in; an unknown subject gets oauth_error=signup_disabled. */
+            auto_provision: boolean;
+            /** @description Non-empty: a new account is created only for a VERIFIED email in one of these domains (exact match), otherwise oauth_error=email_domain_not_allowed. Linked identities are unaffected. */
+            allowed_email_domains: string[];
+            secret_configured: boolean;
+            /** @enum {string} */
+            secret_status: "ok" | "undecryptable";
+            /** Format: date-time */
+            updated_at: string;
+        };
+        OIDCProviderList: {
+            providers: components["schemas"]["OIDCProvider"][];
+            environment: {
+                name: string;
+                issuer_url: string;
+                /** @description A stored provider with this name replaces it. */
+                overridden: boolean;
+            }[];
+            /** @description Whether a key-encryption key exists to seal a client secret. */
+            secrets_available: boolean;
+        };
+        OIDCProviderUpdateRequest: {
+            display_name?: string;
+            /** @description Optional; must equal the stored issuer. */
+            issuer_url?: string;
+            client_id: string;
+            /** @description Omit to keep the stored secret. */
+            client_secret?: string;
+            scopes?: string[];
+            enabled?: boolean;
+            auto_provision?: boolean;
+            allowed_email_domains?: string[];
+            current_password?: string;
+            step_up_token?: string;
+        };
+        OIDCProviderCreateRequest: components["schemas"]["OIDCProviderUpdateRequest"] & {
+            name: string;
         };
         /** @description The outbound-mail configuration and the state it is in. Returned by GET and PUT /api/v1/admin/mail-config. */
         MailConfigState: {
@@ -28570,6 +28690,292 @@ export interface operations {
             };
             /** @description This deployment does not carry the outbound-mail configuration service. */
             501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listOIDCProviders: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The stored providers and the environment list. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OIDCProviderList"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createOIDCProvider: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OIDCProviderCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description The created provider. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OIDCProvider"];
+                };
+            };
+            /** @description Malformed body, or a field the document does not define. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin; `current_password` is incorrect; or `step_up_required`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description A provider with this name exists, or code `oidc_secrets_key_missing` — no key-encryption key to seal the secret with. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Invalid fields (`fields` names them: `name`, `issuer_url`, `client_id`, `client_secret`, `scopes`, `allowed_email_domains`, `display_name`), or both proofs were sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many credential attempts. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateOIDCProvider: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OIDCProviderUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description The updated provider. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OIDCProvider"];
+                };
+            };
+            /** @description Malformed body, or a field the document does not define. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin; `current_password` is incorrect; or `step_up_required`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No provider with this name is stored. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Code `oidc_secrets_key_missing`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Invalid fields, an issuer change, or both proofs sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many credential attempts. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteOIDCProvider: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    current_password?: string;
+                    step_up_token?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The provider was removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Malformed body, or a field the document does not define. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin; `current_password` is incorrect; or `step_up_required`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No provider with this name is stored. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The provider overrides an environment provider (`fields` names `name`), or both proofs were sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many credential attempts. */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
