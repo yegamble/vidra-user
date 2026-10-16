@@ -16,6 +16,7 @@ import { channel } from "./channel";
 import { watch } from "./watch";
 import { panels } from "./panels";
 import { notifications } from "./notifications";
+import { studio } from "./studio";
 import { state } from "./state";
 import { theme } from "./theme";
 
@@ -28,6 +29,6 @@ import { theme } from "./theme";
  * AI model (2026-10-12) and has not been read by a native speaker. A reviewer
  * moves each string they approve ABOVE that rule.
  */
-export const FR_NAMESPACES = { account, a11y, admin, auth, channel, common, create, header, home, nav, notifications, panels, report, search, settings, state, theme, watch };
+export const FR_NAMESPACES = { account, a11y, admin, auth, channel, common, create, header, home, nav, notifications, panels, report, search, settings, state, studio, theme, watch };
 
-export const fr = { ...account, ...a11y, ...admin, ...auth, ...common, ...home, ...report, ...search, ...settings, ...create, ...header, ...nav, ...channel, ...watch, ...panels, ...notifications, ...state, ...theme } satisfies Messages;
+export const fr = { ...account, ...a11y, ...admin, ...auth, ...common, ...home, ...report, ...search, ...settings, ...create, ...header, ...nav, ...channel, ...watch, ...panels, ...notifications, ...state, ...studio, ...theme } satisfies Messages;
