@@ -16,10 +16,11 @@ import {
 import { createPortal } from "react-dom";
 
 import { ChevronLeftIcon, ClockIcon, CloseIcon, HashIcon, SearchIcon, UserIcon, VideoIcon } from "@/components/icons";
+import { useT } from "@/components/I18nProvider";
 import { api } from "@/lib/api";
 import type { SearchSuggestion } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
-import { t } from "@/lib/i18n";
+import type { Translate } from "@/lib/i18n";
 import { trackSearchEvent } from "@/lib/search-events";
 import { useSettledOptionalSession } from "@/lib/use-settled-session";
 import { useViewerModeration } from "@/lib/use-viewer-moderation";
@@ -155,13 +156,13 @@ function isEditableTarget(target: EventTarget | null): boolean {
   return target.closest(EDITABLE) !== null;
 }
 
-function groupLabel(bucket: number): string {
+function groupLabel(bucket: number, t: Translate): string {
   if (bucket === 1) return t("search.groupVideos");
   if (bucket === 2) return t("search.groupChannels");
   return t("search.groupTags");
 }
 
-function typeLabel(type: string): string | null {
+function typeLabel(type: string, t: Translate): string | null {
   if (type === "video") return t("search.typeVideo");
   if (type === "channel") return t("search.typeChannel");
   if (type === "tag") return t("search.typeTag");
@@ -207,6 +208,7 @@ function useSearchCombobox({
    *  trap. */
   escapeBlurs?: boolean;
 } & ComboboxRefs) {
+  const t = useT();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -279,11 +281,7 @@ function useSearchCombobox({
       const shouldOpen = focusedRef.current && ordered.length > 0;
       setOpen(shouldOpen);
       if (shouldOpen) {
-        setLiveMessage(
-          ordered.length === 1
-            ? t("search.suggestionsOne")
-            : t("search.suggestionsMany", { count: ordered.length }),
-        );
+        setLiveMessage(t("search.suggestions", { count: ordered.length }));
         if (shownForRef.current !== prefix) {
           shownForRef.current = prefix;
           trackSearchEvent({
@@ -302,7 +300,7 @@ function useSearchCombobox({
     // effect below already depends on this callback, and a cache hit costs no
     // request. That is one re-run per session (the set settles once), never one
     // per keystroke.
-    [hiddenChannelHandles],
+    [hiddenChannelHandles, t],
   );
 
   // Fetch suggestions for the debounced prefix. Guards: suggestions disabled,
@@ -572,6 +570,7 @@ function useSearchCombobox({
 // ── Shared presentational pieces ────────────────────────────────────────────
 
 function ClearButton({ onClick }: { onClick: () => void }) {
+  const t = useT();
   return (
     <button
       type="button"
@@ -640,6 +639,7 @@ function PillInput({
   /** Header pill only — the phone sheet has no hardware keyboard to hint at. */
   shortcutHint?: boolean;
 }) {
+  const t = useT();
   return (
     <div className="flex min-h-11 items-center gap-2.5 rounded-full border border-border bg-surface-muted px-4 py-2 transition-colors focus-within:bg-surface has-[input:focus-visible]:ring-2 has-[input:focus-visible]:ring-focus">
       <SearchIcon size={17} strokeWidth={2} className="shrink-0 text-fg-muted" />
@@ -693,6 +693,7 @@ function SuggestionListbox({
   hidden: boolean;
   className: string;
 }) {
+  const t = useT();
   return (
     <ul
       ref={listRef}
@@ -708,7 +709,7 @@ function SuggestionListbox({
         const bucket = TYPE_ORDER[s.type] ?? 0;
         const prevBucket = index > 0 ? TYPE_ORDER[c.suggestions[index - 1].type] ?? 0 : -1;
         const showHeader = bucket >= 1 && bucket !== prevBucket;
-        const label = typeLabel(s.type);
+        const label = typeLabel(s.type, t);
         return (
           <Fragment key={`${s.type}-${s.text}-${index}`}>
             {showHeader ? (
@@ -717,7 +718,7 @@ function SuggestionListbox({
                 aria-hidden="true"
                 className="mt-1 border-t border-border-subtle px-4 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-fg-muted first:mt-0 first:border-t-0"
               >
-                {groupLabel(bucket)}
+                {groupLabel(bucket, t)}
               </li>
             ) : null}
             <li
@@ -779,6 +780,7 @@ function HeaderSearchField({
   /** Owned by the parent so the ⌘K / "/" handler can focus this field. */
   inputRef: React.RefObject<HTMLInputElement | null>;
 }) {
+  const t = useT();
   const listRef = useRef<HTMLUListElement>(null);
   const optionRefs = useRef<(HTMLLIElement | null)[]>([]);
   const c = useSearchCombobox({
@@ -827,6 +829,7 @@ function MobileSearchOverlay({
   suggestionsEnabled: boolean;
   onClose: () => void;
 }) {
+  const t = useT();
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const optionRefs = useRef<(HTMLLIElement | null)[]>([]);
@@ -937,6 +940,7 @@ function MobileSearchOverlay({
  * input, its submit, and the results page are unaffected.
  */
 export function SearchAutocomplete({ suggestionsEnabled = true }: { suggestionsEnabled?: boolean }) {
+  const t = useT();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -1037,6 +1041,7 @@ export function SearchAutocomplete({ suggestionsEnabled = true }: { suggestionsE
  * statically prerendered routes don't bail to CSR and there is no layout shift.
  */
 export function SearchAutocompleteFallback() {
+  const t = useT();
   return (
     <>
       <div className="hidden min-w-0 flex-1 justify-center px-2 sm:flex">

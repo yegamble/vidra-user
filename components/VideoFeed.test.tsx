@@ -3,6 +3,11 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
 import type { Video, VideoFeedResponse } from "@/lib/api";
+import {
+  hydrateContentPreferences,
+  resetContentPreferences,
+  settleContentPreferences,
+} from "@/lib/content-preferences";
 import { setInstanceDefaultsForTests } from "@/lib/instance-defaults";
 
 const mocks = vi.hoisted(() => ({
@@ -81,6 +86,7 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   setInstanceDefaultsForTests(null);
+  resetContentPreferences();
 });
 
 describe("VideoFeed server seed", () => {
@@ -216,8 +222,50 @@ describe("VideoFeed session settling", () => {
     sessionStatus = "authed";
     sessionUser = { id: "u-1" };
     mocks.getFeed.mockResolvedValue(page([video(99)], 1));
+    settleContentPreferences(); // a signed-in feed also waits for the viewer's preferences
     render(<VideoFeed sort="recent" initialPage={page(videos, 21)} />);
     expect(await screen.findByText("Video 99")).toBeTruthy();
     expect(mocks.getFeed).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("VideoFeed preferred languages", () => {
+  beforeEach(() => {
+    sessionStatus = "authed";
+    sessionUser = { id: "u1" };
+  });
+  afterEach(() => {
+    sessionStatus = "anon";
+    sessionUser = null;
+  });
+
+  it("waits for the viewer's preferences, then asks once with their languages", async () => {
+    mocks.getFeed.mockResolvedValue(page([video(1)], 1));
+    render(<VideoFeed sort="recent" />);
+    // Signed in, preferences not known yet: no unfiltered request goes out.
+    expect(mocks.getFeed).not.toHaveBeenCalled();
+    act(() =>
+      hydrateContentPreferences({ sensitive_flag_policies: {}, preferred_languages: ["fr", "en"] }),
+    );
+    await waitFor(() => expect(mocks.getFeed).toHaveBeenCalledTimes(1));
+    expect(mocks.getFeed.mock.calls[0][0]).toMatchObject({ language: "fr,en" });
+  });
+
+  it("an explicit language filter wins over the preference", async () => {
+    mocks.getFeed.mockResolvedValue(page([video(1)], 1));
+    act(() =>
+      hydrateContentPreferences({ sensitive_flag_policies: {}, preferred_languages: ["fr"] }),
+    );
+    render(<VideoFeed sort="recent" filters={{ language: "de" }} />);
+    await waitFor(() => expect(mocks.getFeed).toHaveBeenCalledTimes(1));
+    expect(mocks.getFeed.mock.calls[0][0]).toMatchObject({ language: "de" });
+  });
+
+  it("no preferred languages means no language param, and a failed fetch does not hang the feed", async () => {
+    mocks.getFeed.mockResolvedValue(page([video(1)], 1));
+    render(<VideoFeed sort="recent" />);
+    act(() => settleContentPreferences());
+    await waitFor(() => expect(mocks.getFeed).toHaveBeenCalledTimes(1));
+    expect(mocks.getFeed.mock.calls[0][0].language).toBeUndefined();
   });
 });

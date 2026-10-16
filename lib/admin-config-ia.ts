@@ -1376,6 +1376,14 @@ export const META: Record<string, SettingMeta> = {
         ) === true,
     },
   },
+  auto_transcribe_new_uploads: {
+    label: "Transcribe new uploads automatically",
+    help: "Queue a caption job for every video as it publishes, so creators do not have to request captions one video at a time. Skips videos that already have captions. Needs Automatic transcription above; uses Whisper compute for every upload.",
+    control: "toggle",
+    page: "vod",
+    section: "transcription",
+    parent: "transcription_enabled",
+  },
   // VOD / Downloads
   downloads_enabled: {
     label: "Video downloads",

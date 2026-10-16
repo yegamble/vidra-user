@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useSession } from "@/components/auth/AuthProvider";
 import { ChangeEmailSection } from "@/components/auth/ChangeEmailSection";
 import { ChangePasswordSection } from "@/components/auth/ChangePasswordSection";
+import { RecognisedDevicesSection } from "@/components/auth/RecognisedDevicesSection";
 import { SecureAccountSection } from "@/components/auth/SecureAccountSection";
 import { QrCode } from "@/components/QrCode";
 import { useSoftwareBrandHidden } from "@/components/SoftwareBrandProvider";
@@ -62,6 +63,7 @@ export function SecuritySettingsView({
       {/* Password sits next to the devices control because they are the same
           decision: changing the password signs the other devices out. */}
       <ChangePasswordSection />
+      <RecognisedDevicesSection />
       <SignOutEverywhereSection logoutEverywhere={logoutEverywhere} />
     </div>
   );

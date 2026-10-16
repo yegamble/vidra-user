@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { useSession } from "@/components/auth/AuthProvider";
 import { RemoteCommentDeliveryBadge } from "@/components/RemoteCommentDeliveryBadge";
 import { RemoteVideoThread } from "@/components/RemoteVideoThread";
+import { UserText } from "@/components/UserText";
 import { Alert } from "@/components/ui/Alert";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
@@ -321,7 +322,7 @@ function AuthoredCommentItem({
             </div>
           </form>
         ) : (
-          <p className="whitespace-pre-wrap text-sm leading-relaxed text-fg">{comment.body}</p>
+          <UserText variant="comment" mentions={false} text={comment.body} className="text-sm leading-relaxed text-fg" />
         )}
 
         {/* On a failed delivery, name the reason in words too (not only the

@@ -80,6 +80,10 @@ vi.mock("@/lib/api/playback-token-store", () => ({
   setPlaybackToken: () => {},
 }));
 
+// The comments reviewer gate (shared permissions seam) is not under test here.
+vi.mock("@/lib/use-video-action-permissions", () => ({
+  useVideoActionPermissions: () => ({ canManage: false }),
+}));
 vi.mock("@/lib/api", () => {
   class MockApiError extends Error {
     status = 500;

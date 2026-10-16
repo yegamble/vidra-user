@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   formatBytes,
+  formatCountdown,
   formatCount,
   formatDateTime,
   formatDuration,
@@ -10,6 +11,7 @@ import {
   formatVersion,
   pluralize,
   relativeTime,
+  createFormat,
 } from "./format";
 
 describe("formatVersion", () => {
@@ -149,5 +151,84 @@ describe("formatMonthYear", () => {
 
   it("returns empty for an unparseable timestamp", () => {
     expect(formatMonthYear("not-a-date")).toBe("");
+  });
+});
+
+describe("formatCountdown", () => {
+  const now = new Date("2026-10-12T12:00:00Z");
+  const at = (secs: number) => new Date(now.getTime() + secs * 1000).toISOString();
+  it("counts down in the largest whole unit", () => {
+    expect(formatCountdown(at(30), now)).toBe("in 30 seconds");
+    expect(formatCountdown(at(12 * 60 + 5), now)).toBe("in 12 minutes");
+    expect(formatCountdown(at(3 * 3600 + 59), now)).toBe("in 3 hours");
+    expect(formatCountdown(at(2 * 86400 + 3600), now)).toBe("in 2 days");
+  });
+  it("reads a due or overdue start as 'Starting soon', never a negative", () => {
+    expect(formatCountdown(at(0), now)).toBe("Starting soon");
+    expect(formatCountdown(at(-600), now)).toBe("Starting soon");
+  });
+  it("is empty for an unparseable value", () => {
+    expect(formatCountdown("nope", now)).toBe("");
+  });
+});
+
+describe("locale-aware formatting", () => {
+  const now = new Date("2026-10-12T12:00:00Z");
+  const ago = (secs: number) => new Date(now.getTime() - secs * 1000).toISOString();
+
+  it("en output is pinned: explicit en, en-GB and no locale agree", () => {
+    for (const l of [undefined, "en", "en-GB"]) {
+      expect(formatCount(942, l)).toBe("942");
+      expect(formatCount(1234, l)).toBe("1.2K");
+      expect(formatCount(3_400_000, l)).toBe("3.4M");
+      expect(relativeTime(ago(2), now, l)).toBe("just now");
+      expect(relativeTime(ago(300), now, l)).toBe("5m ago");
+      expect(relativeTime(ago(86400 * 3), now, l)).toBe("3d ago");
+      expect(relativeTime(ago(31557600 * 2), now, l)).toBe("2y ago");
+    }
+    expect(formatMonthYear("2026-07-10T00:00:00Z", "en")).toBe("July 2026");
+    expect(formatDateTime("2026-07-10T14:30:00Z", "en-US")).toMatch(/^Jul 10, 2026, \d+:30\s?[AP]M$/);
+  });
+
+  it("fr output uses fr words and separators", () => {
+    expect(formatCount(1234, "fr")).toMatch(/^1,2\s?k$/);
+    expect(formatCount(942, "fr")).toBe("942");
+    expect(relativeTime(ago(2), now, "fr")).toBe("maintenant");
+    expect(relativeTime(ago(300), now, "fr")).toMatch(/^il y a 5\s?min/);
+    expect(relativeTime(ago(86400 * 3), now, "fr")).toMatch(/^il y a 3\s?j/);
+    expect(formatMonthYear("2026-07-10T12:00:00Z", "fr")).toBe("juillet 2026");
+    expect(formatDateTime("2026-07-10T12:00:00Z", "fr")).toMatch(/^10 juil\.? 2026/);
+  });
+
+  it("createFormat binds the locale", () => {
+    expect(createFormat("fr").relativeTime(ago(2), now)).toBe("maintenant");
+    expect(createFormat("en").formatCount(1234)).toBe("1.2K");
+  });
+});
+
+describe("date formatters and the viewer's own locale", () => {
+  it("English passes no locale (follows the viewer); fr pins fr", async () => {
+    vi.resetModules(); // cold Intl cache, so every construction is observed
+    const Real = Intl.DateTimeFormat;
+    const seen: unknown[] = [];
+    class Spy extends Real {
+      constructor(locale?: Intl.LocalesArgument, opts?: Intl.DateTimeFormatOptions) {
+        super(locale, opts);
+        seen.push(locale);
+      }
+    }
+    Intl.DateTimeFormat = Spy as unknown as typeof Intl.DateTimeFormat;
+    try {
+      const fresh = await import("./format");
+      fresh.formatDateTime("2026-07-10T12:00:00Z", "en");
+      fresh.formatMonthYear("2026-07-10T12:00:00Z", "en-GB");
+      expect(seen).toEqual([undefined, undefined]);
+      seen.length = 0;
+      fresh.formatDateTime("2026-07-10T12:00:00Z", "fr");
+      fresh.formatMonthYear("2026-07-10T12:00:00Z", "fr");
+      expect(seen).toEqual(["fr", "fr"]);
+    } finally {
+      Intl.DateTimeFormat = Real;
+    }
   });
 });

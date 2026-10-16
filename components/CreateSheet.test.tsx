@@ -37,6 +37,7 @@ vi.mock("@/lib/api", () => ({
 
 import { setInstanceFeaturesForTests } from "@/lib/instance-features";
 
+import { I18nProvider } from "./I18nProvider";
 import { CreateSheet } from "./CreateSheet";
 
 function features(overrides: Record<string, unknown> = {}) {
@@ -105,5 +106,16 @@ describe("CreateSheet", () => {
     setInstanceFeaturesForTests(features());
     render(<CreateSheet open onClose={() => {}} />);
     expect(screen.getByRole("link", { name: /Go live/ })).toBeTruthy();
+  });
+
+  it("renders the provided catalog, en for a missing key", () => {
+    setInstanceFeaturesForTests(features());
+    render(
+      <I18nProvider locale="fr" messages={{ "create.studio.title": "Ouvrir le Studio" }}>
+        <CreateSheet open onClose={() => {}} />
+      </I18nProvider>,
+    );
+    expect(screen.getByRole("link", { name: /Ouvrir le Studio/ })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Upload video/ })).toBeTruthy();
   });
 });

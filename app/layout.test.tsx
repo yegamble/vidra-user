@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { InstanceConfigSnapshot } from "@/lib/instance-config.server";
 
-const mocks = vi.hoisted(() => ({ getInstanceConfig: vi.fn() }));
+const mocks = vi.hoisted(() => ({ getInstanceConfig: vi.fn(), localeCookie: undefined as string | undefined }));
 
 vi.mock("@/lib/instance-config.server", () => ({
   getInstanceConfig: mocks.getInstanceConfig,
@@ -11,11 +11,16 @@ vi.mock("@/lib/instance-config.server", () => ({
 // proxy.ts sets x-nonce per request; the enforced CSP blocks scripts without it.
 vi.mock("next/headers", () => ({
   headers: async () => new Headers({ "x-nonce": "n0nce" }),
+  cookies: async () => ({
+    get: (name: string) =>
+      name === "vidra_locale" && mocks.localeCookie ? { name, value: mocks.localeCookie } : undefined,
+  }),
 }));
 
 import RootLayout, { dynamic } from "./layout";
 import Script from "next/script";
 
+import { I18nProvider } from "@/components/I18nProvider";
 import { InstanceBanner } from "@/components/InstanceBanner";
 import { InstanceCustomization } from "@/components/InstanceCustomization";
 import { SoftwareBrandProvider } from "@/components/SoftwareBrandProvider";
@@ -39,8 +44,9 @@ function findElement(node: any, type: unknown): any {
   return findElement(node.props?.children, type);
 }
 
-async function renderWith(instance: InstanceConfigSnapshot | null) {
+async function renderWith(instance: InstanceConfigSnapshot | null, localeCookie?: string) {
   mocks.getInstanceConfig.mockResolvedValue(instance);
+  mocks.localeCookie = localeCookie;
   return RootLayout({ children: null });
 }
 
@@ -101,5 +107,29 @@ describe("RootLayout white-label wiring", () => {
     // every deploy (measured: 55 of 56 prerendered documents carried the
     // software name). force-dynamic is what keeps that from happening.
     expect(dynamic).toBe("force-dynamic");
+  });
+});
+
+// The document language is resolved per request (lib/i18n/locale.server.ts) and
+// stamped on <html> — screen readers pick their voice from it, and `dir` flips
+// the whole layout for right-to-left scripts.
+describe("RootLayout locale wiring", () => {
+  it("is lang=en dir=ltr with no locale signal, and hands en to the client provider", async () => {
+    const html = await renderWith(null);
+    expect(html.props.lang).toBe("en");
+    expect(html.props.dir).toBe("ltr");
+    const provider = findElement(html, I18nProvider);
+    expect(provider, "the layout must render an I18nProvider").not.toBeNull();
+    expect(provider.props.locale).toBe("en");
+    expect(provider.props.messages).toEqual({});
+  });
+
+  it("follows the vidra_locale cookie for lang, the provider and the server-rendered skip link", async () => {
+    const html = await renderWith(null, "fr");
+    expect(html.props.lang).toBe("fr");
+    const provider = findElement(html, I18nProvider);
+    expect(provider.props.locale).toBe("fr");
+    expect(provider.props.messages["a11y.skipToContent"]).toBe("Aller au contenu");
+    expect(findElement(html, "a").props.children).toBe("Aller au contenu");
   });
 });

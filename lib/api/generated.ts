@@ -335,7 +335,7 @@ export interface paths {
         put?: never;
         /**
          * Log in
-         * @description Verifies credentials and returns an access token. The account is identified by EXACTLY ONE of `identifier` (an email address or a username) or the legacy `email` field. When an `identifier` matches both one account's email and another account's username, the EMAIL always wins — the owner of an address is the only account that string can reach, so a lookalike username can never shadow someone else's sign-in. Unknown account and wrong password are reported identically (401) to prevent account enumeration. Browser cookie mode also sets `vidra_video_access`, an HttpOnly, SameSite=Lax access-token cookie scoped to `/api/v1/videos/`, Secure on HTTPS, with the access-token TTL. It authorizes only private or unpublished video GET/HEAD reads, never mutations; public playback ignores it. Refresh renews it; logout, logout-all and invalid-cookie refresh clear it. With `cookie_mode: true` (or an existing `vidra_refresh` cookie) the refresh token is delivered as an httpOnly `vidra_refresh` cookie (Path=/api/v1/auth, SameSite=Lax, Secure on https instances) instead of in the response body. When the account has two-factor authentication enabled, valid credentials return `{mfa_required: true, mfa_token}` with NO session tokens — complete the login at POST /api/v1/auth/mfa/challenge within 5 minutes.
+         * @description Verifies credentials and returns an access token. The account is identified by EXACTLY ONE of `identifier` (an email address or a username) or the legacy `email` field. When an `identifier` matches both one account's email and another account's username, the EMAIL always wins — the owner of an address is the only account that string can reach, so a lookalike username can never shadow someone else's sign-in. Unknown account and wrong password are reported identically (401) to prevent account enumeration. So is a temporarily LOCKED account: after repeated failures from one network prefix (IPv4 /24, IPv6 /48), or a larger number across all networks, sign-in is refused with the same 401 body, the same status and no Retry-After — even with the right password — until the backoff expires or an administrator clears it. Browser cookie mode also sets `vidra_video_access`, an HttpOnly, SameSite=Lax access-token cookie scoped to `/api/v1/videos/`, Secure on HTTPS, with the access-token TTL. It authorizes only private or unpublished video GET/HEAD reads, never mutations; public playback ignores it. Refresh renews it; logout, logout-all and invalid-cookie refresh clear it. With `cookie_mode: true` (or an existing `vidra_refresh` cookie) the refresh token is delivered as an httpOnly `vidra_refresh` cookie (Path=/api/v1/auth, SameSite=Lax, Secure on https instances) instead of in the response body. When the account has two-factor authentication enabled, valid credentials return `{mfa_required: true, mfa_token}` with NO session tokens — complete the login at POST /api/v1/auth/mfa/challenge within 5 minutes.
          */
         post: operations["login"];
         delete?: never;
@@ -696,6 +696,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List recognised devices
+         * @description The browsers and devices the account has signed in from, most recent first, and whether the new-device sign-in email is on. A device is a long-lived random `vidra_device` cookie (httpOnly, Path=/api/v1/auth) bound to the browser family and OS; only a hash and a coarse label such as "Chrome on macOS" are stored, never an IP address. `current` marks the device making this request.
+         */
+        get: operations["listRecognisedDevices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/devices/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Forget a recognised device
+         * @description Removes the record, so the next sign-in from that device is treated as new (and mails the account, unless that is turned off). It does NOT end sessions: sessions carry no device link, so use sign out of all devices for that. Audited as `auth.device.forget`.
+         */
+        delete: operations["forgetRecognisedDevice"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/security-prefs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Turn the new-device sign-in email on or off
+         * @description The email is on by default. At most one such email is sent to an account per hour, and an account with no recognised device yet never gets one (its first sign-in just records).
+         */
+        patch: operations["updateSecurityPrefs"];
+        trace?: never;
+    };
     "/api/v1/auth/mfa": {
         parameters: {
             query?: never;
@@ -837,7 +897,7 @@ export interface paths {
          *
          *     Two callbacks do NOT end in a session. When the resolved account has two-factor enabled, no session is issued: the challenge token is set as the httpOnly `vidra_mfa_pending` cookie and the redirect carries `?mfa=required`, to be finished at POST /api/v1/auth/mfa/challenge. And when a session is ALREADY signed in in this browser, the callback is treated as a request to connect that identity to THAT account (`?link=<provider>`), or refused with `?oauth_error=identity_belongs_to_another_account` — never an account switch. (A callback started from `/link/start` uses `?link_error=` instead: the failure key is the one the ORIGIN page renders, and a refusal the landing page cannot show is a silent one.)
          *
-         *     User-actionable failures redirect with an `oauth_error` query code (`access_denied`, `email_conflict`, `email_required`, `account_disabled`, `conflict`); protocol violations (missing/forged/ expired state, nonce mismatch) are 400.
+         *     User-actionable failures redirect with an `oauth_error` query code (`access_denied`, `email_conflict`, `email_required`, `account_disabled`, `conflict`, and for a provider that does not create accounts `signup_disabled` or `email_domain_not_allowed` — the latter also when the address in an allowed domain is unverified); protocol violations (missing/forged/ expired state, nonce mismatch) are 400.
          */
         get: operations["completeOAuth"];
         put?: never;
@@ -1229,6 +1289,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/users/{username}/videos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List an account's public videos
+         * @description The profile Videos tab: an account's public, published videos across ALL of its channels, newest first, paginated with a `total`. Gated like GET /users/{username}/profile (a private, inactive or unknown profile is 404; a signed-in owner may preview their own). Carries the same visibility filters as GET /channels/{handle}/videos for a non-manager: no private, unlisted, draft, quarantined or moderator-blocked video, the signed-in viewer's mute/block clause, and the viewer's sensitive-content setting.
+         */
+        get: operations["listUserVideos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users/{id}/donation-addresses": {
         parameters: {
             query?: never;
@@ -1327,6 +1407,46 @@ export interface paths {
          * @description Accepts the JSON archive produced by the account export and re-creates the SAFE subsets for the caller: profile fields (display name, bio), playlists (each item matched by video id and added only when that video exists locally), follows of local channels (matched by handle), and notification preferences. Everything else in the archive — channels, videos, comments, saved videos, watch history — is NOT re-created in v1 and is reported per section in the returned summary's skipped_sections. The import is additive: it never deletes existing data, follows are idempotent, and re-importing creates duplicate playlists. The request body is bounded by the instance's HTTP body limit (default 8 MB). 403 feature_disabled when the operator has turned archive imports off (user_import_enabled).
          */
         post: operations["importAccountArchive"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/import/peertube/follows/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Status of a background follow import
+         * @description Counts per outcome for the follow import started by POST /api/v1/me/import/peertube (its follows_job_id). Only the caller's own import is visible; any other id is 404.
+         */
+        get: operations["getPeerTubeFollowImport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/import/peertube": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import the metadata of a PeerTube user-export archive
+         * @description Accepts a PeerTube (>= 6.1) user-export zip as multipart field `archive` and imports its METADATA into the caller's own account: channels (created when the handle is free and valid here; a handle the caller already owns counts as existing, another owner's is skipped), regular playlists (matched by title, so a re-import never duplicates; each exported item is resolved WITHOUT network access to a video this instance already holds - by uuid (its own, or an imported video's PeerTube source uuid) or /v/ short code - and added through the playlist service when that video is public, published and not blocked; everything else is counted in playlist_items_skipped with its reason in skipped_sections, and a re-import fills items into an existing playlist without duplicating), the autoplay-next setting, and channel avatars/banners referenced by channels.json archiveFiles (only the referenced image entries are read; each goes through the avatar upload type allowlist plus content sniffing, the 8 MiB cap, dimension bounds and the instance scan policy, and never replaces an existing image). Videos, likes, dislikes, comments, watch history, blocklists and followers are NOT imported yet and are counted under skipped_sections. The accounts in following.json (up to 1000) are queued and followed in the background through the same path as POST /me/remote-follows; the response carries follows_job_id. Synchronous: the work is bounded and touches no network or media. The body cap for this route is PEERTUBE_IMPORT_MAX_SIZE, which defaults to the global HTTP body limit (8 MB), enough for an export trimmed to its peertube/*.json entries; an instance that raises it also accepts the full export including its video files. A Content-Length is required (411 without one). The upload is streamed to a temporary file that is always removed, and only the peertube/*.json entries are ever read; media entries are never opened. The archive is refused whole on traversal, symlink, encrypted, duplicate or oversize JSON entries, or an oversized or ambiguous central directory (more than 20000 entries or 4 MiB). An upload that stops sending for 60 s is abandoned with 408. 403 feature_disabled when user_import_enabled is off. At most 3 imports per user per hour. At most 50 channels may be owned after an import, existing ones included. If the import stops part-way on a server error, the answer is the standard error envelope with an added `summary` (PeerTubeImportSummary) of what was done first; rows already created are kept and re-uploading the same archive is safe.
+         */
+        post: operations["importPeerTubeArchive"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1517,6 +1637,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/feed-token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Whether the caller has a private subscriptions-feed token
+         * @description Reports whether a private feed token exists and when it was issued. The token itself is stored only as a hash and is never returned here; it is shown once, by POST.
+         */
+        get: operations["getFeedToken"];
+        put?: never;
+        /**
+         * Create or rotate the private subscriptions-feed token
+         * @description Mints a fresh random token, replacing any previous one (the old feed URL stops working immediately), and returns it together with the ready-made feed URL (GET /feeds/subscriptions.xml?token=…). This is the only time the raw token is visible. The token grants read access to that one feed and nothing else.
+         */
+        post: operations["rotateFeedToken"];
+        /**
+         * Revoke the private subscriptions-feed token
+         * @description Deletes the token (idempotent); the feed URL then answers 404.
+         */
+        delete: operations["revokeFeedToken"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/subscriptions/videos": {
         parameters: {
             query?: never;
@@ -1531,6 +1679,66 @@ export interface paths {
         get: operations["listSubscriptionVideos"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/{handle}/playlists": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a channel's playlists
+         * @description The channel page's Playlists tab, newest first, paginated with a `total`. Anyone sees the channel's public playlists; a playlist's owner (bearer token) also sees their own unlisted and private ones. Other users and anonymous callers never see those.
+         */
+        get: operations["listChannelPlaylists"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/videos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the caller's own videos (studio "My videos")
+         * @description Every video on every channel the caller OWNS, in any state or privacy (drafts and private videos included), newest first by default, with discovery-card data. Optional filters combine with AND: q (case- insensitive title substring; LIKE wildcards are literal), privacy, state, and channel_id (one of the caller's channels; another account's channel id simply matches nothing, so the result is empty with total 0, never that account's videos). Unknown privacy/state values and a malformed channel_id are 422. Paginated via limit (1-100, default 20) and offset, and reports the filtered total.
+         */
+        get: operations["listMyVideos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/videos/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bulk delete or change the privacy of the caller's own videos
+         * @description Applies one action to up to 100 of the caller's own videos. Every id must be a video the caller owns: if any id is foreign OR does not exist the whole request answers 404 "video not found" (identically, so it is no existence oracle) and NOTHING is changed. Each item then runs the same pipeline as the single-video route (DELETE /videos/{id} or PATCH /videos/{id} with `privacy`), so federation, the search outbox, storage cleanup, edge purge and audit all fire per item. Items are independent: one that fails (for example `set_privacy` to `password` on a video with no stored password -> 400, exactly as the single route) is reported in `results` and does not stop the others. `privacy` is validated like the single PATCH, including `internal`. Only the caller's own videos are reachable: staff and channel collaborators get no extra reach here.
+         */
+        post: operations["bulkMyVideos"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1767,7 +1975,7 @@ export interface paths {
         };
         /**
          * Get a video by id
-         * @description Public and unlisted videos are returned to anyone with the id. A private or non-public-state local video is returned to its owner and to an authenticated moderator/admin, allowing the Manage view to load metadata for private, scheduled, quarantined, and blocked videos; to ordinary non-owners it is reported as 404 so its existence is not revealed. This moderator/admin exception applies only to this metadata detail endpoint and does not widen media or playback routes. A password-protected video (privacy=password, CORE-17) returns 401 with error code "password_required" to a caller who is neither the owner nor a moderator/admin and is not presenting a valid playback token (a plain unknown id is still 404); the caller then unlocks via POST /videos/{id}/unlock and retries with the token (Bearer or ?pt=). The response includes probed technical metadata (duration_seconds, width, height) when a media probe has recorded it.
+         * @description Public and unlisted videos are returned to anyone with the id. A private or non-public-state local video is returned to its owner and to an authenticated moderator/admin, allowing the Manage view to load metadata for private, scheduled, quarantined, and blocked videos; to ordinary non-owners it is reported as 404 so its existence is not revealed. This moderator/admin exception applies only to this metadata detail endpoint and does not widen media or playback routes. A password-protected video (privacy=password, CORE-17) returns 401 with error code "password_required" to a caller who is neither the owner nor a moderator/admin and is not presenting a valid playback token (a plain unknown id is still 404); the caller then unlocks via POST /videos/{id}/unlock and retries with the token (Bearer or ?pt=). An internal video (privacy=internal) is returned to any signed-in account and answers 401 with error code "sign_in_required" to an anonymous caller; the same rule gates its media, downloads and embed policy. The response includes probed technical metadata (duration_seconds, width, height) when a media probe has recorded it.
          */
         get: operations["getVideo"];
         put?: never;
@@ -1781,7 +1989,7 @@ export interface paths {
         head?: never;
         /**
          * Update a video
-         * @description Partial update of a video's metadata (title, description, privacy and the other fields in UpdateVideoRequest). The owner may update their own video; moderators and admins may manage any local video. An ordinary non-owner or unknown id is reported as 404 so a private video's existence is not leaked. The handle is immutable.
+         * @description Partial update of a video's metadata (title, description, privacy and the other fields in UpdateVideoRequest). The owner may update their own video; moderators and admins may manage any local video. An ordinary non-owner or unknown id is reported as 404 so a private video's existence is not leaked. The handle is immutable. Setting channel_id moves the video to another channel with the same owner that the caller manages; a missing, unmanaged or differently-owned target is reported as 404 (these are indistinguishable).
          */
         patch: operations["updateVideo"];
         trace?: never;
@@ -1798,6 +2006,46 @@ export interface paths {
          * @description Engagement totals (views, likes, dislikes, comments) plus a 30-day daily-views series (zero-filled, oldest first, UTC days) for one video. Owner only: a non-owner or unknown id is reported as 404 so the video's existence is not leaked.
          */
         get: operations["getVideoStats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/videos/{id}/playback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Anonymous watch-time beacon
+         * @description One periodic playback sample (about every 10 s while playing). Folded into the video's daily aggregates; no IP address, User-Agent, session or viewer id is stored. Device class and OS family are bucketed from the User-Agent server-side and the raw value is discarded. Rate limited per client and video; the owner's own plays are ignored; a play may be marked started once per client per 10 minutes. 204 on success, 404 for a video that is not published or visible.
+         */
+        post: operations["recordVideoPlayback"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/videos/{id}/playback-stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Watch-time, retention and device analytics for a video (owner or channel editor)
+         * @description Last 30 days of playback aggregates: plays, watch seconds, average view duration, a 20-bucket audience retention curve (omitted when the video duration is unknown or nothing was watched), a device-class and OS split and a daily series. Country is not available (no GeoIP in core). A non-owner/non-editor or unknown id is reported as 404.
+         */
+        get: operations["getVideoPlaybackStats"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2348,6 +2596,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/videos/comments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The review queue — comments on the videos you manage
+         * @description Comments on every video whose channel the caller owns or is an editor member of, newest first, each with its video's title. held=true lists only comments awaiting approval (approve with POST /videos/{id}/comments/{commentId}/approve, reject with DELETE /comments/{id}), held=false only published ones; omitted lists both. The caller's own mutes do not filter this moderation surface.
+         */
+        get: operations["listManagedVideoComments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/uploads": {
         parameters: {
             query?: never;
@@ -2657,15 +2925,35 @@ export interface paths {
         };
         /**
          * List a video's comments
-         * @description Returns a public, published video's comments newest-first, each with its author's identity. Auth is optional: an authenticated viewer's muted accounts are hidden from the list (mutes are per-viewer), while an anonymous viewer sees all comments. A non-public/unpublished or unknown video is 404. Paginated via limit (1–100, default 20) and offset.
+         * @description Returns a public, published video's comments newest-first, each with its author's identity. Auth is optional: an authenticated viewer's muted accounts are hidden from the list (mutes are per-viewer), while an anonymous viewer sees all comments. A non-public/unpublished or unknown video is 404. Paginated via limit (1–100, default 20) and offset. Held comments appear only for their author and the video's reviewers (owner, editor members, staff), in both the page and total.
          */
         get: operations["listComments"];
         put?: never;
         /**
          * Post a comment on a video
-         * @description Adds a comment by the authenticated user to a public, published video. Posting requires the instance-wide comments_enabled setting AND the video's comments_policy to be "enabled" (403 feature_disabled otherwise, config-parity W9); reading comments stays open either way. Best-effort notifications follow: the video's owner gets a "comment" notification, and when parent_id names another user's comment its author gets a "comment_reply" one. A user who is both (the owner replying under their own video) receives comment_reply only — one reply, one notification.
+         * @description Adds a comment by the authenticated user to a public, published video. Posting requires the instance-wide comments_enabled setting AND the video's comments_policy to not be "disabled" (403 feature_disabled otherwise, config-parity W9); reading comments stays open either way. Best-effort notifications follow: the video's owner gets a "comment" notification, and when parent_id names another user's comment its author gets a "comment_reply" one. A user who is both (the owner replying under their own video) receives comment_reply only — one reply, one notification. On a "requires_approval" video a non-reviewer's comment is held (held_for_review): seen only by its author and the reviewers, not federated, and announcing nothing (comment, comment_reply, mentions) until approved — only the video's managers get a "comment_held" notification; a held parent is a 422 like an unknown one.
          */
         post: operations["createComment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/videos/{id}/comments/{commentId}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve a comment held for review
+         * @description Publishes a held comment: reviewers only (owner, editor members, staff; else 403), and the comment must be on this video (else 404). Idempotent — only the first approval federates it, raises the comment/comment_reply notifications (only while the video is public; never to an approving owner) and is audited (content.comment.approve). Reject with DELETE /comments/{id}. updated_at names the version the reviewer saw: a held comment edited since answers 409, unpublished.
+         */
+        post: operations["approveComment"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2684,14 +2972,14 @@ export interface paths {
         post?: never;
         /**
          * Delete a comment
-         * @description Deletes a comment. The comment's author may always delete it; a moderator/admin may delete anyone's. An unknown id is 404; a non-author non-moderator is 403.
+         * @description Deletes a comment. The comment's author may always delete it; a moderator/admin may delete anyone's; the video's owner or an editor member may delete a comment held for review (rejecting it, audited as content.comment.reject). An unknown id is 404; anyone else is 403.
          */
         delete: operations["deleteComment"];
         options?: never;
         head?: never;
         /**
          * Edit a comment
-         * @description Edits the caller's own comment body. Only the author may edit (moderators delete, not edit): another user's comment is 403, an unknown id is 404, and a blank or too-long body is 422. Bumps updated_at so `edited` becomes true.
+         * @description Edits the caller's own comment body. Only the author may edit (moderators delete, not edit): another user's comment is 403, an unknown id is 404, and a blank or too-long body is 422. Bumps updated_at so `edited` becomes true. On a requires_approval video, a changed body from anyone but the video's reviewers sends the comment back to held_for_review until re-approved.
          */
         patch: operations["updateComment"];
         trace?: never;
@@ -2706,7 +2994,7 @@ export interface paths {
         get?: never;
         /**
          * Pin a comment
-         * @description Pins a top-level comment as its video's single pinned comment (a YouTube-style creator pin). The caller must be able to manage the comment's video (its channel owner or an editor) or be a moderator/admin. Pinning replaces any existing pin. Only a top-level, non-tombstoned comment can be pinned (422 otherwise). This is local metadata — it never edits the comment body and never federates.
+         * @description Pins a top-level comment as its video's single pinned comment (a YouTube-style creator pin). The caller must be able to manage the comment's video (its channel owner or an editor) or be a moderator/admin. Pinning replaces any existing pin. Only a top-level, non-tombstoned comment that is not held for review can be pinned (422 otherwise). This is local metadata — it never edits the comment body and never federates.
          */
         put: operations["pinComment"];
         post?: never;
@@ -2924,6 +3212,90 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/videos/{id}/give-ownership": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Offer a video to another local user
+         * @description Starts an ownership change (PeerTube's "give ownership"): the named local account is asked to take over the video and answers from GET /me/video-ownership-changes. Only the video's owner may give it — not a channel editor, not staff (a deliberate departure from PeerTube, where staff may give on an owner's behalf). The recipient is notified (video_ownership_request) unless they muted the caller; the request stands either way. Nothing moves until the recipient accepts, and the giver can withdraw it meanwhile (DELETE). A pending request expires after 30 days, or as soon as the giver no longer owns the video. The checks that do not depend on the recipient (ownership, upload state, a pending request) are answered before the username is looked at. Rate limited like every other API write.
+         */
+        post: operations["giveVideoOwnership"];
+        /**
+         * Withdraw your pending offer of a video
+         * @description Cancels the caller's pending ownership change for this video; the recipient's list shows it as no longer available (expired). Only the giver may cancel, and only while it is pending. Like a refusal, a withdrawal starts the 24-hour cooldown before the caller can offer the same recipient another video. Anything else — an unknown video, someone else's offer, nothing pending — is the same 404.
+         */
+        delete: operations["cancelVideoOwnershipChange"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/video-ownership-changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the ownership changes offered to you
+         * @description The video ownership changes addressed to the caller, newest first, whatever their status: pending ones are answered with the accept and refuse routes; answered ones and ones no longer available (expired) stay as history. Paginated via limit (1–100, default 20) and offset.
+         */
+        get: operations["listVideoOwnershipChanges"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/video-ownership-changes/{id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept a video offered to you
+         * @description Accepts a pending ownership change addressed to the caller by moving the video into one of the caller's channels. The video's stored bytes must fit the caller's storage quota (and daily upload quota), exactly as an upload would. The move happens in the same statement that marks the request accepted, and only while the giver still owns the video and nothing about its media is still being uploaded or processed. It has the side effects of any channel move: search reindex, a federation Update to the new channel's followers and a Delete to followers of only the old one, and a content.video.move audit event.
+         */
+        post: operations["acceptVideoOwnershipChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/video-ownership-changes/{id}/refuse": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refuse a video offered to you
+         * @description Refuses a pending ownership change addressed to the caller. The video stays where it is, and its owner may offer it again.
+         */
+        post: operations["refuseVideoOwnershipChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/videos/{id}/watch-progress": {
         parameters: {
             query?: never;
@@ -3037,7 +3409,7 @@ export interface paths {
         };
         /**
          * Get the caller's notification preferences
-         * @description Returns the caller's per-type notification switchboard: every known notification type (caption_ready, comment, comment_reply, follow, message, new_report, new_video, report_resolved, video_blocked, video_rejected, video_unblocked) mapped to whether it is delivered. Types never configured default to enabled. The new_report type is only ever delivered to admins/moderators, but the switch is visible to everyone.
+         * @description Returns the caller's per-type notification switchboard: every known notification type (caption_ready, comment, comment_held, comment_mention, comment_reply, federation_follower_request, follow, message, new_registration_request, new_report, new_video, report_message, report_resolved, upload_quarantined, video_blocked, video_ownership_request, video_rejected, video_unblocked) mapped to whether it is delivered. Types never configured default to enabled. The new_report, new_registration_request, upload_quarantined and federation_follower_request types are only ever delivered to staff (the last to admins only), but the switches are visible to everyone. Alongside it, `email` maps each type that can ALSO be delivered by email (comment, comment_reply, new_video) to whether it is; email is opt-in, so a type never configured is false.
          */
         get: operations["getNotificationPrefs"];
         put?: never;
@@ -3047,9 +3419,33 @@ export interface paths {
         head?: never;
         /**
          * Update the caller's notification preferences
-         * @description Applies a partial preference update: only the types present in the body are changed. Disabling a type suppresses new notifications of that type at creation time (existing notifications are unaffected). An unknown type is 422 and nothing is written. Returns the full updated map.
+         * @description Applies a partial preference update: only the types present in the body are changed, in `prefs` (in-app) and/or `email`. Disabling a type suppresses new notifications of that type at creation time (existing notifications are unaffected). Email rides the in-app notification: it is queued only when that notification is created, so an in-app type that is off sends no email either, and it is delivered in the background, only to a verified address, while the instance has mail configured. An unknown type, or an email switch for a type without email delivery, is 422 and nothing is written. Returns the full updated maps.
          */
         patch: operations["updateNotificationPrefs"];
+        trace?: never;
+    };
+    "/api/v1/me/content-preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the caller's content preferences
+         * @description The signed-in viewer's per-flag sensitive-content policy overrides, layered on their own sensitive_content_policy (else the instance policy) and their preferred feed languages. A flag with no entry inherits that base policy. Always 200.
+         */
+        get: operations["getContentPreferences"];
+        /**
+         * Update the caller's content preferences
+         * @description Merge-update: sensitive_flag_policies replaces the overrides wholesale (a flag set to an empty string, or omitted, inherits the base policy) and preferred_languages replaces the language list; an omitted field is kept. Unknown flag, policy or language, or more than 10 languages -> 400.
+         */
+        put: operations["updateContentPreferences"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/me/player-settings": {
@@ -3187,6 +3583,26 @@ export interface paths {
          * @description Removes a video from a playlist owned by the caller (idempotent).
          */
         delete: operations["removePlaylistItem"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/playlists/{id}/videos/{videoId}/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move one video within a playlist
+         * @description Moves one item of a playlist owned by the caller to directly after another item (`after_video_id`), or to the front when `after_video_id` is null or omitted, and renumbers the playlist in one atomic step. Unlike PUT /playlists/{id}/videos it needs no copy of the full item list, so a client holding one page of a long playlist can reorder it. The anchor is an item, not an index, so it stays correct when items the client cannot see (a video that went private or unpublished) sit between the visible ones. Concurrent moves are serialized, never lost.
+         */
+        post: operations["movePlaylistItem"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -3340,6 +3756,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the caller's own abuse reports
+         * @description "My reports": the reports the caller filed, most recently active first (filing, resolution, or the latest thread message), each with its status, target and thread activity. The moderator's internal note is never included. A video title is shown only while that video is still public, published and not blocked.
+         */
+        get: operations["listMyReports"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/reports/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get one of the caller's own abuse reports
+         * @description One report the caller filed. Anyone else's report (staff included — this is the reporter's view) is the same 404 as an unknown one.
+         */
+        get: operations["getMyReport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reports/{id}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read a report's message thread
+         * @description The reporter↔staff conversation, oldest first. Open to the report's LOCAL reporter and to admins/moderators; anyone else gets the same 404 as an unknown report. A remote Flag report is readable by staff with can_reply=false.
+         */
+        get: operations["listReportMessages"];
+        put?: never;
+        /**
+         * Post to a report's message thread
+         * @description Same access as reading. Notifies the other side (report_message, never the body); a staff message is audited by id. 409 on a remote Flag report; posting is limited per user (20/hour by default).
+         */
+        post: operations["createReportMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/search/suggestion-bans": {
         parameters: {
             query?: never;
@@ -3428,6 +3908,110 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/watched-word-lists": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List instance watched-word lists
+         * @description Instance named watched-word lists, default list first, each with its word count (not its words). Paginated via limit (1-100, default 20) and offset.
+         */
+        get: operations["listAdminWatchedWordLists"];
+        put?: never;
+        /**
+         * Create a instance watched-word list
+         * @description Creates a named list with an optional word set (at most 500 words, each at most 100 characters). action is "flag" (default; record a match for review) or "hold" (also hold the comment for approval through the held-for-review queue). Names are unique per scope, case-insensitively.
+         */
+        post: operations["createAdminWatchedWordList"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/watched-word-lists/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a instance watched-word list
+         * @description One list with its words (the default list's words are paged via the flat watched-words endpoints and omitted here). A list in the other scope is 404.
+         */
+        get: operations["getAdminWatchedWordList"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a instance watched-word list
+         * @description Deletes the list and its terms; existing matches keep their snapshot. The default list cannot be deleted (409).
+         */
+        delete: operations["deleteAdminWatchedWordList"];
+        options?: never;
+        head?: never;
+        /**
+         * Update a instance watched-word list
+         * @description Renames the list and/or changes its action; when words is present it REPLACES the list's terms (an empty array clears them). Replacing the default list's words is refused (409).
+         */
+        patch: operations["updateAdminWatchedWordList"];
+        trace?: never;
+    };
+    "/api/v1/me/watched-word-lists": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List your own watched-word lists
+         * @description Your own named watched-word lists, default list first, each with its word count (not its words). Paginated via limit (1-100, default 20) and offset.
+         */
+        get: operations["listMyWatchedWordLists"];
+        put?: never;
+        /**
+         * Create a your own watched-word list
+         * @description Creates a named list with an optional word set (at most 500 words, each at most 100 characters). action is "flag" (default; record a match for review) or "hold" (also hold the comment for approval through the held-for-review queue). Names are unique per scope, case-insensitively.
+         */
+        post: operations["createMyWatchedWordList"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/watched-word-lists/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a your own watched-word list
+         * @description One list with its words (the default list's words are paged via the flat watched-words endpoints and omitted here). A list in the other scope is 404.
+         */
+        get: operations["getMyWatchedWordList"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a your own watched-word list
+         * @description Deletes the list and its terms; existing matches keep their snapshot. The default list cannot be deleted (409).
+         */
+        delete: operations["deleteMyWatchedWordList"];
+        options?: never;
+        head?: never;
+        /**
+         * Update a your own watched-word list
+         * @description Renames the list and/or changes its action; when words is present it REPLACES the list's terms (an empty array clears them). Replacing the default list's words is refused (409).
+         */
+        patch: operations["updateMyWatchedWordList"];
+        trace?: never;
+    };
     "/api/v1/admin/watched-word-matches/{id}/resolve": {
         parameters: {
             query?: never;
@@ -3486,6 +4070,26 @@ export interface paths {
         get: operations["listAdminComments"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/comments/bulk-remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Remove every comment by one account
+         * @description Spam-wave cleanup (PeerTube's bulk/remove-comments-of). Hard-deletes every comment authored by one account, instance-wide, in one set-based statement; the end state per comment is identical to DELETE /api/v1/comments/{id} (replies, reports and notifications under it are removed, a pin on the video clears). `account` is a local username (case-insensitive, deactivated accounts included) or, for federated comments, a remote actor URL starting with http:// or https://. Comments by local authors are federated as a Delete exactly as a single delete is; remote authors' comments are removed locally only. Restricted to moderators/admins. An unknown local username is 404; a remote actor with no comments yields removed=0. Audited as moderation.comment.bulk_remove (actor, target account, count; never comment bodies).
+         */
+        post: operations["bulkRemoveAdminComments"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3835,6 +4439,115 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/instances/blocklist-subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List blocklist subscriptions (admin)
+         * @description Shared fediverse denylists this instance syncs into its instance blocklist. Admin only. Paginated via limit (1–100, default 20) and offset.
+         */
+        get: operations["listBlocklistSubscriptions"];
+        put?: never;
+        /**
+         * Subscribe to a blocklist (admin)
+         * @description Adds a list URL (Mastodon CSV, plain domain list, or JSON). The server fetches it through the SSRF guard (public http/https only, redirects re-checked, 8 MiB cap) on the periodic sync or "sync now". Entries with severity suspend (or none) become instance blocks owned by this subscription; silence/limit entries are ignored. Admin only. Audited.
+         */
+        post: operations["createBlocklistSubscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/instances/blocklist-subscriptions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a blocklist subscription (admin)
+         * @description Removes the subscription AND exactly the instance blocks it created. Manual blocks, and blocks owned by other subscriptions, are never touched. Audited.
+         */
+        delete: operations["deleteBlocklistSubscription"];
+        options?: never;
+        head?: never;
+        /**
+         * Edit a blocklist subscription (admin)
+         * @description Changes the label and/or enabled flag. Disabling stops future syncs; the blocks already applied stay until the subscription is deleted.
+         */
+        patch: operations["updateBlocklistSubscription"];
+        trace?: never;
+    };
+    "/api/v1/admin/instances/blocklist-subscriptions/{id}/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sync a blocklist subscription now (admin)
+         * @description Fetches the list and applies it: adds blocks for new entries, removes only blocks this subscription created that the list no longer names. A fetch/parse failure is a 200 with status "error" (the last good state is kept); a list with no usable entries removes nothing. A sync that would remove more than 25 blocks and more than half of the ones the subscription owns is held: status "needs_confirmation", nothing changed; repeat with {"confirm": true} to apply it. Entries naming this instance or a parent domain of it are skipped. Rate limited per admin (6 per minute). Audited with added/removed counts.
+         */
+        post: operations["syncBlocklistSubscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/instances/blocklist-allowlist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List domains exempt from blocklist subscriptions (admin) */
+        get: operations["listBlocklistAllowlist"];
+        put?: never;
+        /**
+         * Exempt a domain from blocklist subscriptions (admin)
+         * @description The allowlist wins over every subscription: the domain is not blocked by a sync, and a block a subscription already created for it is lifted now. A manual block is untouched. Idempotent. Audited.
+         */
+        post: operations["addBlocklistAllow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/instances/blocklist-allowlist/{domain}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Lift a blocklist-subscription exemption (admin)
+         * @description Idempotent. The next sync re-applies lists to the domain. Audited.
+         */
+        delete: operations["removeBlocklistAllow"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/remote-videos/{id}": {
         parameters: {
             query?: never;
@@ -3849,6 +4562,54 @@ export interface paths {
         get: operations["getRemoteVideo"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/remote-videos/{id}/rating": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Your own rating of a federated video
+         * @description Returns the caller's like/dislike of a remote video, or null. The counts belong to the origin instance and are not reported here.
+         */
+        get: operations["getRemoteVideoRating"];
+        /**
+         * Like or dislike a federated video
+         * @description Records the caller's like/dislike and federates it to the video's origin as an ActivityPub Like or Dislike signed by the caller's account actor; changing a rating also sends an Undo of the previous one. Repeating the same rating sends nothing.
+         */
+        put: operations["setRemoteVideoRating"];
+        post?: never;
+        /**
+         * Clear your rating of a federated video
+         * @description Removes the caller's rating (idempotent) and federates an Undo of it to the origin.
+         */
+        delete: operations["deleteRemoteVideoRating"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/remote-videos/{id}/view": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record a view of a federated video
+         * @description The remote twin of recordVideoView. The origin instance owns the view count, so nothing is counted here: when federation is enabled the view is sent to the origin as an ActivityPub View signed by this instance's actor (never the viewer's account), at most once per viewer per window (the user id when authenticated, else the client IP, hashed), and at most a fixed number of Views per origin domain per hour. Always returns 204 for a visible remote video, whether or not a View was sent.
+         */
+        post: operations["recordRemoteVideoView"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4081,6 +4842,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/remote-interaction/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find the subscribe URL on a visitor's home fediverse server
+         * @description The outbound half of remote interaction. A visitor who is not signed in here gives their own fediverse handle (user@host) and an address on THIS instance (a channel or video); the server WebFingers the handle's host through the SSRF-guarded federation fetch and returns that host's subscribe template (rel http://ostatus.org/schema/1.0/subscribe) with {uri} replaced by the escaped target. The client navigates to the returned https URL. Optional auth; signed-out callers need the operator's search_remote_uri_anonymous setting. Rate-limited (fail closed) on the same budget as remote-URI search resolution. Mounted with the federation service; 503 while federation is disabled.
+         */
+        get: operations["resolveRemoteInteraction"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/blocks/remote": {
         parameters: {
             query?: never;
@@ -4175,6 +4956,26 @@ export interface paths {
          * @description Lists the currently-live PUBLIC streams across all channels for a home "Live now" rail, most-recently-started first. Only streams that are both state=live AND privacy=public appear — unlisted/private and offline/ended streams are never listed. Each card carries id, title, channel identity, started_at (the current session's start), an is_live flag (always true here — this is the card contract that can cheaply and truthfully carry it; the video feed card intentionally does not, since live streams are a table disjoint from videos), and, when a media server is configured, the live HLS playlist path. Stream keys are never returned. There is deliberately NO viewer/concurrent-viewer count: no server-side counter exists yet (a live-completion dependency, wave W4), and the field is omitted rather than faked. A thumbnail/preview is likewise omitted — live streams have no server-generated poster yet. This is a public read and, like GET /live/{id}, is not gated on the live feature toggle (that guards creation/ingest). Paginated with limit (1–100, default 30) and offset (>= 0).
          */
         get: operations["listLivePublicStreams"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/live/upcoming": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Public "Upcoming" listing of scheduled lives
+         * @description Lists PUBLIC streams that are not live yet and carry a planned start, soonest first. A start up to one hour in the past is still listed (a broadcaster a few minutes late reads "starting soon"); older ones drop out without the row being touched. Same visibility as "Live now": unlisted and private streams never appear, and a stream owner the signed-in viewer muted or blocked is omitted for that viewer. The optional `channel` handle narrows it to one channel (the channel page). A public read, not gated on the live feature toggle. Paginated.
+         */
+        get: operations["listUpcomingLiveStreams"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4809,6 +5610,64 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/oidc-providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List admin-managed OIDC login providers (admin)
+         * @description The OpenID Connect providers stored in the database, plus the environment providers (OAUTH_PROVIDERS) they may override — name and issuer only. A stored row REPLACES the environment provider of the same name; a disabled row switches that name off.
+         *
+         *     NEVER RETURNS A CLIENT SECRET: each row reports `secret_configured` and `secret_status` (`undecryptable` when the KEK changed; such a provider is offered to nobody). `secrets_available` is false when this deployment has no key-encryption key, in which case a save carrying a secret is refused with 409.
+         *
+         *     Restricted to admins (moderators get 403).
+         */
+        get: operations["listOIDCProviders"];
+        put?: never;
+        /**
+         * Add an OIDC login provider (admin)
+         * @description Adds a provider. `name` is the URL segment (`/api/v1/auth/oauth/{name}`) and the key linked accounts are matched by, so it is immutable, and it is refused when accounts are already linked through that name from a different issuer (only the issuer of an environment provider of the same name may be re-used). Discovery, JWKS and token calls for this provider go through the SSRF guard; `issuer_url` must be https on a public host, and every endpoint the discovery document names must be https, unless OIDC_ALLOW_PRIVATE_ISSUERS is on. A name configured in the environment may be overridden only with that provider's issuer. `client_secret` is required and stored sealed.
+         *
+         *     Takes effect immediately here and within one settings-poll interval across the rest of the fleet. Audited as `admin.oidc_provider.create` with the provider name; never a value.
+         *
+         *     Restricted to admins, and requires a FRESH credential — exactly one of `current_password` or `step_up_token` — because a login provider decides who can sign in.
+         */
+        post: operations["createOIDCProvider"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/oidc-providers/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update an OIDC login provider (admin)
+         * @description Replaces the mutable fields. `issuer_url` cannot change (subjects are only unique within one issuer): omit it or repeat the stored value, anything else is 422. `client_secret` is write-only: omit it to keep the stored secret, send a value to replace it. `enabled` and `auto_provision` keep their stored values when omitted. Audited as `admin.oidc_provider.update` with the changed field NAMES and whether the secret was replaced. Same fresh-credential rule as create.
+         */
+        put: operations["updateOIDCProvider"];
+        post?: never;
+        /**
+         * Remove an OIDC login provider (admin)
+         * @description Removes a stored provider and its sealed secret. Linked identities are kept. A provider whose name is also configured in the environment (OAUTH_PROVIDERS) cannot be deleted — disable or edit it instead — because deleting it would restore the environment provider without the stored row's restrictions. Requires a fresh credential, like the other writes. Audited as `admin.oidc_provider.delete`.
+         */
+        delete: operations["deleteOIDCProvider"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/mail/test": {
         parameters: {
             query?: never;
@@ -4993,7 +5852,7 @@ export interface paths {
         head?: never;
         /**
          * Update instance settings (admin)
-         * @description Applies a partial, per-key-validated update to the instance-settings overlay and returns the full effective document. The body is a flat JSON object of setting key → new value: a boolean for the toggle keys (registration_enabled, registration_require_approval, quarantine_new_uploads, uploads_enabled, imports_enabled, live_enabled, comments_enabled, downloads_enabled, contact_form_enabled, instance_is_sensitive, the config-parity W8 feature toggles import_http_enabled, channel_sync_enabled, storyboards_enabled, video_card_previews_enabled, video_card_previews_default_enabled, transcription_enabled, user_import_enabled, user_export_enabled, and the config-parity W10 VOD knobs transcoding_enabled, transcoding_original_resolution, upload_additional_extensions_enabled, the config-parity W11 live knobs live_allow_replay and live_default_save_replay, and the config-parity W12 federation policy gates federation_accept_remote_comments (default true; off drops inbound remote comments at the ActivityPub inbox after the blocked-domain check — never retroactively), federation_allow_channel_followers (default true; off answers inbound channel Follows with a Reject, existing followers untouched), federation_follower_approval (default false; on holds new channel Follows PENDING in GET /api/v1/admin/federation/follower-requests — a vidra deviation applying PeerTube's instance-follower approval to CHANNEL followers, since vidra has no instance-level AP actor), and federation_auto_follow_back (default false; on follows an accepted follower back FROM THE FOLLOWED CHANNEL'S ACTOR, respecting the domain blocklist and never duplicating an existing follow/follow-back edge — note the content of followed-back actors then federates in, so moderation becomes reactive, as in PeerTube). Every federation_* key governs the ActivityPub inbox ONLY: the ATProto integration is outbound cross-posting with no inbound path, so these gates are explicitly out of scope for it. The config-parity W13 remote-URI search gates ride here too: search_remote_uri_users (default true) and search_remote_uri_anonymous (default false) let logged-in / anonymous callers resolve URL- and handle-shaped search queries to remote content through the SSRF-guarded federation fetcher — both effective only while federation is enabled — and the config-parity W7 sign-up keys registration_require_email_verification (default false; effective only while the deployment has an outbound mail path, see features.mail; holds NEW registrations sessionless until the emailed link is confirmed — accounts created while the gate was off are never retroactively locked) and new_user_history_enabled (default true; seeds the per-user watch-history preference at account creation only)), an integer for the int-kind limits (including the W8 keys channel_sync_max_per_user, channel_sync_interval_minutes (5..10080, default CHANNEL_SYNC_INTERVAL in whole minutes; the re-list cadence and backoff base, read at each reschedule so a change applies without a restart), channel_sync_batch (1..100, default CHANNEL_SYNC_BATCH; the newest uploads one sync pass imports, read at the start of each pass), channel_sync_cooldown_minutes (1..1440, default CHANNEL_SYNC_COOLDOWN in whole minutes; the minimum spacing between manual sync-now triggers, read per request so a change applies without a restart), channel_sync_backoff_max_hours (1..720, default CHANNEL_SYNC_BACKOFF_MAX in whole hours; the cap on the exponential backoff of a failing sync, read at each failure so a change applies without a restart), user_export_expiration_hours, user_export_max_quota_bytes, max_channels_per_user — 0 always means unlimited/never — the W10 keys transcoding_max_fps (0 = no cap, else 24..240), transcoding_threads (0 = ffmpeg default, else 1..64), and transcoding_concurrency / import_jobs_concurrency (1..16, read per worker tick so changes apply without a restart), and the W11 live limits live_max_instance_lives / live_max_user_lives (0..10000, 0 = unlimited, enforced at the RTMP publish callback) and live_max_duration_secs (0 = no limit, else 60..2592000, enforced by the duration watchdog), live_recording_retention_hours (0..8760, default LIVE_RECORDING_RETENTION in whole hours rounded up; 0 = delete a session recording as soon as its replay is published and sweep nothing, else the hourly sweep deletes recordings older than that many hours. This setting DELETES FILES: lowering it, or raising it from 0, makes the next sweep delete every recording older than the new window, including recordings kept as the only copy of a failed or replay-disabled broadcast; read at every use, no restart), audit_log_retention_days (0..36500, default AUDIT_LOG_RETENTION in whole days rounded up; 0 = keep the audit trail forever. The env value is a FLOOR: the effective window is max(setting, env), so this setting can only keep the trail LONGER, and a value below the floor is a 422 naming it. When AUDIT_LOG_RETENTION=0 the trail is already kept forever and only 0 is accepted, so the setting has no effect. Read by every hourly sweep, no restart; changes are audited old -> new), and the W7 sign-up limits registration_user_limit (0 = unlimited; signup refuses and GET /api/v1/instance reports registration_enabled=false with reason user_limit_reached once the account count reaches it — the count is approximate under concurrent signups), registration_minimum_age (0 = off, else 1..150; signup then requires the age_attestation flag — no birthdate is collected), and default_user_daily_quota_bytes (0 = unlimited; a ROLLING trailing-24h upload window enforced at the upload gates with 422 daily_quota_exceeded)), a string for the text/markdown/link keys and enum keys such as sensitive_content_policy, and an array of strings for list keys (instance_categories, moderator_languages, and transcoding_resolutions — a non-empty, duplicate-free subset of the canonical ladder rungs 2160/1440/1080/720/480/360/240/144). A null value clears that override (resets the key to its config default). Only the keys present are changed. An unknown key, a type mismatch, or a content-invalid value (e.g. a malformed URL/email, an empty instance_name, an unknown taxonomy id, or an enum value outside its options) is 422 with field errors and nothing is written. Restricted to admins; audited (admin.instance.update, changed key names only). Changes take effect immediately (the overlay cache reloads), so subsequent GET /api/v1/instance, GET /api/v1/instance/about, POST /api/v1/instance/contact, public sensitive-content filtering, and the upload/import/live/comment/download/ registration gates reflect them.
+         * @description Applies a partial, per-key-validated update to the instance-settings overlay and returns the full effective document. The body is a flat JSON object of setting key → new value: a boolean for the toggle keys (registration_enabled, registration_require_approval, quarantine_new_uploads, uploads_enabled, imports_enabled, live_enabled, comments_enabled, downloads_enabled, contact_form_enabled, instance_is_sensitive, the config-parity W8 feature toggles import_http_enabled, channel_sync_enabled, storyboards_enabled, video_card_previews_enabled, video_card_previews_default_enabled, transcription_enabled, auto_transcribe_new_uploads (default false; on queues the same auto-caption job as POST /videos/{id}/captions/auto for each video as it publishes, only while transcription is effectively available, never duplicating a job or an existing caption), user_import_enabled, user_export_enabled, and the config-parity W10 VOD knobs transcoding_enabled, transcoding_original_resolution, upload_additional_extensions_enabled, the config-parity W11 live knobs live_allow_replay and live_default_save_replay, and the config-parity W12 federation policy gates federation_accept_remote_comments (default true; off drops inbound remote comments at the ActivityPub inbox after the blocked-domain check — never retroactively), federation_allow_channel_followers (default true; off answers inbound channel Follows with a Reject, existing followers untouched), federation_follower_approval (default false; on holds new channel Follows PENDING in GET /api/v1/admin/federation/follower-requests — a vidra deviation applying PeerTube's instance-follower approval to CHANNEL followers, since vidra has no instance-level AP actor), and federation_auto_follow_back (default false; on follows an accepted follower back FROM THE FOLLOWED CHANNEL'S ACTOR, respecting the domain blocklist and never duplicating an existing follow/follow-back edge — note the content of followed-back actors then federates in, so moderation becomes reactive, as in PeerTube). Every federation_* key governs the ActivityPub inbox ONLY: the ATProto integration is outbound cross-posting with no inbound path, so these gates are explicitly out of scope for it. The config-parity W13 remote-URI search gates ride here too: search_remote_uri_users (default true) and search_remote_uri_anonymous (default false) let logged-in / anonymous callers resolve URL- and handle-shaped search queries to remote content through the SSRF-guarded federation fetcher — both effective only while federation is enabled — and the config-parity W7 sign-up keys registration_require_email_verification (default false; effective only while the deployment has an outbound mail path, see features.mail; holds NEW registrations sessionless until the emailed link is confirmed — accounts created while the gate was off are never retroactively locked) and new_user_history_enabled (default true; seeds the per-user watch-history preference at account creation only)), an integer for the int-kind limits (including the W8 keys channel_sync_max_per_user, channel_sync_interval_minutes (5..10080, default CHANNEL_SYNC_INTERVAL in whole minutes; the re-list cadence and backoff base, read at each reschedule so a change applies without a restart), channel_sync_batch (1..100, default CHANNEL_SYNC_BATCH; the newest uploads one sync pass imports, read at the start of each pass), channel_sync_cooldown_minutes (1..1440, default CHANNEL_SYNC_COOLDOWN in whole minutes; the minimum spacing between manual sync-now triggers, read per request so a change applies without a restart), channel_sync_backoff_max_hours (1..720, default CHANNEL_SYNC_BACKOFF_MAX in whole hours; the cap on the exponential backoff of a failing sync, read at each failure so a change applies without a restart), user_export_expiration_hours, user_export_max_quota_bytes, max_channels_per_user — 0 always means unlimited/never — the W10 keys transcoding_max_fps (0 = no cap, else 24..240), transcoding_threads (0 = ffmpeg default, else 1..64), and transcoding_concurrency / import_jobs_concurrency (1..16, read per worker tick so changes apply without a restart), and the W11 live limits live_max_instance_lives / live_max_user_lives (0..10000, 0 = unlimited, enforced at the RTMP publish callback) and live_max_duration_secs (0 = no limit, else 60..2592000, enforced by the duration watchdog), live_recording_retention_hours (0..8760, default LIVE_RECORDING_RETENTION in whole hours rounded up; 0 = delete a session recording as soon as its replay is published and sweep nothing, else the hourly sweep deletes recordings older than that many hours. This setting DELETES FILES: lowering it, or raising it from 0, makes the next sweep delete every recording older than the new window, including recordings kept as the only copy of a failed or replay-disabled broadcast; read at every use, no restart), audit_log_retention_days (0..36500, default AUDIT_LOG_RETENTION in whole days rounded up; 0 = keep the audit trail forever. The env value is a FLOOR: the effective window is max(setting, env), so this setting can only keep the trail LONGER, and a value below the floor is a 422 naming it. When AUDIT_LOG_RETENTION=0 the trail is already kept forever and only 0 is accepted, so the setting has no effect. Read by every hourly sweep, no restart; changes are audited old -> new), and the W7 sign-up limits registration_user_limit (0 = unlimited; signup refuses and GET /api/v1/instance reports registration_enabled=false with reason user_limit_reached once the account count reaches it — the count is approximate under concurrent signups), registration_minimum_age (0 = off, else 1..150; signup then requires the age_attestation flag — no birthdate is collected), and default_user_daily_quota_bytes (0 = unlimited; a ROLLING trailing-24h upload window enforced at the upload gates with 422 daily_quota_exceeded)), a string for the text/markdown/link keys and enum keys such as sensitive_content_policy, and an array of strings for list keys (instance_categories, moderator_languages, and transcoding_resolutions — a non-empty, duplicate-free subset of the canonical ladder rungs 2160/1440/1080/720/480/360/240/144). A null value clears that override (resets the key to its config default). Only the keys present are changed. An unknown key, a type mismatch, or a content-invalid value (e.g. a malformed URL/email, an empty instance_name, an unknown taxonomy id, or an enum value outside its options) is 422 with field errors and nothing is written. Restricted to admins; audited (admin.instance.update, changed key names only). Changes take effect immediately (the overlay cache reloads), so subsequent GET /api/v1/instance, GET /api/v1/instance/about, POST /api/v1/instance/contact, public sensitive-content filtering, and the upload/import/live/comment/download/ registration gates reflect them.
          */
         patch: operations["updateInstanceSettings"];
         trace?: never;
@@ -5250,6 +6109,34 @@ export interface paths {
         /** Start or restart the configured internal node */
         post: operations["restartIPFS"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/ipfs/repin-playback-only": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Progress of the bulk re-pin to the playback-only set (admin)
+         * @description The current or last run: phase (idle, running, paused, completed, cancelled), counts of rows done, skipped (already playback-only), blocked (the admission policy would not re-admit them), failed and in flight, the pinned HLS rows not yet examined (an upper bound on the work left) and an estimate of the pinned bytes saved. Bytes are returned to the disk only after the node's GC.
+         */
+        get: operations["getIPFSRepin"];
+        put?: never;
+        /**
+         * Start the bulk re-pin to the playback-only set (admin)
+         * @description Re-pins every already-pinned HLS tree whose pinned root still includes files the HLS routes do not serve (download MP4s, vp9.webm), so it matches what a new pin adds (Tier A F6). Runs in the leader's mirror worker through the ordinary pin path - admission, reservation and the capacity ceilings all apply - in small batches, and pauses while the node is at its budget. The superseded root is unpinned only when no other row shares it; its blocks are freed by the node's garbage collection. Resumable and safe to repeat. Returns 202 with the run status. Restricted to admins; audited.
+         */
+        post: operations["startIPFSRepin"];
+        /**
+         * Cancel the bulk re-pin to the playback-only set (admin)
+         * @description Stops the run from arming further rows. Rows already re-armed finish through the ordinary pin path; nothing is rolled back. Works while running or paused. Returns the run status. Restricted to admins; audited.
+         */
+        delete: operations["cancelIPFSRepin"];
         options?: never;
         head?: never;
         patch?: never;
@@ -5528,7 +6415,7 @@ export interface paths {
         };
         /**
          * List the registration approval queue
-         * @description Returns registration requests, newest first, with the reviewing admin's username, plus a `total` counting the requests that match the same status filter. Restricted to admins. The stored password hash is never exposed.
+         * @description Returns registration requests, newest first, with the reviewing admin's username, plus a `total` counting the requests that match the same status filter. Admins and moderators. The stored password hash is never exposed.
          */
         get: operations["listRegistrationRequests"];
         put?: never;
@@ -5550,7 +6437,7 @@ export interface paths {
         put?: never;
         /**
          * Approve a registration request
-         * @description Approves a pending request, creating the account from the stored credentials (atomically). Admin only. An unknown/already-resolved id is 404; a username/email taken since the request was filed is 409.
+         * @description Approves a pending request, creating the account from the stored credentials (atomically). Admins and moderators. An unknown/already-resolved id is 404; a username/email taken since the request was filed is 409.
          */
         post: operations["approveRegistrationRequest"];
         delete?: never;
@@ -5570,7 +6457,7 @@ export interface paths {
         put?: never;
         /**
          * Reject a registration request
-         * @description Rejects a pending request with an optional internal moderator note. Admin only. An unknown/already-resolved id is 404.
+         * @description Rejects a pending request with an optional internal moderator note. Admins and moderators. An unknown/already-resolved id is 404.
          */
         post: operations["rejectRegistrationRequest"];
         delete?: never;
@@ -5588,7 +6475,7 @@ export interface paths {
         };
         /**
          * List the federation follower-approval queue
-         * @description Returns pending inbound ActivityPub channel Follows awaiting an admin decision, newest first, while federation_follower_approval is on (config-parity W12). Modeled on the registration-requests queue. Restricted to admins. Paginated via limit (1–100, default 20) and offset. A vidra deviation from PeerTube recorded in the parity ledger: approval applies to CHANNEL followers because vidra has no instance-level AP actor. Governs the ActivityPub inbox only — the ATProto integration is outbound cross-posting with no inbound path.
+         * @description Returns pending inbound ActivityPub channel Follows awaiting an admin decision, newest first, while federation_follower_approval is on (config-parity W12). Modeled on the registration-requests queue. Restricted to admins. Paginated via limit (1–100, default 20) and offset. The same setting holds INSTANCE followers for approval too; those are decided at /admin/federation/instance-followers. Governs the ActivityPub inbox only — the ATProto integration is outbound cross-posting with no inbound path.
          */
         get: operations["listFederationFollowerRequests"];
         put?: never;
@@ -5639,6 +6526,130 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/federation/instance-followers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the instances following this one
+         * @description Remote instance actors (PeerTube's `Application` actor) that follow this instance's actor (/accounts/peertube), newest first — PeerTube's /server/followers. A pending follower waits for an admin while federation_follower_approval is on; a rejected one stays rejected until removed. Admin only. Paginated via limit (1–100, default 20) and offset.
+         */
+        get: operations["listInstanceFollowers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/federation/instance-followers/{id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept a pending instance follower
+         * @description Accepts one pending instance follower: the instance actor's Accept is queued to its inbox, followed by Announces of the newest public videos (at most 50). Admin only; audited (admin.federation.instance_follower_accept, safe row id only).
+         */
+        post: operations["acceptInstanceFollower"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/federation/instance-followers/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reject an instance follower
+         * @description Rejects a pending or accepted instance follower: a Reject is queued to its inbox and the row stays `rejected`, so its next Follow is refused too (as on PeerTube). Admin only; audited (admin.federation.instance_follower_reject, safe row id only).
+         */
+        post: operations["rejectInstanceFollower"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/federation/instance-followers/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove an instance follower
+         * @description Removes an instance follower in any state. A pending or accepted one is told with a Reject; a removed instance may follow again. Admin only; audited (admin.federation.instance_follower_remove, safe row id only).
+         */
+        delete: operations["removeInstanceFollower"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/federation/instance-following": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the instances this one follows
+         * @description Remote instance actors this instance's actor follows, newest first — PeerTube's /server/following. `pending` until the remote Accepts; `rejected` when it refused. Admin only. Paginated via limit (1–100, default 20) and offset.
+         */
+        get: operations["listInstanceFollowing"];
+        put?: never;
+        /**
+         * Follow a remote instance
+         * @description Follows the instance at `host` as this instance's actor (/accounts/peertube), as PeerTube's POST /server/following does. The remote instance actor is found through its NodeInfo `Application` link, else WebFinger acct:peertube@host (every fetch SSRF-guarded), and must live on that host. A signed Follow is queued to it; once it Accepts, the public videos it announces are ingested like those of a followed remote channel. Idempotent: an existing follow is returned unchanged, and one the remote rejected is re-armed. Admin only; audited (admin.federation.instance_follow, safe row id only).
+         */
+        post: operations["followInstance"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/federation/instance-following/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Unfollow a remote instance
+         * @description Stops following: the follow is removed at once and an Undo{Follow} is queued to the remote instance actor (also through an instance block, since it only ends contact). Admin only; audited (admin.federation.instance_unfollow, safe row id only).
+         */
+        delete: operations["unfollowInstance"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/users": {
         parameters: {
             query?: never;
@@ -5648,11 +6659,15 @@ export interface paths {
         };
         /**
          * List accounts (admin)
-         * @description Returns accounts, newest first, optionally filtered by a username/email substring (q). Restricted to admins. Paginated via limit (1–200, default 50) and offset; `total` counts the accounts matching the same q, so a client can tell how many pages exist.
+         * @description Returns accounts, newest first, optionally filtered by a username/email substring (q). Admins and moderators. Paginated via limit (1–200, default 50) and offset; `total` counts the accounts matching the same q, so a client can tell how many pages exist.
          */
         get: operations["listUsers"];
         put?: never;
-        post?: never;
+        /**
+         * Create an account on behalf of the user (admin)
+         * @description PeerTube `POST /users` parity, for instances with registration closed. Admin-only; the CALLER re-confirms their OWN password (same step-up and strict limiter as `POST /api/v1/admin/users/{id}/password-reset-link`). There is no admin-chosen password: the account starts password-less and the holder sets the first one with a one-time link (the ordinary reset token, 1 hour). The address is marked verified (the admin vouches for it). Signup creates no default channel, so neither does this. When a mail path is configured the link is emailed and `link_emailed` is true with no `reset_url`; otherwise `reset_url` is returned once (no-store), only after the audit row `admin.user.create` is written. The row is required on both delivery paths: if it, the update or the delivery fails after the account was made, the account is DEACTIVATED (it cannot sign in and does not count as an active admin) and 502/503 is returned; the username and email stay reserved until an admin deletes it. The audit payload never carries the address, a password or the token.
+         */
+        post: operations["adminCreateUser"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5678,9 +6693,29 @@ export interface paths {
         head?: never;
         /**
          * Edit a user's role / active flag / storage quota (admin)
-         * @description Updates a user's role, active flag, and/or storage quota (partial). Restricted to admins. An admin cannot demote or deactivate their own account (422), and a hard-deleted account cannot be reactivated (422: the tombstone is anonymised in place, so re-enabling it would republish a profile without restoring anything). An unknown id is 404. Deactivating revokes the user's sessions. A role change takes effect on the target's EXISTING sessions immediately — the role is re-read from the account on every authenticated request, not taken from the access token — so a demoted staff member loses the staff routes at once while keeping their ordinary session. storage_quota_bytes is tri-state — omitted: unchanged; null: reset to the instance default; a non-negative integer: per-user override (0 = unlimited).
+         * @description Updates a user's role, active flag, and/or storage quota (partial). Restricted to admins. An admin cannot demote or deactivate their own account (422), and a hard-deleted account cannot be reactivated (422: the tombstone is anonymised in place, so re-enabling it would republish a profile without restoring anything). An unknown id is 404. Deactivating revokes the user's sessions. A role change takes effect on the target's EXISTING sessions immediately — the role is re-read from the account on every authenticated request, not taken from the access token — so a demoted staff member loses the staff routes at once while keeping their ordinary session. storage_quota_bytes is tri-state — omitted: unchanged; null: reset to the instance default; a non-negative integer: per-user override (0 = unlimited); daily_quota_bytes is the same tri-state for the per-user rolling-24h upload quota. Moderators share ONLY ban and unban (`is_active`, with a required `ban_reason` when banning) and only for accounts whose role is `user`: any other field, a staff or owner target, or themselves is 403. Banning stores the reason, time and actor, and emails the user the reason (best-effort); unbanning clears them and emails a reinstatement. The audit row records the reason's length, never its text.
          */
         patch: operations["updateUser"];
+        trace?: never;
+    };
+    "/api/v1/admin/users/{id}/login-lockout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Clear an account's failed-login lockout (admin)
+         * @description Drops every failed-login counter and lock for the account, so the holder can sign in again immediately. Admin-only; audited as `admin.user.login_lockout_clear` with the target named. Idempotent: 204 whether or not a lockout existed. No password step-up — it only removes a brake.
+         */
+        delete: operations["adminClearLoginLockout"];
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/admin/users/{id}/mfa": {
@@ -5813,6 +6848,19 @@ export interface components {
             /** @description Present only when the ledger could not be read for some reason other than "not migrated yet". The response is still 200. */
             error?: string;
         };
+        FeedTokenStatus: {
+            configured: boolean;
+            /** Format: date-time */
+            created_at?: string;
+        };
+        FeedTokenIssued: {
+            /** @description The raw token; shown only once. */
+            token: string;
+            /** @description Ready-to-paste feed URL; absent when the instance has no public origin configured. */
+            url?: string;
+            /** Format: date-time */
+            created_at: string;
+        };
         /** @description The single, consistent error envelope returned by every endpoint for non-2xx responses (except the readiness probe, which returns ReadinessResponse on 503). */
         ErrorResponse: {
             error: {
@@ -5930,6 +6978,11 @@ export interface components {
              *     ]
              */
             oauth_providers: string[];
+            /** @description The same providers as `oauth_providers`, in the same order, with the label a sign-in button shows (admin-managed providers can set one; otherwise it is the name). */
+            oauth_provider_details: {
+                name: string;
+                display_name: string;
+            }[];
             /** @description Whether ATProto identity login (Bluesky / any self-hosted PDS) is enabled (ATPROTO_LOGIN_ENABLED). When true, render a "sign in with a handle" affordance that POSTs to /api/v1/auth/atproto/start. Independent of oauth_providers above. */
             atproto_login?: boolean;
             /** @description Whether ActivityPub federation is enabled on this instance (gates remote-content surfaces such as remote follows and remote videos). */
@@ -6026,7 +7079,7 @@ export interface components {
                      */
                     licence: number;
                     /** @enum {string} */
-                    comment_policy: "enabled" | "disabled";
+                    comment_policy: "enabled" | "disabled" | "requires_approval";
                     download_enabled: boolean;
                 };
             };
@@ -6308,6 +7361,8 @@ export interface components {
             /** @example Ada Makes */
             display_name: string;
             description: string;
+            /** @description PeerTube-style free-text (markdown) "support" message, e.g. "Support me on Liberapay: <link>". Omitted when unset. New videos inherit it unless they supply their own. */
+            support?: string;
             /** Format: date-time */
             created_at: string;
             /** @description Whether an avatar is set (served at GET /channels/{handle}/avatar). */
@@ -6347,6 +7402,8 @@ export interface components {
         UpdateChannelRequest: {
             display_name?: string;
             description?: string;
+            /** @description Markdown support message. An empty string clears it; absent leaves it unchanged. */
+            support?: string;
             /** @description Toggle ActivityPub federation for this channel (owner only). Absent leaves it unchanged. */
             activitypub_enabled?: boolean;
             /** @description Toggle ATProto/Bluesky cross-posting for this channel (owner only). Absent leaves it unchanged. */
@@ -6499,10 +7556,10 @@ export interface components {
             title: string;
             description: string;
             /**
-             * @description Present on every local video; omitted on remote cards.
+             * @description Present on every local video; omitted on remote cards. "internal" (PeerTube's members-only tier) is visible to any signed-in account of this instance and to no anonymous viewer; it is never federated, indexed for public search, or listed on an anonymous surface.
              * @enum {string}
              */
-            privacy?: "public" | "unlisted" | "private" | "password";
+            privacy?: "public" | "unlisted" | "private" | "password" | "internal";
             /**
              * @description Publish lifecycle. "scheduled" means the upload finished processing but publish_at lies in the future; public surfaces (feed, search, channel lists) only show "published", while direct links behave like any non-published video. "quarantined" means the instance holds new uploads for moderator review (QUARANTINE_NEW_UPLOADS): only the owner (studio badge) and moderators can see the video until it is approved (published) or rejected (failed). "transcoding" means the video opted into publish_after_transcode and is held off every public surface until its HLS transcode completes; like quarantine, only the owner and moderators can see it meanwhile, and the release publishes it through the normal publish transition. Present on every local video; omitted on remote cards.
              * @enum {string}
@@ -6510,6 +7567,8 @@ export interface components {
             state?: "draft" | "processing" | "scheduled" | "quarantined" | "transcoding" | "published" | "failed";
             /** @description Whether the owner flagged the video as sensitive content. Always present; false on remote cards (no local flag exists for them). When the instance sensitive_content_policy is "hide", flagged videos are excluded from the public feed and search server-side; under warn/blur the frontend applies the matching presentation. */
             is_sensitive: boolean;
+            /** @description The kinds of sensitive content (PeerTube 7.2 nsfwFlags), always present ([] when none; a flag implies is_sensitive). The viewer's per-flag policy (GET /me/content-preferences) overrides their base policy for that flag; with several flags the most restrictive applies. "hide" is enforced server-side in browse and search; blur and warn are presentation. */
+            sensitive_flags?: components["schemas"]["SensitiveFlag"][];
             /** @description The creator's optional content-warning text, paired with is_sensitive by the frontend. Always present (empty string when unset, and on remote cards). At most 280 characters. */
             sensitive_reason: string;
             /**
@@ -6532,6 +7591,8 @@ export interface components {
             blocked?: boolean;
             /** @description The moderator's reason for that block, on the same owner-only listing and only when non-empty. The A16 ruling made it creator-facing: a creator told only that something was taken down can neither appeal it nor avoid repeating it, so the reason the moderator already writes for the moderation block-list is shown to them. It is moderator prose about a named account and never appears on any public surface, on another viewer's read of the same channel, or on the video detail endpoint (which stays 404 while the block stands). */
             block_reason?: string;
+            /** @description PeerTube-style free-text (markdown) "support" message for this video. Present on the detail and create/update views when set. */
+            support?: string;
             /**
              * Format: date-time
              * @description When the video was FIRST published elsewhere (a PeerTube import's originallyPublishedAt, or a date the creator set). Present on the detail and create/update views when known; omitted for anything first published on this instance, where created_at is the only date.
@@ -6561,11 +7622,11 @@ export interface components {
             /** @description Optional content-license id from GET /videos/config; omitted when unset. */
             license?: string;
             /**
-             * @description The per-video comment policy (config-parity W9). Present on the create/update/detail views; omitted on list/feed views and remote cards.
+             * @description The per-video comment policy (config-parity W9; requires_approval holds comments for the video's reviewers to approve). Present on the create/update/detail views; omitted on list/feed views and remote cards.
              * @enum {string}
              */
-            comments_policy?: "enabled" | "disabled";
-            /** @description EFFECTIVE comment availability on the DETAIL view only: the instance-wide comments_enabled setting AND this video's comments_policy. Reading existing comments stays open either way; this reports whether posting is possible. */
+            comments_policy?: "enabled" | "disabled" | "requires_approval";
+            /** @description EFFECTIVE comment availability on the DETAIL view only: the instance-wide comments_enabled setting AND this video's comments_policy (true for requires_approval, which still accepts comments). Reading existing comments stays open either way; this reports whether posting is possible. */
             comments_enabled?: boolean;
             /** @description The per-video download policy (config-parity W9). Present on the create/update/detail views; omitted on list/feed views. Effective availability for regular viewers is this flag AND the instance downloads feature (GET /instance features.downloads); moderators/admins bypass both. */
             download_enabled?: boolean;
@@ -6831,6 +7892,43 @@ export interface components {
             /** @description Dense 30-day series, oldest first, zero-filled. */
             daily_views: components["schemas"]["DailyViews"][];
         };
+        PlaybackBeaconRequest: {
+            /** @description Playhead position at sample time. */
+            position_seconds: number;
+            /** @description Seconds actually played since the previous sample (heartbeat is 10 s). */
+            watched_seconds: number;
+            /** @description True on the first sample of a play. */
+            started?: boolean;
+        };
+        PlaybackShare: {
+            key: string;
+            /** Format: int64 */
+            watch_seconds: number;
+            /** @description Fraction of total watch seconds, 0..1. */
+            share: number;
+        };
+        PlaybackDay: {
+            /** Format: date */
+            day: string;
+            /** Format: int64 */
+            plays: number;
+            /** Format: int64 */
+            watch_seconds: number;
+        };
+        PlaybackStatsResponse: {
+            /** Format: int64 */
+            plays: number;
+            /** Format: int64 */
+            watch_seconds: number;
+            avg_view_duration_seconds: number;
+            /** @description Probed video duration; 0 when unknown. */
+            duration_seconds: number;
+            /** @description 20 buckets of the video's length, each 0..1. */
+            retention?: number[] | null;
+            devices: components["schemas"]["PlaybackShare"][];
+            os: components["schemas"]["PlaybackShare"][];
+            daily: components["schemas"]["PlaybackDay"][];
+        };
         ChannelStatsResponse: {
             /** Format: int64 */
             views: number;
@@ -6947,13 +8045,15 @@ export interface components {
              * @description Omitted/empty seeds the instance's default_video_privacy setting (registry default "public"). "password" is never seeded (a password video needs a password first).
              * @enum {string}
              */
-            privacy?: "public" | "unlisted" | "private" | "password";
+            privacy?: "public" | "unlisted" | "private" | "password" | "internal";
             /** @description Optional subject-category id (see GET /videos/config). Unknown value -> 422. */
             category?: string;
             /** @description Optional content language code (see GET /videos/config). Unknown value -> 422. */
             language?: string;
             /** @description Optional content-license id (see GET /videos/config); unknown value -> 422. Omitted/empty seeds the instance's default_video_licence setting (0 = no default, left unset). */
             license?: string;
+            /** @description Markdown support message. Omitted/null inherits the channel's support text at create time; an empty string means none. */
+            support?: string;
             /** @description Free-form tags. Lowercased, trimmed, and deduped server-side; at most 5 distinct tags of at most 50 characters each -> 422 otherwise. */
             tags?: string[];
             /**
@@ -6963,13 +8063,15 @@ export interface components {
             publish_at?: string;
             /** @description Mark the video as sensitive content (defaults to false). See the Video schema for how the instance policy treats flagged videos. */
             is_sensitive?: boolean;
+            /** @description The kinds of sensitive content. Any flag also marks the video sensitive. An unknown flag -> 422. */
+            sensitive_flags?: components["schemas"]["SensitiveFlag"][];
             /** @description Optional creator content-warning text, trimmed and capped at 280 characters (-> 422 over the cap). Storable regardless of is_sensitive; the frontend pairs them. */
             sensitive_reason?: string;
             /**
-             * @description Per-video comment policy (config-parity W9). Omitted/empty seeds the instance's default_comment_policy setting. PeerTube's requires_approval tier is deliberately not supported -> 422.
+             * @description Per-video comment policy (config-parity W9). Omitted/empty seeds the instance's default_comment_policy setting.
              * @enum {string}
              */
-            comments_policy?: "enabled" | "disabled";
+            comments_policy?: "enabled" | "disabled" | "requires_approval";
             /** @description Per-video download policy (config-parity W9), layered on the instance-wide downloads_enabled gate (both must be on for regular viewers). Omitted (null) seeds the instance's default_download_enabled setting. */
             download_enabled?: boolean;
             /** @description Opt into publish-after-transcode (default false). When true, the video is held (state "transcoding") off every public surface until its HLS transcode completes, then publishes automatically. Ignored when transcoding is disabled/unavailable (the video publishes immediately) and when publish_at is set (time-gating takes precedence). */
@@ -6980,13 +8082,15 @@ export interface components {
             title?: string;
             description?: string;
             /** @enum {string} */
-            privacy?: "public" | "unlisted" | "private" | "password";
+            privacy?: "public" | "unlisted" | "private" | "password" | "internal";
             /** @description Set the subject-category id (see GET /videos/config). Unknown/empty value -> 422. */
             category?: string;
             /** @description Set the content language code (see GET /videos/config). Unknown/empty value -> 422. */
             language?: string;
             /** @description Set the content-license id (see GET /videos/config). Unknown/empty value -> 422. */
             license?: string;
+            /** @description Set the markdown support message; an empty string clears it, absent leaves it unchanged. */
+            support?: string;
             /** @description Replaces the video's whole tag set (an empty array clears it; omit the field to leave tags unchanged). Same limits as create. */
             tags?: string[];
             /**
@@ -7001,17 +8105,24 @@ export interface components {
             originally_published_at?: string;
             /** @description Set or clear the sensitive-content flag (omit to leave unchanged). */
             is_sensitive?: boolean;
+            /** @description Replace the sensitive-content kinds (omit to leave unchanged; [] clears). A non-empty set also marks the video sensitive. An unknown flag -> 422. */
+            sensitive_flags?: components["schemas"]["SensitiveFlag"][];
             /** @description Set the creator content-warning text (omit to leave unchanged; an empty string clears it). Trimmed and capped at 280 characters -> 422 over the cap. */
             sensitive_reason?: string;
             /**
-             * @description Set the per-video comment policy (omit to leave unchanged). "disabled" makes new comments answer 403 feature_disabled while reading existing comments stays open.
+             * @description Set the per-video comment policy (omit to leave unchanged). "disabled" makes new comments answer 403 feature_disabled while reading existing comments stays open; "requires_approval" holds them.
              * @enum {string}
              */
-            comments_policy?: "enabled" | "disabled";
+            comments_policy?: "enabled" | "disabled" | "requires_approval";
             /** @description Set the per-video download policy (omit to leave unchanged), layered on the instance-wide downloads_enabled gate. */
             download_enabled?: boolean;
             /** @description Set the publish-after-transcode opt-in (omit to leave unchanged). Setting it true on an already-published video that has never been publicly visible and still has a live transcode job holds the video (state "transcoding") until that transcode completes; a publicly-visible video is never pulled back to hidden. */
             publish_after_transcode?: boolean;
+            /**
+             * Format: uuid
+             * @description Move the video to this channel (omit to leave it where it is). Both channels must have the SAME owner and the caller must manage both (owner or editor member); no role is exempt. The channel the video is already on is a no-op. Allowed in any video state, including mid-transcode. Search is reindexed; federation sends an Update naming the target channel and a Delete to followers of the old channel.
+             */
+            channel_id?: string;
         };
         /** @description A WebVTT caption track's metadata (the file is fetched separately). */
         Caption: {
@@ -7059,6 +8170,14 @@ export interface components {
             pinned: boolean;
             /** @description True when the video's creator has hearted this comment (a like from the uploader). */
             hearted: boolean;
+            /** @description True while the comment awaits approval; only its author and the video's reviewers ever receive it. It cannot be pinned or replied to. */
+            held_for_review: boolean;
+        };
+        ManagedCommentListResponse: components["schemas"]["PageMeta"] & {
+            comments: (components["schemas"]["Comment"] & {
+                /** @description Title of the video the comment is on. */
+                video_title: string;
+            })[];
         };
         CommentListResponse: components["schemas"]["PageMeta"] & {
             comments: components["schemas"]["Comment"][];
@@ -7077,6 +8196,33 @@ export interface components {
             muted_at: string;
             /** @description Every channel handle this account publishes under, sorted. Present so a client can recognise a channel that belongs to a muted account without a lookup per handle: autocomplete suggestions (GET /search/suggestions) are viewer-agnostic by design and carry only channel_handle, so the client drops the ones naming a muted or blocked account itself. An account with no channel yields an empty array, never null. */
             channel_handles: string[];
+        };
+        VideoOwnershipChange: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * @description pending is answerable; expired = no longer available. A request the giver withdrew, one older than 30 days and one that can no longer be honoured all read expired, deliberately alike: the recipient is not told which.
+             * @enum {string}
+             */
+            status: "pending" | "accepted" | "refused" | "expired";
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            video: {
+                /** Format: uuid */
+                id: string;
+                /** @description The title when the video was offered. It does not follow later renames, so an answered request never shows what the video has become since. */
+                title: string;
+            };
+            /** @description The account that offered the video (its owner when it did). */
+            initiator: {
+                username: string;
+                display_name: string;
+            };
+        };
+        VideoOwnershipChangeListResponse: components["schemas"]["PageMeta"] & {
+            changes: components["schemas"]["VideoOwnershipChange"][];
         };
         MutedAccountListResponse: components["schemas"]["PageMeta"] & {
             accounts: components["schemas"]["MutedAccount"][];
@@ -7105,9 +8251,83 @@ export interface components {
             blocked_by?: string;
             /** Format: date-time */
             blocked_at: string;
+            /** @description Who owns the block: "manual", or "subscription:<id>" when a blocklist subscription created it. */
+            source: string;
         };
         BlockedInstanceListResponse: components["schemas"]["PageMeta"] & {
             instances: components["schemas"]["BlockedInstance"][];
+        };
+        BlocklistSubscription: {
+            /** Format: uuid */
+            id: string;
+            url: string;
+            label: string;
+            /** @enum {string} */
+            format: "mastodon_csv" | "domain_list" | "json";
+            enabled: boolean;
+            /**
+             * @description Outcome of the last attempt. A failed attempt keeps the last good counts.
+             * @enum {string}
+             */
+            last_status: "never" | "ok" | "not_modified" | "error" | "needs_confirmation";
+            /** @description A short class message (e.g. "HTTP 500", "address not allowed"), never a raw error. */
+            last_error?: string;
+            /** Format: date-time */
+            last_synced_at?: string;
+            /** Format: date-time */
+            last_attempt_at?: string;
+            last_added: number;
+            last_removed: number;
+            /** @description Usable domains in the last applied list. */
+            entry_count: number;
+            /**
+             * Format: int64
+             * @description Instance blocks this subscription currently owns.
+             */
+            block_count: number;
+            /** Format: date-time */
+            created_at: string;
+        };
+        BlocklistSubscriptionListResponse: components["schemas"]["PageMeta"] & {
+            subscriptions: components["schemas"]["BlocklistSubscription"][];
+        };
+        CreateBlocklistSubscriptionRequest: {
+            url: string;
+            /** @enum {string} */
+            format: "mastodon_csv" | "domain_list" | "json";
+            label?: string;
+            /** @description Defaults to true. */
+            enabled?: boolean;
+        };
+        UpdateBlocklistSubscriptionRequest: {
+            label?: string;
+            enabled?: boolean;
+        };
+        BlocklistSyncResult: {
+            /** @enum {string} */
+            status: "ok" | "not_modified" | "error" | "needs_confirmation";
+            error?: string;
+            /** @description Entries skipped because they name this instance or a parent domain. */
+            protected: number;
+            /** @description With needs_confirmation, how many blocks a confirmed sync would remove. */
+            pending_removals?: number;
+            added: number;
+            removed: number;
+            entries: number;
+            /** @description Rows skipped because vidra has no equivalent of silence/limit. */
+            ignored_severity: number;
+            /** @description Rows skipped as malformed (wildcard, obfuscated, IP, ...). */
+            invalid: number;
+        };
+        BlocklistAllowRequest: {
+            domain: string;
+        };
+        BlocklistAllowlistResponse: components["schemas"]["PageMeta"] & {
+            domains: {
+                domain: string;
+                /** Format: date-time */
+                added_at: string;
+            }[];
         };
         RemoteVideo: {
             /** Format: uuid */
@@ -7138,6 +8358,10 @@ export interface components {
             published_at?: string;
             /** @description Whether a locally cached thumbnail is available. */
             has_thumbnail: boolean;
+            /** @description The origin flagged this video sensitive (ActivityStreams `sensitive`). The viewer's sensitive-content policy applies as to a local video's is_sensitive: under "hide" it is excluded from search. */
+            is_sensitive: boolean;
+            /** @description The origin's PeerTube SensitiveTag flags (explicitSex maps to sex); unknown names are dropped. */
+            sensitive_flags?: components["schemas"]["SensitiveFlag"][];
         };
         /** @description Credentials for linking a Bluesky account. app_password must be a Bluesky APP PASSWORD (Settings → App Passwords), never the account's main password — the backend never returns it. */
         ATProtoLinkRequest: {
@@ -7334,6 +8558,13 @@ export interface components {
             /** Format: date-time */
             blocked_at: string;
         };
+        RemoteInteractionResolution: {
+            /**
+             * Format: uri
+             * @description https URL on the visitor's home server to navigate to.
+             */
+            url: string;
+        };
         RemoteBlockListResponse: {
             actors: components["schemas"]["RemoteBlockView"][];
             /** Format: int64 */
@@ -7371,6 +8602,13 @@ export interface components {
         BlockedUserListResponse: components["schemas"]["PageMeta"] & {
             users: components["schemas"]["BlockedUser"][];
         };
+        RemoteVideoRating: {
+            /**
+             * @description The caller's own rating of the remote video, or null.
+             * @enum {string|null}
+             */
+            my_rating: "like" | "dislike" | null;
+        };
         VideoRating: {
             /** Format: int64 */
             like_count: number;
@@ -7381,6 +8619,30 @@ export interface components {
              * @enum {string|null}
              */
             my_rating: "like" | "dislike" | null;
+        };
+        BulkVideosRequest: {
+            video_ids: string[];
+            /** @enum {string} */
+            action: "delete" | "set_privacy";
+            /**
+             * @description Required when action is set_privacy; ignored otherwise.
+             * @enum {string}
+             */
+            privacy?: "public" | "unlisted" | "private" | "password" | "internal";
+        };
+        BulkVideoResult: {
+            /** Format: uuid */
+            video_id: string;
+            ok: boolean;
+            /** @description The HTTP status the single-video route would have answered. */
+            status: number;
+            /** @description Client-safe reason; present only when ok is false. */
+            error?: string;
+        };
+        BulkVideosResponse: {
+            results: components["schemas"]["BulkVideoResult"][];
+            succeeded: number;
+            failed: number;
         };
         VideoListResponse: components["schemas"]["PageMeta"] & {
             videos: components["schemas"]["Video"][];
@@ -7409,7 +8671,7 @@ export interface components {
              * @description The ordering actually applied (normalised from the request).
              * @enum {string}
              */
-            sort: "recent" | "popular" | "trending";
+            sort: "recent" | "popular" | "trending" | "originally_published_at" | "name";
             /**
              * @description The feed scope actually applied (normalised from the request); present on the public feed only. "all" mixes federated remote videos (remote:true cards) into the feed.
              * @enum {string}
@@ -7508,10 +8770,10 @@ export interface components {
             /** Format: uuid */
             id: string;
             /**
-             * @description What happened. follow = someone followed your channel; comment = someone commented on your video (addressed to the video's OWNER); comment_reply = someone replied to a comment you wrote (addressed to the comment's AUTHOR, who is usually not the video's owner; actor = the replier, video_id/video_title = the video the thread lives on, comment_id = the reply). A reply to a comment written by the video's own owner delivers comment_reply only, never both; message = someone sent you a direct message; new_video = a channel you follow published a new public video (actor = the channel owner, channel_handle/channel_display_name = the channel, video_id/video_title = the video; sent only while your bell for that channel is "all"); new_report = a user filed an abuse report (delivered only to admins/moderators; actor = the reporter, report_id/report_status/report_target_type carry the report); report_resolved = a moderator resolved an abuse report you filed; video_rejected = a moderator rejected your quarantined upload (video_id/video_title carry which one, moderation_note carries the moderator's written reason when they gave one; the moderator's identity is never included); video_blocked = a moderator blocked one of your PUBLISHED videos, so it is no longer available to viewers (video_id/video_title carry which one; distinct from video_rejected, which is the quarantine outcome for an upload that never published — a block takes down live content and is reversible). The moderator's identity is never included, but moderation_note carries their block reason while the block stands (the A16 ruling made it creator-facing) and is absent once the block is lifted; video_unblocked = a moderator LIFTED the block on one of your videos, so it is available again (video_id/video_title carry which one; no moderator identity and no prose — there is nothing to explain about a restoration). It closes the loop video_blocked opens, and a repeated unblock of the same video delivers only one; caption_ready = an auto-generated caption track finished for your video (video_id/video_title carry which one).
+             * @description What happened. follow = someone followed your channel; comment = someone commented on your video (addressed to the video's OWNER); comment_held = a comment on a requires_approval video you manage (as its channel owner or an editor) awaits your approval (actor = the commenter, absent for a federated one; video_id/video_title/comment_id carry which; one per comment, re-surfaced unread when an edit sends an approved comment back for review); comment_reply = someone replied to a comment you wrote (addressed to the comment's AUTHOR, who is usually not the video's owner; actor = the replier, video_id/video_title = the video the thread lives on, comment_id = the reply). A reply to a comment written by the video's own owner delivers comment_reply only, never both; message = someone sent you a direct message; new_video = a channel you follow published a new public video (actor = the channel owner, channel_handle/channel_display_name = the channel, video_id/video_title = the video; sent only while your bell for that channel is "all"); new_report = a user filed an abuse report (delivered only to admins/moderators; actor = the reporter, report_id/report_status/report_target_type carry the report); new_registration_request = a registration request awaits approval (delivered only to admins/moderators; no actor, the applicant has no account yet); upload_quarantined = an upload entered the quarantine review queue (delivered only to admins/moderators; actor = the uploader, video_id/video_title/channel_handle carry which one); federation_follower_request = a remote actor asked to follow a channel while follower approval is on (delivered only to admins; channel_handle/channel_display_name = the followed channel) — or, with no channel, a remote INSTANCE asked to follow this instance (at most one unread; decided at /admin/federation/instance-followers); report_resolved = a moderator resolved an abuse report you filed; report_message = a new message on an abuse report's thread (the reporter is told when staff write, with no actor — the moderator is never named; staff who receive new_report are told when the reporter writes, actor = the reporter; report_id/report_status/report_target_type carry the report, and the message body is never included); video_rejected = a moderator rejected your quarantined upload (video_id/video_title carry which one, moderation_note carries the moderator's written reason when they gave one; the moderator's identity is never included); video_blocked = a moderator blocked one of your PUBLISHED videos, so it is no longer available to viewers (video_id/video_title carry which one; distinct from video_rejected, which is the quarantine outcome for an upload that never published — a block takes down live content and is reversible). The moderator's identity is never included, but moderation_note carries their block reason while the block stands (the A16 ruling made it creator-facing) and is absent once the block is lifted; video_unblocked = a moderator LIFTED the block on one of your videos, so it is available again (video_id/video_title carry which one; no moderator identity and no prose — there is nothing to explain about a restoration). It closes the loop video_blocked opens, and a repeated unblock of the same video delivers only one; caption_ready = an auto-generated caption track finished for your video (video_id/video_title carry which one). video_ownership_request = another local user offered you one of their videos (actor = the giver; the title is on the request, not on the notification); answer it from GET /me/video-ownership-changes.
              * @enum {string}
              */
-            type: "follow" | "comment" | "comment_reply" | "message" | "new_video" | "new_report" | "report_resolved" | "video_rejected" | "video_blocked" | "video_unblocked" | "caption_ready";
+            type: "follow" | "comment" | "comment_held" | "comment_reply" | "comment_mention" | "message" | "new_video" | "new_report" | "new_registration_request" | "upload_quarantined" | "federation_follower_request" | "report_resolved" | "report_message" | "video_rejected" | "video_blocked" | "video_unblocked" | "caption_ready" | "video_ownership_request";
             read: boolean;
             /** Format: date-time */
             created_at: string;
@@ -7522,14 +8784,14 @@ export interface components {
             channel_display_name?: string;
             /**
              * Format: uuid
-             * @description Commented video's id (comment and comment_reply notifications).
+             * @description Commented video's id (comment, comment_reply and comment_mention notifications).
              */
             video_id?: string;
-            /** @description Commented video's title (comment and comment_reply notifications). */
+            /** @description Commented video's title (comment, comment_reply and comment_mention notifications). */
             video_title?: string;
             /**
              * Format: uuid
-             * @description The comment's id — the new comment for comment, the reply for comment_reply.
+             * @description The comment's id — the new comment for comment, the reply for comment_reply, the mentioning comment for comment_mention.
              */
             comment_id?: string;
             /**
@@ -7539,16 +8801,16 @@ export interface components {
             conversation_id?: string;
             /**
              * Format: uuid
-             * @description The report's id (new_report and report_resolved notifications). On report_resolved the resolving moderator's identity is never included (actor is absent); on new_report the actor is the reporter.
+             * @description The report's id (new_report, report_resolved and report_message notifications). On report_resolved the resolving moderator's identity is never included (actor is absent); on new_report the actor is the reporter.
              */
             report_id?: string;
             /**
-             * @description The report's current status (new_report and report_resolved notifications).
+             * @description The report's current status (new_report, report_resolved and report_message notifications).
              * @enum {string}
              */
             report_status?: "open" | "accepted" | "rejected";
             /**
-             * @description What the report targeted (new_report and report_resolved notifications).
+             * @description What the report targeted (new_report, report_resolved and report_message notifications).
              * @enum {string}
              */
             report_target_type?: "video" | "comment" | "account" | "remote_video" | "message";
@@ -7573,13 +8835,20 @@ export interface components {
              * @example {
              *       "caption_ready": true,
              *       "comment": true,
+             *       "comment_held": true,
+             *       "comment_mention": true,
              *       "comment_reply": true,
+             *       "federation_follower_request": true,
              *       "follow": false,
              *       "message": true,
+             *       "new_registration_request": true,
              *       "new_report": true,
              *       "new_video": true,
+             *       "report_message": true,
              *       "report_resolved": true,
+             *       "upload_quarantined": true,
              *       "video_blocked": true,
+             *       "video_ownership_request": true,
              *       "video_rejected": true,
              *       "video_unblocked": true
              *     }
@@ -7587,17 +8856,60 @@ export interface components {
             prefs: {
                 [key: string]: boolean;
             };
+            /**
+             * @description Every type that can also be delivered by email (comment, comment_reply, new_video) mapped to whether it is. Email is opt-in, mirroring PeerTube's web-only defaults for these types: a type with no stored choice is false. Types absent from this map have no email delivery.
+             * @example {
+             *       "comment": false,
+             *       "comment_reply": true,
+             *       "new_video": true
+             *     }
+             */
+            email: {
+                [key: string]: boolean;
+            };
         };
+        /** @description At least one type must be named in prefs or email (an update naming none is 422). */
         UpdateNotificationPrefsRequest: {
             /**
-             * @description Partial map of notification type -> enabled. Only the types present are changed. Known types: caption_ready, comment, comment_reply, follow, message, new_report, new_video, report_resolved, video_blocked, video_rejected, video_unblocked. An unknown type rejects the whole update (422).
+             * @description Partial map of notification type -> enabled. Only the types present are changed. Known types: caption_ready, comment, comment_held, comment_mention, comment_reply, federation_follower_request, follow, message, new_registration_request, new_report, new_video, report_message, report_resolved, upload_quarantined, video_blocked, video_ownership_request, video_rejected, video_unblocked. An unknown type rejects the whole update (422).
              * @example {
              *       "follow": false
              *     }
              */
-            prefs: {
+            prefs?: {
                 [key: string]: boolean;
             };
+            /**
+             * @description Partial map of email-capable type -> emailed. Only the types present are changed. Email types: comment, comment_reply, new_video. Any other type rejects the whole update (422).
+             * @example {
+             *       "new_video": true
+             *     }
+             */
+            email?: {
+                [key: string]: boolean;
+            };
+        };
+        /**
+         * @description A kind of sensitive content. On the wire to PeerTube these are SensitiveTag entries (sex is explicitSex); `sensitive` stays the boolean Mastodon reads.
+         * @enum {string}
+         */
+        SensitiveFlag: "violent" | "shocking" | "sex";
+        ContentPreferences: {
+            /** @description Per-flag viewer policy overrides. Keys are SensitiveFlag values; each value is hide, warn, blur or display. A flag with no entry inherits the viewer's base policy. */
+            sensitive_flag_policies: {
+                [key: string]: "hide" | "warn" | "blur" | "display";
+            };
+            /** @description Language ids (GET /videos/config) the viewer wants in browse feeds; [] = no filter. The client passes them as the feed's comma-separated ?language. */
+            preferred_languages: string[];
+        };
+        /** @description A merge: an omitted field keeps its stored value. */
+        UpdateContentPreferencesRequest: {
+            /** @description REPLACES the per-flag overrides. An empty string value (or an omitted flag) inherits the base policy. */
+            sensitive_flag_policies?: {
+                [key: string]: "hide" | "warn" | "blur" | "display" | "";
+            };
+            /** @description REPLACES the language list ([] clears). Unknown id -> 400. */
+            preferred_languages?: string[];
         };
         /** @description A signed-in user's effective player defaults (PLAY-07). Every field is always present. video_card_previews_enabled is resolved from the current instance default until the user explicitly chooses true or false. */
         PlayerSettings: {
@@ -7659,6 +8971,16 @@ export interface components {
         Playlist: {
             /** Format: uuid */
             id: string;
+            /**
+             * Format: uuid
+             * @description The owning user. Compare it with the signed-in user to decide owner controls; GET /me/playlists is paged and cannot answer that.
+             */
+            owner_id: string;
+            /**
+             * Format: uuid
+             * @description The owner's channel this playlist is shown under (its Playlists tab, GET /channels/{handle}/playlists). Omitted when the playlist is not attributed to a channel, or after that channel was deleted.
+             */
+            channel_id?: string;
             /** @example Watch later picks */
             title: string;
             description: string;
@@ -7691,6 +9013,11 @@ export interface components {
              * @enum {string}
              */
             visibility?: "public" | "unlisted" | "private";
+            /**
+             * Format: uuid
+             * @description Optional channel to show the playlist under. It must be a channel the caller owns; otherwise the request fails with 404.
+             */
+            channel_id?: string;
         };
         /** @description Partial update; provide at least one field. */
         UpdatePlaylistRequest: {
@@ -7698,17 +9025,45 @@ export interface components {
             description?: string;
             /** @enum {string} */
             visibility?: "public" | "unlisted" | "private";
+            /**
+             * Format: uuid
+             * @description Attach the playlist to a channel the caller owns (404 otherwise), or null to detach it. Omit to leave it unchanged.
+             */
+            channel_id?: string | null;
         };
         AddPlaylistItemRequest: {
             /** Format: uuid */
             video_id: string;
         };
+        MovePlaylistItemRequest: {
+            /**
+             * Format: uuid
+             * @description The item the moved video should directly follow. null or omitted moves it to the front.
+             */
+            after_video_id?: string | null;
+        };
         ReorderPlaylistItemsRequest: {
             /** @description The playlist's video ids in the desired order. Must be exactly the playlist's current items — each id once, none missing or extra. */
             video_ids: string[];
         };
+        /** @enum {string} */
+        ReportReason: "violentOrRepulsive" | "hatefulOrAbusive" | "spamOrMisleading" | "privacy" | "rights" | "serverRules" | "thumbnails" | "captions";
+        /** @description `reasons`, `start_seconds` and `end_seconds` apply to VIDEO reports only (422 on a comment or account report). `end_seconds` needs `start_seconds` and must exceed it; both must be within the video's duration when known. */
         CreateReportRequest: {
             reason: string;
+            reasons?: components["schemas"]["ReportReason"][];
+            /** Format: int32 */
+            start_seconds?: number;
+            /** Format: int32 */
+            end_seconds?: number;
+        };
+        BulkRemoveCommentsRequest: {
+            /** @description A local username, or a remote actor URL (http:// or https://). */
+            account: string;
+        };
+        BulkRemoveCommentsResponse: {
+            /** @description How many comments were removed. */
+            removed: number;
         };
         ResolveReportRequest: {
             /** @enum {string} */
@@ -7745,7 +9100,7 @@ export interface components {
             id: string;
             title: string;
             /** @enum {string} */
-            privacy: "public" | "unlisted" | "private" | "password";
+            privacy: "public" | "unlisted" | "private" | "password" | "internal";
             /** @enum {string} */
             state: "quarantined";
             channel_handle: string;
@@ -7762,8 +9117,16 @@ export interface components {
         RejectQuarantinedVideoRequest: {
             reason?: string;
         };
+        /** @description Who filed the report. A report another instance sent as an ActivityPub Flag (PeerTube, Mastodon, ...) has remote=true, actor_url and domain, and username carries that domain. */
         ReportReporter: {
             username: string;
+            remote?: boolean;
+            /**
+             * Format: uri
+             * @description The remote reporter's ActivityPub actor (remote reports only).
+             */
+            actor_url?: string;
+            domain?: string;
         };
         Report: {
             /** Format: uuid */
@@ -7773,6 +9136,18 @@ export interface components {
             reason: string;
             /** @enum {string} */
             status: "open" | "accepted" | "rejected";
+            /** @description PeerTube-style predefined reasons (never null; empty when none). */
+            reasons: components["schemas"]["ReportReason"][];
+            /**
+             * Format: int32
+             * @description Start of the reported video range, in seconds (video reports only).
+             */
+            start_seconds?: number;
+            /**
+             * Format: int32
+             * @description End of the reported video range; omitted for a single moment.
+             */
+            end_seconds?: number;
             moderator_note: string;
             /** Format: date-time */
             created_at: string;
@@ -7818,13 +9193,82 @@ export interface components {
         ReportListResponse: components["schemas"]["PageMeta"] & {
             reports: components["schemas"]["Report"][];
         };
+        /** @description One message in a report's thread. */
+        ReportMessage: {
+            /** Format: uuid */
+            id: string;
+            /** @description Plain text, as written. Never render it as HTML. */
+            body: string;
+            /** @description True when written by staff rather than the report's reporter. */
+            by_moderator: boolean;
+            /** @description True when the caller wrote it. */
+            is_mine: boolean;
+            /** @description Who wrote it — staff viewers only; the reporter is never told which moderator. */
+            author_username?: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        ReportMessageListResponse: components["schemas"]["PageMeta"] & {
+            messages: components["schemas"]["ReportMessage"][];
+            /** @description False for a remote Flag report (no local reporter to write to). */
+            can_reply: boolean;
+        };
+        CreateReportMessageRequest: {
+            /** @description The message, 1–3000 characters after trimming. */
+            body: string;
+        };
+        /** @description One of the caller's own reports. There is deliberately no moderator_note: it is staff-internal. */
+        MyReport: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            target_type: "video" | "comment" | "account" | "remote_video" | "message";
+            /** @enum {string} */
+            status: "open" | "accepted" | "rejected";
+            /** @description The caller's own words when filing. */
+            reason: string;
+            /** @description PeerTube-style predefined reasons (never null; empty when none). */
+            reasons: components["schemas"]["ReportReason"][];
+            /**
+             * Format: int32
+             * @description Start of the reported video range, in seconds (video reports only).
+             */
+            start_seconds?: number;
+            /**
+             * Format: int32
+             * @description End of the reported video range; omitted for a single moment.
+             */
+            end_seconds?: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            resolved_at?: string;
+            /**
+             * Format: date-time
+             * @description The latest of filing, resolution and the newest thread message.
+             */
+            last_activity_at: string;
+            /** Format: int64 */
+            message_count: number;
+            /** Format: uuid */
+            video_id?: string;
+            /** @description Omitted unless the video is still public, published and not blocked. */
+            video_title?: string;
+            /** @description The reported account (account reports). */
+            reported_username?: string;
+            /** @description The reported federated video (remote_video reports). */
+            remote_video_title?: string;
+        };
+        MyReportListResponse: components["schemas"]["PageMeta"] & {
+            reports: components["schemas"]["MyReport"][];
+        };
         /** @description A currently-blocked video, for the moderation block-list. */
         BlockedVideo: {
             /** Format: uuid */
             video_id: string;
             title: string;
             /** @enum {string} */
-            privacy: "public" | "unlisted" | "private" | "password";
+            privacy: "public" | "unlisted" | "private" | "password" | "internal";
             /** @enum {string} */
             state: "draft" | "processing" | "scheduled" | "quarantined" | "published" | "failed";
             channel_handle: string;
@@ -7868,7 +9312,7 @@ export interface components {
             id: string;
             title: string;
             /** @enum {string} */
-            privacy: "public" | "unlisted" | "private" | "password";
+            privacy: "public" | "unlisted" | "private" | "password" | "internal";
             /** @enum {string} */
             state: "draft" | "processing" | "scheduled" | "quarantined" | "published" | "failed";
             channel_handle: string;
@@ -7933,6 +9377,8 @@ export interface components {
             created_at: string;
             /** @description True for a tombstoned comment (its author's account was permanently deleted); body renders as "[deleted]". */
             deleted: boolean;
+            /** @description Tags computed from the body when it was posted or last edited: `external-link` (it contains a URL) and the NAME of each instance watched-word list it matches. Never the matched words. Empty for an untagged comment, and for one that predates the feature until it is edited. Tags are a snapshot of list names at post/edit time: renaming or deleting a list, or adding words, does not retag old comments. */
+            automatic_tags: string[];
         };
         AdminCommentListResponse: components["schemas"]["PageMeta"] & {
             comments: components["schemas"]["AdminComment"][];
@@ -7971,6 +9417,37 @@ export interface components {
             limit: number;
             offset: number;
         };
+        /** @description A named watched-word list. Instance lists (admin) apply to every comment; a creator's own lists apply only to comments on their videos. words is present on get/create/update only, and never for the default list. */
+        WatchedWordList: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @enum {string} */
+            action: "flag" | "hold";
+            is_default: boolean;
+            /** Format: int64 */
+            word_count: number;
+            words?: string[];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        WatchedWordListsPage: components["schemas"]["PageMeta"] & {
+            lists: components["schemas"]["WatchedWordList"][];
+        };
+        CreateWatchedWordListRequest: {
+            name: string;
+            /** @enum {string} */
+            action?: "flag" | "hold";
+            words?: string[];
+        };
+        UpdateWatchedWordListRequest: {
+            name?: string;
+            /** @enum {string} */
+            action?: "flag" | "hold";
+            words?: string[];
+        };
         WatchedWordListResponse: components["schemas"]["PageMeta"] & {
             words: components["schemas"]["WatchedWord"][];
         };
@@ -7980,6 +9457,8 @@ export interface components {
             id: string;
             /** @description The watched term that matched, as it read when the flag was raised. It survives the term being deleted from the list (see term_active). */
             word: string;
+            /** @description The watched-word list that matched (a snapshot; absent for matches that predate named lists). */
+            list_name?: string;
             /**
              * @description What was flagged.
              * @enum {string}
@@ -8062,6 +9541,30 @@ export interface components {
             /** Format: date-time */
             expires_at: string;
         };
+        AdminCreateUserRequest: {
+            /** @description Same rules as signup: no '@' or whitespace. */
+            username: string;
+            /** Format: email */
+            email: string;
+            /** @enum {string} */
+            role: "user" | "moderator" | "admin";
+            /** @description Per-user override (0 = unlimited); absent or null = the instance default. */
+            storage_quota_bytes?: number | null;
+            /** @description The CALLING administrator's own current password (step-up), never the new account's. */
+            password: string;
+        };
+        AdminCreateUserResponse: {
+            user: components["schemas"]["AdminUser"];
+            /** @description True when the set-password link was emailed; reset_url is then absent. */
+            link_emailed: boolean;
+            /**
+             * Format: uri
+             * @description PUBLIC_BASE_URL + /reset-password/confirm?token=..., shown once; absent when emailed.
+             */
+            reset_url?: string;
+            /** Format: date-time */
+            expires_at: string;
+        };
         /** @description Admin projection of an account (never includes the password hash). */
         AdminUser: {
             /** Format: uuid */
@@ -8085,6 +9588,16 @@ export interface components {
              * @description The account's current storage usage: total stored bytes of its video files (originals, renditions, thumbnails) across the videos owned via its channels.
              */
             storage_used_bytes: number;
+            /**
+             * Format: int64
+             * @description Per-user rolling-24h upload quota override in bytes. null = the instance default (default_user_daily_quota_bytes) applies; 0 = unlimited for this account.
+             */
+            daily_quota_bytes: number | null;
+            /**
+             * Format: int64
+             * @description Bytes the account stored in the trailing 24 hours (the upload-usage ledger the daily quota gate sums; deleting a video does not refund it).
+             */
+            daily_used_bytes: number;
             /** Format: date-time */
             created_at: string;
             /**
@@ -8092,6 +9605,15 @@ export interface components {
              * @description When this account was hard-deleted, or null for a live account. A deleted account stays listed as an anonymised tombstone (`deleted-<suffix>`) so an admin can see it, but deletion is permanent: PATCH with `is_active: true` on such a row is refused with 422, and the console offers no reactivate action for it. Every other admin write to a tombstone is refused the same way.
              */
             deleted_at: string | null;
+            /** @description Why the account was banned; null when not banned. */
+            ban_reason: string | null;
+            /** Format: date-time */
+            banned_at: string | null;
+            /**
+             * Format: uuid
+             * @description The staff account that banned it.
+             */
+            banned_by: string | null;
             /** @description Whether this account is THE instance owner — the account that redeemed the first-run setup token. There is no owner ROLE: the owner holds `admin` like any other administrator, so this flag is the only thing that identifies it. Another administrator cannot demote, deactivate or delete it (422 `owner_protected`), and nobody can remove the last active administrator (422 `last_admin`). False for every account on an instance claimed before the marker existed whose owner could not be determined. */
             is_owner: boolean;
             /** @description Whether this account has a CONFIRMED second factor (TOTP). A pending enrollment reads false, exactly as the account's own GET /api/v1/auth/mfa reports it. It is a boolean and nothing more: no admin route ever returns the shared secret or a recovery code. An admin can remove the factor with DELETE /api/v1/admin/users/{id}/mfa, which is the only operator answer to a user who has lost both their authenticator and their recovery codes. */
@@ -8357,6 +9879,59 @@ export interface components {
                 watched_at?: string;
             }[];
         };
+        /** @description What POST /api/v1/me/import/peertube created and skipped. */
+        PeerTubeImportSummary: {
+            /** @description Accounts from following.json queued to be followed in the background (name@host handles only; at most 1000 pending per user and 20 per host). Handles not queued (duplicate, malformed, over the cap) are counted in skipped_sections.following. */
+            follows_queued: number;
+            /** @description Handles held back because federation is disabled on this instance. */
+            follows_skipped_federation: number;
+            /**
+             * Format: uuid
+             * @description Poll GET /api/v1/me/import/peertube/follows/{id}; null when nothing was queued.
+             */
+            follows_job_id: string | null;
+            channels_created: number;
+            channels_existing: number;
+            /** @description Channels whose PeerTube name was rewritten into the handle alphabet ([A-Za-z0-9_], 3-30 characters; other characters become "_", with a numeric "_N" suffix on a collision). Playlists follow their channel. */
+            channels_mapped: {
+                from: string;
+                to: string;
+            }[];
+            /** @description Empty name, reserved, owned by someone else, or over the channel limit. */
+            channels_skipped: number;
+            playlists_created: number;
+            playlists_existing: number;
+            playlists_skipped: number;
+            /** @description Items not added; skipped_sections.playlist_items_not_addable (no such video, or one that is not public and published, deliberately indistinguishable) and playlist_items_over_cap give the reasons. */
+            playlist_items_skipped: number;
+            /** @description Items resolved to a local video and present in the playlist (a re-import re-confirms them). */
+            playlist_items_added: number;
+            /** @description Channel avatars/banners from the export applied to channels that had none. */
+            channel_images_set: number;
+            /** @description Avatars/banners the export names but that were refused (not a usable files/ image entry, wrong or mismatched type, over 8 MiB, out-of-bounds dimensions, scan policy, no storage). */
+            channel_images_skipped: number;
+            settings_applied: number;
+            skipped_sections: {
+                [key: string]: number;
+            };
+        };
+        /** @description Progress of one background follow import. total is the sum of the other counts; the import is finished when pending is 0. */
+        PeerTubeFollowImportStatus: {
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            created_at: string;
+            total: number;
+            /** @description Waiting or being retried with backoff. */
+            pending: number;
+            /** @description Follow requested (the remote may still accept or reject it). */
+            done: number;
+            /** @description Could not be resolved (unreachable after the retry limit, or not followable from this instance). */
+            failed: number;
+            skipped_federation: number;
+            /** @description A local actor or a handle that cannot be followed. */
+            skipped_invalid: number;
+        };
         /** @description What POST /api/v1/me/import re-created (safe subsets only) and what it skipped. */
         AccountImportSummary: {
             /** @description True when display_name/bio were applied from the archive. */
@@ -8400,6 +9975,11 @@ export interface components {
              * @description When the current live session began (stamped on the transition into "live", cleared when it ends). Present only while the stream is live.
              */
             started_at?: string;
+            /**
+             * Format: date-time
+             * @description Planned start, present only while the stream is not live. Public to whoever may already read the stream (a private stream is 404 to strangers, so its schedule is too). Announcement metadata only.
+             */
+            scheduled_start_at?: string;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -8462,6 +10042,11 @@ export interface components {
             permanent: boolean;
             /** @description Record sessions and republish them as VODs (see LiveStream.replay_enabled). When OMITTED, the instance default (live_default_save_replay, exposed as the /instance live block's default_save_replay) is seeded; an explicit value always wins. While the instance disallows replay (live.allow_replay=false) the seed is always false and any stored flag produces no replay. */
             replay_enabled?: boolean;
+            /**
+             * Format: date-time
+             * @description Planned start (RFC 3339). Must be in the future and within one year; otherwise 422 on scheduled_start_at. ANNOUNCEMENT ONLY: nothing ever starts a stream because this time passed — going live is still the encoder connecting. Going live clears it.
+             */
+            scheduled_start_at?: string | null;
         };
         UpdateLiveStreamRequest: {
             title: string;
@@ -8475,6 +10060,11 @@ export interface components {
             permanent: boolean;
             /** @default false */
             replay_enabled: boolean;
+            /**
+             * Format: date-time
+             * @description Planned start (RFC 3339). REPLACES the stored value like every field of this body, so omitting it or sending null CLEARS it. An unchanged stored value may be echoed back even after it has passed. Not settable while the stream is live. Must be in the future and within one year; otherwise 422 on scheduled_start_at. ANNOUNCEMENT ONLY: nothing ever starts a stream because this time passed — going live is still the encoder connecting. Going live clears it.
+             */
+            scheduled_start_at?: string | null;
         };
         CreateLiveStreamResponse: {
             live_stream: components["schemas"]["LiveStream"];
@@ -8482,6 +10072,8 @@ export interface components {
             stream_key: string;
             /** @description RTMP ingest base URL (omitted when no ingest is configured). */
             rtmp_url?: string;
+            /** @description RTMPS (RTMP over TLS) ingest base URL, present only when the operator configured LIVE_RTMPS_URL. Prefer it over rtmp_url: plain RTMP sends the stream key in cleartext. */
+            rtmps_url?: string;
         };
         LiveStreamListResponse: components["schemas"]["PageMeta"] & {
             live_streams: components["schemas"]["LiveStream"][];
@@ -8512,10 +10104,26 @@ export interface components {
         LivePublicListResponse: components["schemas"]["PageMeta"] & {
             live_streams: components["schemas"]["LiveStreamCard"][];
         };
+        /** @description One entry of the public "Upcoming" listing: a PUBLIC, not-yet-live stream with a planned start. Never carries privacy/state or the key. */
+        LiveStreamUpcomingCard: {
+            /** Format: uuid */
+            id: string;
+            title: string;
+            description?: string;
+            channel_handle: string;
+            channel_display_name: string;
+            /** Format: date-time */
+            scheduled_start_at: string;
+        };
+        LiveUpcomingListResponse: components["schemas"]["PageMeta"] & {
+            live_streams: components["schemas"]["LiveStreamUpcomingCard"][];
+        };
         LiveStreamKey: {
             /** @description The new stream key, shown ONCE. */
             stream_key: string;
             rtmp_url?: string;
+            /** @description RTMPS (RTMP over TLS) ingest base URL, present only when the operator configured LIVE_RTMPS_URL. Prefer it over rtmp_url: plain RTMP sends the stream key in cleartext. */
+            rtmps_url?: string;
         };
         LiveIngestRequest: {
             /** @description The publisher's raw stream key, as presented to the RTMP ingest. */
@@ -9220,6 +10828,56 @@ export interface components {
                 self: boolean;
             }[];
         };
+        /** @description An admin-managed OIDC provider. Carries no secret. */
+        OIDCProvider: {
+            /** @example corp-sso */
+            name: string;
+            /** @description Sign-in button label; empty means the name. */
+            display_name: string;
+            /** Format: uri */
+            issuer_url: string;
+            client_id: string;
+            /** @description Requested scopes; empty means openid email profile. openid is always added. */
+            scopes: string[];
+            enabled: boolean;
+            /** @description false: only already-linked identities sign in; an unknown subject gets oauth_error=signup_disabled. */
+            auto_provision: boolean;
+            /** @description Non-empty: a new account is created only for a VERIFIED email in one of these domains (exact match), otherwise oauth_error=email_domain_not_allowed. Linked identities are unaffected. */
+            allowed_email_domains: string[];
+            secret_configured: boolean;
+            /** @enum {string} */
+            secret_status: "ok" | "undecryptable";
+            /** Format: date-time */
+            updated_at: string;
+        };
+        OIDCProviderList: {
+            providers: components["schemas"]["OIDCProvider"][];
+            environment: {
+                name: string;
+                issuer_url: string;
+                /** @description A stored provider with this name replaces it. */
+                overridden: boolean;
+            }[];
+            /** @description Whether a key-encryption key exists to seal a client secret. */
+            secrets_available: boolean;
+        };
+        OIDCProviderUpdateRequest: {
+            display_name?: string;
+            /** @description Optional; must equal the stored issuer. */
+            issuer_url?: string;
+            client_id: string;
+            /** @description Omit to keep the stored secret. */
+            client_secret?: string;
+            scopes?: string[];
+            enabled?: boolean;
+            auto_provision?: boolean;
+            allowed_email_domains?: string[];
+            current_password?: string;
+            step_up_token?: string;
+        };
+        OIDCProviderCreateRequest: components["schemas"]["OIDCProviderUpdateRequest"] & {
+            name: string;
+        };
         /** @description The outbound-mail configuration and the state it is in. Returned by GET and PUT /api/v1/admin/mail-config. */
         MailConfigState: {
             /**
@@ -9478,6 +11136,8 @@ export interface components {
             live?: {
                 /** @description LIVE_RTMP_URL — already handed verbatim to every streamer on stream creation. */
                 rtmp_url: string;
+                /** @description LIVE_RTMPS_URL; absent when RTMPS is not offered. */
+                rtmps_url?: string;
                 /** @description LIVE_HLS_ROOT — a container path in the same sensitivity class as storage.local_root. */
                 hls_root: string;
             };
@@ -9735,7 +11395,7 @@ export interface components {
             conflict_policy: string;
             /** @description Whether this run was allowed to update rows the import already owns where the source and this instance had diverged. Recorded on the report because "why did that title change?" is asked long afterwards. */
             source_authoritative?: boolean;
-            /** @description Per-entity-kind counts, keyed by entity kind (category_taxonomy, user, user_suspension, user_quota_unlimited, channel, actor_avatar, actor_banner, video, video_sensitive, video_block, video_file, hls_playlist, video_no_media, thumbnail, storyboard, caption, tag, view_count, video_original_date, chapter, rating, rendition, comment, playlist, playlist_item, follow, watch_history). watch_history restores local-video resume positions and timestamps in batches; remote history is unsupported. Existing or cleared destination history is preserved even in source-authoritative mode. New accounts retain the source history-enabled preference when available. video_no_media counts VIDEOS that land with NOTHING to play — no web-video file and no streaming playlist. It is the only count here that reports an absence, and it exists because the absence is otherwise invisible: such a video is inserted, counted as an imported video, and discovered when somebody presses play. Copy mode carries flat local HLS dependencies; nested/external references need conversion. Reference-mode counts do not verify that referenced objects exist. It stays 0 for a metadata-only run (media_mode none, or no destination store), where nothing to play is what was asked for. user_suspension counts USERS whose source suspension (user.blocked) was carried onto is_active, video_sensitive counts VIDEOS the source flagged nsfw, and video_block counts VIDEOS the source had BLACKLISTED (moderator-removed there, carried into video_blocks so they are removed here too); all three count only what was CARRIED, never the whole family. user_quota_unlimited counts USERS the import CREATED and therefore gave an unlimited storage quota (storage_quota_bytes = 0): a migrated creator's back-catalogue is already stored and usage is recomputed live from video_files, so inheriting the instance default would put anyone with a larger catalogue over quota on their first upload after cutover. Quotas on migrated accounts are a deliberate admin action afterwards; the import states this once, at creation, and never on a re-run. view_count counts VIDEOS whose view total was carried, never views: the source records one lifetime number per video and no daily breakdown, so the total is applied as a delta to the video's counter and no per-day rows are invented. category_taxonomy is the INSTANCE's category list, so it is 0 or 1: 1 when the source replaces the stock taxonomy (a categories plugin) and the setting is the import's to write, 0 for the majority of sources, which run the stock list and get no override written. actor_avatar and actor_banner count the source's account and channel profile images, which are FETCHED over HTTP from the source instance rather than read from its object store (no PeerTube configuration puts them there), and which are never written over an image this instance already has. thumbnail and storyboard count VIDEOS whose poster and seek-preview sprite sheet were carried, and they follow the same rules: PeerTube keeps neither in object storage either, so both are read from a mounted source media root when there is one and fetched over HTTP otherwise, and neither is written over an asset this instance already holds. A storyboard is carried as its sprite sheet AND a WebVTT map synthesised from the source's grid geometry, because PeerTube stores no map of its own; expect a source to have fewer storyboards than videos, since it generates none for a video shorter than three seconds. */
+            /** @description Per-entity-kind counts, keyed by entity kind (category_taxonomy, user, user_suspension, user_quota_unlimited, channel, actor_avatar, actor_banner, video, video_sensitive, video_block, video_file, hls_playlist, video_no_media, thumbnail, storyboard, caption, tag, view_count, video_original_date, chapter, rating, rendition, comment, playlist, playlist_item, follow, remote_follower, watch_history). remote_follower counts accepted follows of a local channel by a remote actor, carried only when the channel's actor id here is the one followed and no block refuses the follower; an ACCOUNT follow is unsupported (followers are per channel). watch_history restores local-video resume positions and timestamps in batches; remote history is unsupported. Existing or cleared destination history is preserved even in source-authoritative mode. New accounts retain the source history-enabled preference when available. video_no_media counts VIDEOS that land with NOTHING to play — no web-video file and no streaming playlist. It is the only count here that reports an absence, and it exists because the absence is otherwise invisible: such a video is inserted, counted as an imported video, and discovered when somebody presses play. Copy mode carries flat local HLS dependencies; nested/external references need conversion. Reference-mode counts do not verify that referenced objects exist. It stays 0 for a metadata-only run (media_mode none, or no destination store), where nothing to play is what was asked for. user_suspension counts USERS whose source suspension (user.blocked) was carried onto is_active, video_sensitive counts VIDEOS the source flagged nsfw, and video_block counts VIDEOS the source had BLACKLISTED (moderator-removed there, carried into video_blocks so they are removed here too); all three count only what was CARRIED, never the whole family. user_quota_unlimited counts USERS the import CREATED and therefore gave an unlimited storage quota (storage_quota_bytes = 0): a migrated creator's back-catalogue is already stored and usage is recomputed live from video_files, so inheriting the instance default would put anyone with a larger catalogue over quota on their first upload after cutover. Quotas on migrated accounts are a deliberate admin action afterwards; the import states this once, at creation, and never on a re-run. view_count counts VIDEOS whose view total was carried, never views: the source records one lifetime number per video and no daily breakdown, so the total is applied as a delta to the video's counter and no per-day rows are invented. category_taxonomy is the INSTANCE's category list, so it is 0 or 1: 1 when the source replaces the stock taxonomy (a categories plugin) and the setting is the import's to write, 0 for the majority of sources, which run the stock list and get no override written. actor_avatar and actor_banner count the source's account and channel profile images, which are FETCHED over HTTP from the source instance rather than read from its object store (no PeerTube configuration puts them there), and which are never written over an image this instance already has. thumbnail and storyboard count VIDEOS whose poster and seek-preview sprite sheet were carried, and they follow the same rules: PeerTube keeps neither in object storage either, so both are read from a mounted source media root when there is one and fetched over HTTP otherwise, and neither is written over an asset this instance already holds. A storyboard is carried as its sprite sheet AND a WebVTT map synthesised from the source's grid geometry, because PeerTube stores no map of its own; expect a source to have fewer storyboards than videos, since it generates none for a video shorter than three seconds. */
             entities: {
                 [key: string]: components["schemas"]["PeerTubeImportCounts"];
             };
@@ -9962,6 +11622,52 @@ export interface components {
             /** Format: int64 */
             unpinned: number;
         };
+        /** @description Progress of the bulk re-pin of pinned HLS trees to the playback-only set. */
+        IPFSRepinStatus: {
+            /** @enum {string} */
+            phase: "idle" | "running" | "paused" | "completed" | "cancelled";
+            /** Format: date-time */
+            started_at: string | null;
+            /** Format: date-time */
+            finished_at: string | null;
+            /** @description Why the run is paused (e.g. budget_exhausted); empty otherwise. */
+            pause_reason: string;
+            /** Format: int64 */
+            scanned: number;
+            /**
+             * Format: int64
+             * @description Rows moved back to pending for a playback-only re-add.
+             */
+            queued: number;
+            /**
+             * Format: int64
+             * @description Queued rows now pinned to a new root.
+             */
+            done: number;
+            /**
+             * Format: int64
+             * @description Rows already playback-only, or that changed under the run.
+             */
+            skipped: number;
+            /**
+             * Format: int64
+             * @description Rows the admission policy would not re-admit (e.g. backfill off).
+             */
+            blocked: number;
+            /** Format: int64 */
+            failed: number;
+            in_flight: number;
+            /**
+             * Format: int64
+             * @description Pinned HLS rows not examined yet; an upper bound on the work left.
+             */
+            remaining: number;
+            /**
+             * Format: int64
+             * @description Pinned bytes no longer held by the ledger; freed on disk only after GC.
+             */
+            bytes_saved_estimate: number;
+        };
         /** @description Result of an IPFS reconciliation scan: how many pin intents were enqueued, overall and per media class. Idempotent — a second run enqueues zero. */
         IPFSReconcileResult: {
             /**
@@ -10033,6 +11739,8 @@ export interface components {
             /** @enum {string} */
             role?: "user" | "moderator" | "admin";
             is_active?: boolean;
+            /** @description Why the account is being banned; only valid with `is_active=false`. Required from a moderator, optional from an admin. */
+            ban_reason?: string;
             /** @description Admin-set email verification state: true marks the address confirmed without the token round-trip; false revokes the confirmation. Omit to leave unchanged. */
             email_verified?: boolean;
             /** @description Exempts the account from the QUARANTINE_NEW_UPLOADS gate (its uploads publish directly); false re-subjects it. Omit to leave unchanged. */
@@ -10042,6 +11750,11 @@ export interface components {
              * @description Per-user storage quota in bytes. Omit to leave unchanged; null resets the account to the instance default; 0 makes the account unlimited. Negative or non-integer values are 422.
              */
             storage_quota_bytes?: number | null;
+            /**
+             * Format: int64
+             * @description Per-user rolling-24h upload quota in bytes (PeerTube videoQuotaDaily), tri-state like storage_quota_bytes: omit to leave unchanged; null resets to the instance default (default_user_daily_quota_bytes); 0 makes the account unlimited. Negative or non-integer values are 422.
+             */
+            daily_quota_bytes?: number | null;
         };
         /** @description A stored file backing a video. The storage key is internal and not exposed. */
         VideoFile: {
@@ -10382,6 +12095,24 @@ export interface components {
             /** Format: date-time */
             created_at: string;
         };
+        /** @description One instance follow (migration 0166): a remote instance actor following this instance's actor, or this instance's actor following one. */
+        InstanceFollow: {
+            /** Format: uuid */
+            id: string;
+            /** @description The remote instance actor's ActivityPub id. */
+            actor_url: string;
+            /** @description The remote instance's host. */
+            host: string;
+            /** @description The remote instance actor's preferred_username@host. */
+            handle: string;
+            /** @enum {string} */
+            state: "pending" | "accepted" | "rejected";
+            /** Format: date-time */
+            created_at: string;
+        };
+        InstanceFollowListResponse: components["schemas"]["PageMeta"] & {
+            follows: components["schemas"]["InstanceFollow"][];
+        };
         FederationFollowerRequestListResponse: components["schemas"]["PageMeta"] & {
             requests: components["schemas"]["FederationFollowerRequest"][];
         };
@@ -10434,6 +12165,26 @@ export interface components {
             mfa_required: true;
             /** @description Short-lived (5 min) single-purpose token. Not an access token — it is only accepted by the MFA challenge endpoint. */
             mfa_token: string;
+        };
+        RecognisedDevice: {
+            /** Format: uuid */
+            id: string;
+            /** @example Chrome on macOS */
+            label: string;
+            /** Format: date-time */
+            first_seen_at: string;
+            /** Format: date-time */
+            last_seen_at: string;
+            /** @description True for the device making this request. */
+            current: boolean;
+        };
+        RecognisedDevicesResponse: {
+            devices: components["schemas"]["RecognisedDevice"][];
+            /** @description Whether the new-device sign-in email is on (default true). */
+            new_device_email: boolean;
+        };
+        SecurityPrefsRequest: {
+            new_device_email: boolean;
         };
         MFAStatusResponse: {
             /** @description Whether TOTP two-factor authentication is enabled. */
@@ -10588,6 +12339,10 @@ export interface components {
     };
     responses: never;
     parameters: {
+        /** @description The instance follow's id. */
+        InstanceFollowID: string;
+        /** @description Only follows in this state. */
+        InstanceFollowState: "pending" | "accepted" | "rejected";
         /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
         PageLimit: number;
         /** @description Rows to skip. Negative values are clamped to 0. */
@@ -12104,6 +13859,115 @@ export interface operations {
                 };
             };
             /** @description Validation failed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listRecognisedDevices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The account's recognised devices. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecognisedDevicesResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    forgetRecognisedDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The device was forgotten. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such device on this account. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateSecurityPrefs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SecurityPrefsRequest"];
+            };
+        };
+        responses: {
+            /** @description The stored preference. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecurityPrefsRequest"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation failed (new_device_email is required). */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -13664,6 +15528,44 @@ export interface operations {
             };
         };
     };
+    listUserVideos: {
+        parameters: {
+            query?: {
+                /** @description `-published_at` (newest first, the default) or `published_at` (oldest first). */
+                sort?: "-published_at" | "published_at";
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path: {
+                username: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The account's public videos (possibly empty). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VideoListResponse"];
+                };
+            };
+            /** @description The profile is private, inactive, or unknown. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     listUserDonationAddresses: {
         parameters: {
             query?: never;
@@ -13909,6 +15811,145 @@ export interface operations {
             };
             /** @description Not a valid vidra account archive. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getPeerTubeFollowImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current counts. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PeerTubeFollowImportStatus"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such import for this caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    importPeerTubeArchive: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    archive: string;
+                };
+            };
+        };
+        responses: {
+            /** @description What was imported and what was skipped. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PeerTubeImportSummary"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Archive imports are disabled (code feature_disabled). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The upload stopped sending for 60 seconds and was abandoned. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The request has no Content-Length. */
+            411: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The request body exceeds PEERTUBE_IMPORT_MAX_SIZE (default: the global HTTP body limit), declared or actually streamed. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, not a zip, or not a valid PeerTube export. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many imports in the window (3 per user per hour). */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The server is already receiving the maximum number of archives, or has too little free temporary space for this one (also when space runs short mid-upload); retry after the Retry-After seconds. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -14535,6 +16576,91 @@ export interface operations {
             };
         };
     };
+    getFeedToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Token status. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedTokenStatus"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    rotateFeedToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The new token. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedTokenIssued"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    revokeFeedToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revoked (or none existed). */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     listSubscriptionVideos: {
         parameters: {
             query?: {
@@ -14560,6 +16686,143 @@ export interface operations {
             };
             /** @description Missing, invalid, or expired token. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listChannelPlaylists: {
+        parameters: {
+            query?: {
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path: {
+                handle: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The channel's playlists visible to the caller. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaylistListResponse"];
+                };
+            };
+            /** @description No channel with that handle. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listMyVideos: {
+        parameters: {
+            query?: {
+                /** @description Title search (at most 200 characters). */
+                q?: string;
+                privacy?: "public" | "unlisted" | "private" | "password" | "internal";
+                state?: "draft" | "processing" | "scheduled" | "quarantined" | "transcoding" | "published" | "failed";
+                channel_id?: string;
+                /** @description `-published_at` (newest first, default) or `published_at` (oldest first); same convention as the per-channel list. */
+                sort?: "-published_at" | "published_at";
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of the caller's videos (possibly empty). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VideoListResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unknown privacy/state, malformed channel_id, or an over-long q. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    bulkMyVideos: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkVideosRequest"];
+            };
+        };
+        responses: {
+            /** @description Per-id results (the request itself was accepted). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkVideosResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description At least one id is not a video the caller owns; nothing was changed. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Zero ids, more than 100, a malformed or duplicate id, an unknown action, or an invalid privacy. */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -14672,15 +16935,15 @@ export interface operations {
     listPublicVideos: {
         parameters: {
             query?: {
-                /** @description Ordering: recent (newest first), popular (most all-time views), or trending (views decayed by age). Unknown values fall back to recent. */
-                sort?: "recent" | "popular" | "trending";
+                /** @description Ordering: recent (newest first), popular (most all-time views), trending (views decayed by age), originally_published_at (newest by the creator-declared original date, falling back to the publish date), or name (title A-Z, case-insensitive). Every order ends in a newest-first, id tiebreak. Unknown values fall back to recent. */
+                sort?: "recent" | "popular" | "trending" | "originally_published_at" | "name";
                 /** @description Feed scope: local (this instance's videos only) or all (adds federated remote videos for discovery). Unknown values fall back to local. */
                 scope?: "local" | "all";
                 /** @description Only videos carrying this free-form tag (case-insensitive exact match; at most 50 characters). */
                 tag?: string;
                 /** @description Only videos with this subject-category id (see GET /videos/config). Unknown value -> 422. */
                 category?: string;
-                /** @description Only videos with this content-language code (see GET /videos/config). Unknown value -> 422. */
+                /** @description Only videos in this content language (see GET /videos/config), or in ANY of a comma-separated list of up to 10 (`en,fr`; a viewer's preferred_languages from GET /me/content-preferences). Unknown value -> 422. */
                 language?: string;
                 /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
                 limit?: components["parameters"]["PageLimit"];
@@ -14992,7 +17255,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description The video is password protected and the caller presented no valid credential. Error code "password_required". */
+            /** @description The video is password protected and the caller presented no valid credential (error code "password_required"), or it is privacy=internal and the caller is not signed in (error code "sign_in_required"). */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -15032,7 +17295,7 @@ export interface operations {
                     "application/json": components["schemas"]["Video"];
                 };
             };
-            /** @description The video is password protected and the caller presented no valid credential (owner/moderator/admin token or playback token). Error code "password_required". */
+            /** @description The video is password protected and the caller presented no valid credential (owner/moderator/admin token or playback token), error code "password_required"; or it is privacy=internal and the caller is not signed in, error code "sign_in_required". */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -15123,7 +17386,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description No such video, or the caller is neither its owner nor a moderator/admin. */
+            /** @description No such video, or the caller is neither its owner nor a moderator/admin; or channel_id names a channel that does not exist or that the caller does not manage, or whose owner differs from the current channel's. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -15173,6 +17436,97 @@ export interface operations {
                 };
             };
             /** @description No such video, or not owned by the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    recordVideoPlayback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlaybackBeaconRequest"];
+            };
+        };
+        responses: {
+            /** @description Sample accepted (or ignored). */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Malformed body or out-of-range value. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such video, or not visible to the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Beacon budget exceeded. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getVideoPlaybackStats: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The video's playback statistics. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaybackStatsResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such video, or the caller may not manage it. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -16757,6 +19111,50 @@ export interface operations {
             };
         };
     };
+    listManagedVideoComments: {
+        parameters: {
+            query?: {
+                held?: boolean;
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of the queue (possibly empty). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedCommentListResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description held is not true or false. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     listMyUploads: {
         parameters: {
             query?: {
@@ -17951,6 +20349,84 @@ export interface operations {
             };
         };
     };
+    approveComment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                commentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /**
+                     * Format: date-time
+                     * @description The comment's updated_at as the reviewer saw it.
+                     */
+                    updated_at: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The comment, no longer held. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Comment"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller cannot review this video's comments. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such comment on this video. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The held comment changed since that version; review it again. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description updated_at is missing. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     deleteComment: {
         parameters: {
             query?: never;
@@ -18774,6 +21250,288 @@ export interface operations {
             };
         };
     };
+    giveVideoOwnership: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description The recipient's username (case-insensitive). */
+                    username: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The request is pending the recipient's answer. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The video does not exist or the caller does not own it ("video not found"), or no eligible recipient has that username ("user not found" — one answer for an unknown, banned or deleted account, a block in either direction, and the caller themselves). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description A request for this video is already pending; the video is still uploading or processing (state draft or processing, or any upload, replacement, import or transcode of it unfinished); or an offer from the caller to the same recipient ended — refused, or withdrawn by the caller — in the last 24 hours. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation failed (username is required). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Ownership changes are not configured on this server. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    cancelVideoOwnershipChange: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Withdrawn. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No pending offer of this video by the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listVideoOwnershipChanges: {
+        parameters: {
+            query?: {
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of ownership changes (possibly empty). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VideoOwnershipChangeListResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Ownership changes are not configured on this server. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    acceptVideoOwnershipChange: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /**
+                     * Format: uuid
+                     * @description One of the caller's own channels.
+                     */
+                    channel_id: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Accepted; the video now belongs to the caller. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such request addressed to the caller ("ownership change not found"), or the channel does not exist or is not the caller's ("channel not found"). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The request was already answered, withdrawn or expired (older than 30 days); the giver no longer owns the video; or the video is still being uploaded or processed (any upload, replacement, import or transcode of it unfinished). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation failed (channel_id must be a channel id), or the video does not fit the caller's quota (code quota_exceeded or daily_quota_exceeded). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Ownership changes are not configured on this server. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    refuseVideoOwnershipChange: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Refused. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such request addressed to the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The request was already accepted or refused. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Ownership changes are not configured on this server. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     getWatchProgress: {
         parameters: {
             query?: never;
@@ -19064,8 +21822,79 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Empty update or unknown notification type. */
+            /** @description Empty update, unknown notification type, or an email switch for a type without email delivery. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getContentPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's content preferences. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContentPreferences"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateContentPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateContentPreferencesRequest"];
+            };
+        };
+        responses: {
+            /** @description The saved content preferences. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContentPreferences"];
+                };
+            };
+            /** @description Malformed body, unknown flag, or invalid policy. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -19490,6 +22319,68 @@ export interface operations {
             };
         };
     };
+    movePlaylistItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                /** @description The item to move. */
+                videoId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MovePlaylistItemRequest"];
+            };
+        };
+        responses: {
+            /** @description The video is in its new place. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such playlist owned by the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The video, or after_video_id, is not an item of this playlist (the client's copy is stale — reload it). Nothing moved. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description after_video_id is malformed or names the moved video itself. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     getPlaylistThumbnail: {
         parameters: {
             query?: never;
@@ -19795,6 +22686,8 @@ export interface operations {
             query?: {
                 /** @description Which half of the queue to return. `open` is unresolved; `resolved` is everything already accepted or rejected; `all` (the default, and what an absent parameter means) is both. An unrecognised value is a 400 — it previously meant "all", so `?status=resolved` silently returned the entire queue. */
                 status?: "open" | "resolved" | "all";
+                /** @description Only reports carrying this predefined reason; `total` counts the same filter. An unrecognised value is a 400. */
+                reason?: components["schemas"]["ReportReason"];
                 /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
                 limit?: components["parameters"]["PageLimit"];
                 /** @description Rows to skip. Negative values are clamped to 0. */
@@ -19933,6 +22826,196 @@ export interface operations {
             };
             /** @description Malformed report id. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listMyReports: {
+        parameters: {
+            query?: {
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of the caller's reports (possibly empty). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyReportListResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getMyReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The report. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyReport"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such report among the caller's own. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listReportMessages: {
+        parameters: {
+            query?: {
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of the thread (possibly empty). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportMessageListResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such report, or the caller is neither its reporter nor staff. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createReportMessage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateReportMessageRequest"];
+            };
+        };
+        responses: {
+            /** @description The message was added. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportMessage"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such report, or the caller is neither its reporter nor staff. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The report was filed by another instance and has no local reporter to message. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation failed (empty, over 3000 characters, or a NUL character). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller has posted too many report messages recently. */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -20251,6 +23334,519 @@ export interface operations {
             };
         };
     };
+    listAdminWatchedWordLists: {
+        parameters: {
+            query?: {
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of lists. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchedWordListsPage"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not a moderator or admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createAdminWatchedWordList: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateWatchedWordListRequest"];
+            };
+        };
+        responses: {
+            /** @description The list was created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchedWordList"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not a moderator or admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The name is already used, or the per-account list limit (20) is reached. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation failed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getAdminWatchedWordList: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The list. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchedWordList"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not a moderator or admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such list in this scope. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteAdminWatchedWordList: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The list was deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not a moderator or admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such list in this scope. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The default list cannot be deleted. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateAdminWatchedWordList: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateWatchedWordListRequest"];
+            };
+        };
+        responses: {
+            /** @description The updated list. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchedWordList"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not a moderator or admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such list in this scope. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Name already used, or words on the default list. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation failed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listMyWatchedWordLists: {
+        parameters: {
+            query?: {
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of lists. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchedWordListsPage"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createMyWatchedWordList: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateWatchedWordListRequest"];
+            };
+        };
+        responses: {
+            /** @description The list was created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchedWordList"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The name is already used, or the per-account list limit (20) is reached. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation failed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getMyWatchedWordList: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The list. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchedWordList"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such list in this scope. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteMyWatchedWordList: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The list was deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such list in this scope. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The default list cannot be deleted. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateMyWatchedWordList: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateWatchedWordListRequest"];
+            };
+        };
+        responses: {
+            /** @description The updated list. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchedWordList"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such list in this scope. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Name already used, or words on the default list. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation failed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     resolveWatchedWordMatch: {
         parameters: {
             query?: never;
@@ -20359,6 +23955,8 @@ export interface operations {
             query?: {
                 /** @description Case-insensitive body substring filter. */
                 q?: string;
+                /** @description Keep only comments carrying this automatic tag (`external-link`, or an instance watched-word list name); case-insensitive exact match. */
+                auto_tag?: string;
                 /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
                 limit?: components["parameters"]["PageLimit"];
                 /** @description Rows to skip. Negative values are clamped to 0. */
@@ -20399,6 +23997,66 @@ export interface operations {
             };
         };
     };
+    bulkRemoveAdminComments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkRemoveCommentsRequest"];
+            };
+        };
+        responses: {
+            /** @description The comments were removed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkRemoveCommentsResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not a moderator or admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such local account. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation failed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     listAdminVideos: {
         parameters: {
             query?: {
@@ -20409,7 +24067,7 @@ export interface operations {
                 /** @description Lifecycle states to include. Repeatable and/or comma-separated (`?state=draft&state=failed` and `?state=draft,failed` are equivalent). Absent means all states. */
                 state?: ("draft" | "processing" | "scheduled" | "quarantined" | "transcoding" | "published" | "failed")[];
                 /** @description Privacy tiers to include. Repeatable and/or comma-separated. Absent means all tiers. */
-                privacy?: ("public" | "unlisted" | "private" | "password")[];
+                privacy?: ("public" | "unlisted" | "private" | "password" | "internal")[];
                 /** @description Whether to include locally hosted rows, federated rows, or both. */
                 scope?: "local" | "remote" | "all";
                 /** @description Exact channel handle. Federated rows match on their `name@domain` handle. */
@@ -21422,6 +25080,439 @@ export interface operations {
             };
         };
     };
+    listBlocklistSubscriptions: {
+        parameters: {
+            query?: {
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of subscriptions (possibly empty). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlocklistSubscriptionListResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createBlocklistSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateBlocklistSubscriptionRequest"];
+            };
+        };
+        responses: {
+            /** @description The subscription (never synced yet). */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlocklistSubscription"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Already subscribed to that URL. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Invalid URL (not a public http/https URL) or format. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteBlocklistSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Subscription and the blocks it owned are removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Malformed subscription id. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such subscription. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateBlocklistSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateBlocklistSubscriptionRequest"];
+            };
+        };
+        responses: {
+            /** @description The updated subscription. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlocklistSubscription"];
+                };
+            };
+            /** @description Malformed subscription id. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such subscription. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    syncBlocklistSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    confirm?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description The outcome of this sync. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlocklistSyncResult"];
+                };
+            };
+            /** @description Malformed subscription id. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such subscription. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Sync budget exhausted; Retry-After is set. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listBlocklistAllowlist: {
+        parameters: {
+            query?: {
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of allowlisted domains (possibly empty). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlocklistAllowlistResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    addBlocklistAllow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BlocklistAllowRequest"];
+            };
+        };
+        responses: {
+            /** @description The domain is exempt. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or invalid domain. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    removeBlocklistAllow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                domain: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The domain is no longer exempt. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Invalid domain. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     getRemoteVideo: {
         parameters: {
             query?: never;
@@ -21444,6 +25535,225 @@ export interface operations {
             };
             /** @description No such remote video (or its origin instance is blocked). */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getRemoteVideoRating: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's rating. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemoteVideoRating"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such remote video, or it (or its origin) is blocked here. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    setRemoteVideoRating: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    rating: "like" | "dislike";
+                };
+            };
+        };
+        responses: {
+            /** @description The caller's rating. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemoteVideoRating"];
+                };
+            };
+            /** @description Malformed JSON body. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such remote video, or it (or its origin) is blocked here. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The rating is not `like` or `dislike`. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many rating changes by this user; retry after a minute. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Federation is disabled on this instance. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteRemoteVideoRating: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The rating is cleared (my_rating null). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemoteVideoRating"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such remote video, or it (or its origin) is blocked here. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many rating changes by this user; retry after a minute. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Federation is disabled on this instance. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    recordRemoteVideoView: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The view ping was accepted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such remote video, or it (or its origin) is blocked here. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Per-IP view-ping budget exhausted (60 per minute); Retry-After is set. */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -21948,7 +26258,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Invalid target (neither handle nor actor_url, or both), a target on this instance (follow local channels via POST /channels/{handle}/follow), or a handle/actor URL that could not be resolved to a remote channel. */
+            /** @description Invalid target (neither handle nor actor_url, or both), a target on this instance (follow local channels via POST /channels/{handle}/follow), or a handle/actor URL that could not be resolved to a remote channel. A target this instance does not federate with gets the same answer as an unresolvable one. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -22174,6 +26484,85 @@ export interface operations {
             };
             /** @description Missing, invalid, or expired token. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    resolveRemoteInteraction: {
+        parameters: {
+            query: {
+                /** @description The visitor's fediverse handle, user@host (a leading @ is accepted). */
+                handle: string;
+                /** @description The ActivityPub id of the channel or video on this instance the visitor wants to follow or interact with. */
+                target: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The home-server URL to send the visitor to. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemoteInteractionResolution"];
+                };
+            };
+            /** @description The caller is signed out and the operator has not enabled remote lookups for anonymous visitors (search_remote_uri_anonymous). The client may fall back to looking the handle up from the browser. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The handle's server advertises no usable subscribe template. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed handle, a target that is not on this instance, or a handle that is a literal non-public address. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many lookups from this client. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The handle's server could not be reached (or may not be contacted; the two are deliberately indistinguishable). */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Federation is disabled on this instance, or the rate budget is temporarily unavailable. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -22517,6 +26906,32 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LivePublicListResponse"];
+                };
+            };
+        };
+    };
+    listUpcomingLiveStreams: {
+        parameters: {
+            query?: {
+                /** @description Only this channel's upcoming streams (by handle). */
+                channel?: string;
+                limit?: number;
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The upcoming public streams (possibly empty). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiveUpcomingListResponse"];
                 };
             };
         };
@@ -24284,6 +28699,292 @@ export interface operations {
             };
         };
     };
+    listOIDCProviders: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The stored providers and the environment list. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OIDCProviderList"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createOIDCProvider: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OIDCProviderCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description The created provider. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OIDCProvider"];
+                };
+            };
+            /** @description Malformed body, or a field the document does not define. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin; `current_password` is incorrect; or `step_up_required`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description A provider with this name exists, or code `oidc_secrets_key_missing` — no key-encryption key to seal the secret with. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Invalid fields (`fields` names them: `name`, `issuer_url`, `client_id`, `client_secret`, `scopes`, `allowed_email_domains`, `display_name`), or both proofs were sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many credential attempts. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateOIDCProvider: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OIDCProviderUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description The updated provider. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OIDCProvider"];
+                };
+            };
+            /** @description Malformed body, or a field the document does not define. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin; `current_password` is incorrect; or `step_up_required`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No provider with this name is stored. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Code `oidc_secrets_key_missing`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Invalid fields, an issuer change, or both proofs sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many credential attempts. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteOIDCProvider: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    current_password?: string;
+                    step_up_token?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The provider was removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Malformed body, or a field the document does not define. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin; `current_password` is incorrect; or `step_up_required`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No provider with this name is stored. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The provider overrides an environment provider (`fields` names `name`), or both proofs were sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many credential attempts. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     sendTestMail: {
         parameters: {
             query?: never;
@@ -25876,6 +30577,192 @@ export interface operations {
             };
         };
     };
+    getIPFSRepin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The run status. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IPFSRepinStatus"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description This build or storage backend cannot recompute the playback-only set. */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description IPFS mirroring is not enabled on this instance (ipfs_disabled). */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    startIPFSRepin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The run was recorded; the worker advances it. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IPFSRepinStatus"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description A re-pin is already running. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description This build or storage backend cannot recompute the playback-only set. */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description IPFS mirroring is not enabled on this instance (ipfs_disabled). */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    cancelIPFSRepin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The run was cancelled. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IPFSRepinStatus"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No re-pin is running. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description This build or storage backend cannot recompute the playback-only set. */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description IPFS mirroring is not enabled on this instance (ipfs_disabled). */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     reconcileIPFS: {
         parameters: {
             query?: {
@@ -26978,6 +31865,381 @@ export interface operations {
             };
         };
     };
+    listInstanceFollowers: {
+        parameters: {
+            query?: {
+                /** @description Only follows in this state. */
+                state?: components["parameters"]["InstanceFollowState"];
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of instance followers (possibly empty). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstanceFollowListResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description state is not pending, accepted or rejected. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    acceptInstanceFollower: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The instance follow's id. */
+                id: components["parameters"]["InstanceFollowID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted; the Accept is queued. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such pending instance follower. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    rejectInstanceFollower: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The instance follow's id. */
+                id: components["parameters"]["InstanceFollowID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rejected; the Reject is queued. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such pending or accepted instance follower. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    removeInstanceFollower: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The instance follow's id. */
+                id: components["parameters"]["InstanceFollowID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such instance follower. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listInstanceFollowing: {
+        parameters: {
+            query?: {
+                /** @description Only follows in this state. */
+                state?: components["parameters"]["InstanceFollowState"];
+                /** @description Page size. Any value in [1, 100] is accepted — this is a RANGE, not a fixed set of options. Out-of-range and malformed values are clamped, never rejected, so an existing client sending limit=500 keeps receiving the first 100 rows rather than a 4xx. */
+                limit?: components["parameters"]["PageLimit"];
+                /** @description Rows to skip. Negative values are clamped to 0. */
+                offset?: components["parameters"]["PageOffset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of followed instances (possibly empty). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstanceFollowListResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description state is not pending, accepted or rejected. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    followInstance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /**
+                     * @description The remote instance's host (and port, if any).
+                     * @example videos.example
+                     */
+                    host: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The follow (pending until the remote Accepts). */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstanceFollow"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The instance (or its actor) is blocked here, or this instance does not serve its instance actor. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description host is malformed, is this instance, or has no reachable instance actor. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Federation is disabled on this instance. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    unfollowInstance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The instance follow's id. */
+                id: components["parameters"]["InstanceFollowID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Unfollowed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such followed instance. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     listUsers: {
         parameters: {
             query?: {
@@ -27013,6 +32275,94 @@ export interface operations {
             };
             /** @description The caller is not an admin. */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    adminCreateUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminCreateUserRequest"];
+            };
+        };
+        responses: {
+            /** @description The created account and how the set-password link was delivered. */
+            201: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCreateUserResponse"];
+                };
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not an admin, or the caller's password is wrong. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Username or email already taken (or reserved by a channel); the caller has no password; or PUBLIC_BASE_URL is unset and no mail path exists. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation failed (username, email, role, storage_quota_bytes or password). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many attempts (strict auth limiter). */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The set-password email failed and there is no origin to return a link on; the account was deactivated. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The audit write failed; the account was deactivated and no link was issued. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -27131,6 +32481,53 @@ export interface operations {
             };
             /** @description Validation failed, or an attempt to self-demote/deactivate. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    adminClearLoginLockout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Any lockout on the account was cleared. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, or expired token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The caller is not an admin. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such user. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

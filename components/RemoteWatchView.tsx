@@ -4,11 +4,15 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { useT } from "@/components/I18nProvider";
+import { RatingControls, remoteRatingAdapter } from "@/components/RatingControls";
+import { WatchSignInProvider } from "@/components/watch/WatchSignInPrompt";
 import { FederatedOriginBadge } from "@/components/FederatedOriginBadge";
 import { ExternalLinkIcon, InfoIcon } from "@/components/icons";
 import { RemoteVideoComments } from "@/components/RemoteVideoComments";
 import { ReportButton } from "@/components/ReportButton";
 import { Button, EmptyState, ErrorState, Spinner, buttonClasses } from "@/components/ui";
+import { UserText } from "@/components/UserText";
 import { ApiError, api, errorMessage, remoteVideoThumbnailUrl } from "@/lib/api";
 import type { RemoteVideo } from "@/lib/api";
 import { formatDuration, relativeTime } from "@/lib/format";
@@ -21,13 +25,14 @@ type Status = "loading" | "error" | "notfound" | "ready";
 // RemoteWatchView is the watch surface for a FEDERATED video: Vidra stores
 // metadata only, so playback streams the origin's stream_url when one exists
 // (HLS via hls.js/native, or a direct file) and the page always links out to
-// the origin's watch page. There are deliberately no comments, ratings, or
-// save/playlist controls — those interactions live on the origin instance
-// (honest copy says so). What DOES live here is local safety: a signed-in
+// the origin's watch page. Saving lives on the origin instance (honest
+// copy says so); like/dislike is sent on to the origin as an ActivityPub
+// Like/Dislike and the counts stay there. What DOES live here is local safety: a signed-in
 // viewer can report the remote video to the LOCAL moderators (target_type
 // remote_video) and mute the whole origin instance.
 export function RemoteWatchView({ id }: { id: string }) {
   const router = useRouter();
+  const t = useT();
   const [status, setStatus] = useState<Status>("loading");
   const [video, setVideo] = useState<RemoteVideo | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -92,6 +97,7 @@ export function RemoteWatchView({ id }: { id: string }) {
   }
 
   return (
+    <WatchSignInProvider>
     <article className="flex flex-col gap-4">
       <RemotePlayer video={video} onEnded={queuedNext ? playQueuedNext : undefined} />
 
@@ -123,6 +129,7 @@ export function RemoteWatchView({ id }: { id: string }) {
             Watch on {video.domain}
             <ExternalLinkIcon size={14} strokeWidth={2} />
           </a>
+          <RatingControls key={video.id} videoId={video.id} adapter={remoteRatingAdapter} />
           <ReportButton kind="remote_video" targetId={video.id} />
           <BlockRemoteAccountControl video={video} />
           <MuteInstanceControl domain={video.domain} />
@@ -134,17 +141,14 @@ export function RemoteWatchView({ id }: { id: string }) {
         </div>
         <div className="flex items-start gap-2.5 rounded-2xl bg-surface-muted p-4 text-[13px] leading-relaxed text-fg-muted">
           <InfoIcon size={14} strokeWidth={2} className="mt-0.5 flex-none" />
-          <p>
-            This is a federated video from {video.domain}. Ratings and saving live on the origin
-            instance. You can reply here: your comment is hosted on this instance and sent on to{" "}
-            {video.domain}. The &ldquo;Comments from the origin&rdquo; below are a copy of the
-            origin&rsquo;s own thread, sent here. Reports go to the moderators of this instance.
-          </p>
+          <p>{t("watch.remote.note", { domain: video.domain })}</p>
         </div>
         {video.description ? (
-          <p className="whitespace-pre-wrap text-sm leading-relaxed text-fg-muted">
-            {video.description}
-          </p>
+          <UserText
+            variant="description"
+            text={video.description}
+            className="text-sm leading-relaxed text-fg-muted"
+          />
         ) : null}
       </div>
 
@@ -158,6 +162,7 @@ export function RemoteWatchView({ id }: { id: string }) {
       */}
       <RemoteVideoComments videoId={video.id} domain={video.domain} />
     </article>
+    </WatchSignInProvider>
   );
 }
 
@@ -167,6 +172,17 @@ export function RemoteWatchView({ id }: { id: string }) {
 function RemotePlayer({ video, onEnded }: { video: RemoteVideo; onEnded?: () => void }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const playback = useRemotePlayback(videoRef, video);
+
+  // Report one view to the origin instance on the first play signal — the same
+  // fire-once seam local views use (WatchView.handlePlay). The ref is keyed by
+  // video id, so a pause/replay/seek never re-fires. Best-effort telemetry: a
+  // failure (e.g. the origin's 429) is swallowed and never touches playback.
+  const viewReportedForRef = useRef<string | null>(null);
+  const handlePlay = () => {
+    if (viewReportedForRef.current === video.id) return;
+    viewReportedForRef.current = video.id;
+    void api.recordRemoteVideoView(video.id).catch(() => {});
+  };
 
   // "Nothing playable was advertised" and "the origin's stream would not load"
   // are different facts. The panel below is for the first: with no source there
@@ -204,6 +220,7 @@ function RemotePlayer({ video, onEnded }: { video: RemoteVideo; onEnded?: () => 
       src={playback.src}
       poster={video.has_thumbnail ? remoteVideoThumbnailUrl(video.id) : undefined}
       onEnded={onEnded}
+      onPlay={handlePlay}
     >
       Your browser does not support the video tag.
     </video>

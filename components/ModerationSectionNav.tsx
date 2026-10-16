@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 
+import { useT } from "@/components/I18nProvider";
 import { useSession } from "@/components/auth/AuthProvider";
 import {
   ChevronDownIcon,
@@ -16,12 +17,14 @@ import {
   ServerIcon,
   ShieldIcon,
   SlashCircleIcon,
+  UserIcon,
   VideoIcon,
 } from "@/components/icons";
 import { Dropdown } from "@/components/ui/Dropdown";
 import { cn } from "@/lib/cn";
+import type { PlainMessageKey } from "@/lib/i18n";
 
-type Section = { href: string; label: string; icon: ReactNode };
+type Section = { href: string; labelKey: PlainMessageKey; icon: ReactNode };
 
 // The moderation surfaces, ordered as a Mail-style section sidebar. Queues
 // (the report queue) is the mail-triage home; the rest are the review/blocklist
@@ -33,24 +36,29 @@ type Section = { href: string; label: string; icon: ReactNode };
 // way. When it said "Reports"/"All videos" and wore the shield on Quarantine
 // instead, an admin tapping "Queues" landed on a rail highlighting "Reports".
 const SECTIONS: Section[] = [
-  { href: "/moderation", label: "Queues", icon: <ShieldIcon size={18} /> },
-  { href: "/moderation/quarantine", label: "Quarantine", icon: <LockIcon size={18} /> },
-  { href: "/moderation/blocked", label: "Blocked videos", icon: <SlashCircleIcon size={18} /> },
-  { href: "/moderation/videos", label: "Content", icon: <VideoIcon size={18} /> },
-  { href: "/moderation/comments", label: "Comments", icon: <MessageCircleIcon size={18} /> },
-  { href: "/moderation/watched-words", label: "Watched words", icon: <EyeIcon size={18} /> },
+  { href: "/moderation", labelKey: "admin.modNav.queues", icon: <ShieldIcon size={18} /> },
+  { href: "/moderation/quarantine", labelKey: "admin.modNav.quarantine", icon: <LockIcon size={18} /> },
+  { href: "/moderation/blocked", labelKey: "admin.modNav.blocked", icon: <SlashCircleIcon size={18} /> },
+  { href: "/moderation/videos", labelKey: "admin.modNav.content", icon: <VideoIcon size={18} /> },
+  { href: "/moderation/comments", labelKey: "admin.modNav.comments", icon: <MessageCircleIcon size={18} /> },
+  { href: "/moderation/watched-words", labelKey: "admin.modNav.watchedWords", icon: <EyeIcon size={18} /> },
   {
     href: "/moderation/watched-word-matches",
-    label: "Word matches",
+    labelKey: "admin.modNav.wordMatches",
     icon: <HashIcon size={18} />,
   },
-  { href: "/moderation/instances", label: "Instances", icon: <ServerIcon size={18} /> },
+  { href: "/moderation/instances", labelKey: "admin.modNav.instances", icon: <ServerIcon size={18} /> },
+  { href: "/moderation/accounts", labelKey: "admin.modNav.remoteAccounts", icon: <UserIcon size={18} /> },
+  // Moderators share user listing + ban/unban and the registration queue with
+  // admins (core: MANAGE_USERS over ordinary accounts, MANAGE_REGISTRATIONS).
+  { href: "/admin/users", labelKey: "admin.modNav.users", icon: <UserIcon size={18} /> },
+  { href: "/admin/registration-requests", labelKey: "admin.modNav.registrations", icon: <UserIcon size={18} /> },
   // Autosuggest bans are a MODERATION action, not an instance setting: core
   // gates GET/PUT/DELETE /admin/search/suggestion-bans on moderator-or-admin,
   // while the instance-settings endpoints are admin-only. Hanging this off
   // /admin/config would have locked out the moderator the contract was
   // deliberately widened for.
-  { href: "/moderation/autosuggest", label: "Autosuggest", icon: <SearchIcon size={18} /> },
+  { href: "/moderation/autosuggest", labelKey: "admin.modNav.autosuggest", icon: <SearchIcon size={18} /> },
 ];
 
 function isActive(pathname: string, href: string): boolean {
@@ -67,6 +75,7 @@ function isActive(pathname: string, href: string): boolean {
 // for anonymous/regular viewers so it never appears above a "Moderators only"
 // gate.
 export function ModerationSectionNav() {
+  const t = useT();
   const { user } = useSession();
   const pathname = usePathname();
   const router = useRouter();
@@ -86,7 +95,7 @@ export function ModerationSectionNav() {
     <>
       {/* Desktop: vertical section rail, tint-pill active. */}
       <nav
-        aria-label="Moderation sections"
+        aria-label={t("admin.modNav.label")}
         className="hidden md:flex md:w-52 md:shrink-0 md:flex-col md:gap-1"
       >
         {SECTIONS.map((s) => {
@@ -106,7 +115,7 @@ export function ModerationSectionNav() {
               <span aria-hidden className="shrink-0">
                 {s.icon}
               </span>
-              <span className="truncate">{s.label}</span>
+              <span className="truncate">{t(s.labelKey)}</span>
             </Link>
           );
         })}
@@ -119,7 +128,7 @@ export function ModerationSectionNav() {
               <span aria-hidden className="shrink-0">
                 <GridIcon size={18} />
               </span>
-              <span className="truncate">Admin console</span>
+              <span className="truncate">{t("admin.modNav.console")}</span>
             </Link>
           </div>
         ) : null}
@@ -131,27 +140,27 @@ export function ModerationSectionNav() {
           align="start"
           className="w-full"
           triggerClassName="w-full min-h-11 justify-between"
-          triggerLabel={`Moderation section: ${current.label}`}
+          triggerLabel={t("admin.modNav.trigger", { section: t(current.labelKey) })}
           trigger={
             <>
               <span className="flex min-w-0 items-center gap-2 truncate">
                 <span aria-hidden className="shrink-0 text-fg-muted">
                   {current.icon}
                 </span>
-                <span className="truncate">{current.label}</span>
+                <span className="truncate">{t(current.labelKey)}</span>
               </span>
               <ChevronDownIcon size={16} aria-hidden />
             </>
           }
           items={[
             ...SECTIONS.map((s) => ({
-              label: s.label,
+              label: t(s.labelKey),
               onSelect: () => router.push(s.href),
             })),
             ...(isAdmin
               ? [
                   { type: "separator" } as const,
-                  { label: "Admin console", href: "/admin", icon: <GridIcon size={18} /> },
+                  { label: t("admin.modNav.console"), href: "/admin", icon: <GridIcon size={18} /> },
                 ]
               : []),
           ]}

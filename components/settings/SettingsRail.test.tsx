@@ -36,6 +36,8 @@ vi.mock("@/components/auth/AuthProvider", () => ({
   useSession: () => ({ user: session.user }),
 }));
 
+import { en } from "@/lib/i18n/en";
+
 import { SettingsRail } from "./SettingsRail";
 import { SETTINGS_GROUPS, SETTINGS_PROFILE } from "./sections";
 
@@ -60,7 +62,7 @@ describe("SettingsRail", () => {
         .map((a) => a.getAttribute("href")),
     ).toEqual(ALL.map((i) => i.href));
     for (const group of SETTINGS_GROUPS) {
-      expect(within(rail()).getByRole("heading", { name: group.label })).toBeTruthy();
+      expect(within(rail()).getByRole("heading", { name: en[group.label] })).toBeTruthy();
     }
   });
 
@@ -68,7 +70,7 @@ describe("SettingsRail", () => {
     render(<SettingsRail />);
     for (const item of SETTINGS_GROUPS.flatMap((g) => g.items)) {
       expect(
-        within(rail()).getByRole("link", { name: new RegExp(item.action) }).getAttribute("href"),
+        within(rail()).getByRole("link", { name: new RegExp(en[item.action]) }).getAttribute("href"),
       ).toBe(item.href);
     }
   });

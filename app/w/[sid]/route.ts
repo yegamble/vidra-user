@@ -1,3 +1,4 @@
+import { legacyWatchSearch } from "@/lib/legacy-redirect";
 import { peertubeShortUUIDToUUID } from "@/lib/peertube-short-uuid";
 import { getPublicVideoByLegacyUUID } from "@/lib/video.server";
 import { watchPath } from "@/lib/watch-path";
@@ -44,6 +45,6 @@ export async function GET(
   // NextRequest and is undefined for the plain Request a unit test constructs.
   return new Response(null, {
     status: 302,
-    headers: { location: watchPath(video, new URL(req.url).search) },
+    headers: { location: watchPath(video, legacyWatchSearch(new URL(req.url).search)) },
   });
 }

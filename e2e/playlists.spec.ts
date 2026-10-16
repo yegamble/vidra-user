@@ -5,9 +5,11 @@ import { expect, test, type Page } from "@playwright/test";
 const LOGIN = /\/api\/v1\/auth\/login$/;
 const FEED = /\/api\/v1\/videos(\?|$)/;
 const UNREAD = /\/api\/v1\/me\/notifications\/unread-count$/;
-const MY_PLAYLISTS = /\/api\/v1\/me\/playlists$/;
+const MY_PLAYLISTS = /\/api\/v1\/me\/playlists(\?|$)/;
 const CREATE = /\/api\/v1\/playlists$/;
-const DETAIL = /\/api\/v1\/playlists\/p1$/;
+// The detail GET now carries ?limit=&offset= (items are paged); PATCH and
+// DELETE do not. (\?|$) matches both.
+const DETAIL = /\/api\/v1\/playlists\/p1(\?|$)/;
 const ADD = /\/api\/v1\/playlists\/p1\/videos$/;
 const REMOVE = /\/api\/v1\/playlists\/p1\/videos\/v1$/;
 const THUMBNAIL = /\/api\/v1\/playlists\/p1\/thumbnail(\?|$)/;
@@ -36,6 +38,9 @@ function video(id: string, title: string) {
 function playlist(id: string, title: string, count: number) {
   return {
     id,
+    // The signed-in user (session.user.id): the detail page decides owner
+    // controls from owner_id.
+    owner_id: "u1",
     title,
     description: "",
     visibility: "private",
@@ -43,6 +48,12 @@ function playlist(id: string, title: string, count: number) {
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
+}
+
+// GET /playlists/{id}: the playlist plus ONE page of items in the real PageMeta
+// envelope (total/limit/offset describe the videos).
+function detailOf(pl: ReturnType<typeof playlist>, videos: ReturnType<typeof video>[]) {
+  return { ...pl, videos, total: videos.length, limit: 20, offset: 0 };
 }
 
 const detail = video("v1", "Watch Me");
@@ -150,7 +161,7 @@ test("the playlist detail shows videos and the owner can remove one", async ({ p
     route.fulfill({ json: { playlists: [playlist("p1", "My Mix", 1)] } }),
   );
   await page.route(DETAIL, (route) =>
-    route.fulfill({ json: { ...playlist("p1", "My Mix", 1), videos: [video("v1", "Clip")] } }),
+    route.fulfill({ json: detailOf(playlist("p1", "My Mix", 1), [video("v1", "Clip")]) }),
   );
   await page.route(REMOVE, (route) => route.fulfill({ status: 204, body: "" }));
 
@@ -169,23 +180,23 @@ test("the owner can reorder playlist items", async ({ page }) => {
   );
   await page.route(DETAIL, (route) =>
     route.fulfill({
-      json: { ...playlist("p1", "My Mix", 2), videos: [video("v1", "First"), video("v2", "Second")] },
+      json: detailOf(playlist("p1", "My Mix", 2), [video("v1", "First"), video("v2", "Second")]),
     }),
   );
-  // PUT reorder → 204; the body is asserted below via waitForRequest.
-  await page.route(/\/api\/v1\/playlists\/p1\/videos$/, (route) => route.fulfill({ status: 204, body: "" }));
+  // POST move → 204; the body is asserted below via waitForRequest.
+  const MOVE = /\/api\/v1\/playlists\/p1\/videos\/v2\/move$/;
+  await page.route(MOVE, (route) => route.fulfill({ status: 204, body: "" }));
 
   await goToPlaylists(page);
   await page.getByRole("link", { name: /My Mix/ }).click();
   await expect(page.getByRole("heading", { name: "First" })).toBeVisible();
 
-  // Move "Second" up → PUT the full new order [v2, v1].
-  const reordered = page.waitForRequest(
-    (r) => /\/api\/v1\/playlists\/p1\/videos$/.test(r.url()) && r.method() === "PUT",
-  );
+  // Move "Second" up → POST a move of v2 to the front (no anchor). It sends one
+  // id, not the full order, so it works on a playlist that is only partly loaded.
+  const reordered = page.waitForRequest((r) => MOVE.test(r.url()) && r.method() === "POST");
   await page.getByRole("button", { name: "Move Second up" }).click();
   const req = await reordered;
-  expect(req.postDataJSON()).toEqual({ video_ids: ["v2", "v1"] });
+  expect(req.postDataJSON()).toEqual({ after_video_id: null });
 
   // The list reordered optimistically: "Second" is now first, so its Move up is disabled.
   await expect(page.getByRole("button", { name: "Move Second up" })).toBeDisabled();
@@ -198,7 +209,7 @@ test("the owner can edit a playlist's title and visibility", async ({ page }) =>
   );
   // One handler serves GET (detail) and PATCH (update) on /playlists/p1; the
   // mutable `current` lets the post-save refetch reflect the change.
-  let current = { ...playlist("p1", "My Mix", 1), videos: [video("v1", "Clip")] };
+  let current = detailOf(playlist("p1", "My Mix", 1), [video("v1", "Clip")]);
   await page.route(DETAIL, (route) => {
     if (route.request().method() === "PATCH") {
       current = { ...current, ...route.request().postDataJSON() };
@@ -232,7 +243,7 @@ test("the owner can delete a playlist", async ({ page }) => {
   );
   await page.route(DETAIL, (route) => {
     if (route.request().method() === "DELETE") return route.fulfill({ status: 204, body: "" });
-    return route.fulfill({ json: { ...playlist("p1", "My Mix", 0), videos: [] } });
+    return route.fulfill({ json: detailOf(playlist("p1", "My Mix", 0), []) });
   });
 
   // Reach the detail page via client-side nav so the in-memory session survives.
@@ -252,7 +263,7 @@ test("the owner can upload and remove a playlist cover from the detail page", as
     route.fulfill({ json: { playlists: [playlist("p1", "My Mix", 1)] } }),
   );
   await page.route(DETAIL, (route) =>
-    route.fulfill({ json: { ...playlist("p1", "My Mix", 1), videos: [video("v1", "Clip")] } }),
+    route.fulfill({ json: detailOf(playlist("p1", "My Mix", 1), [video("v1", "Clip")]) }),
   );
   let posted = false;
   await page.route(THUMBNAIL, (route) => {
@@ -297,7 +308,7 @@ test("an unsupported playlist cover type shows a friendly error", async ({ page 
     route.fulfill({ json: { playlists: [playlist("p1", "My Mix", 1)] } }),
   );
   await page.route(DETAIL, (route) =>
-    route.fulfill({ json: { ...playlist("p1", "My Mix", 1), videos: [] } }),
+    route.fulfill({ json: detailOf(playlist("p1", "My Mix", 1), []) }),
   );
   await page.route(THUMBNAIL, (route) =>
     route.request().method() === "POST"

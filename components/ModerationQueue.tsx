@@ -5,17 +5,20 @@ import { useCallback, useMemo, useState } from "react";
 
 import { ListBoundary } from "@/components/admin/ListBoundary";
 import { PagedListShell } from "@/components/admin/PagedListShell";
+import { ReportThread } from "@/components/reports/ReportThread";
 import { RoleGate } from "@/components/RoleGate";
 import { useSession } from "@/components/auth/AuthProvider";
 import { ChevronLeftIcon, FlagIcon } from "@/components/icons";
 import { Badge, type BadgeVariant } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { Select } from "@/components/ui/Select";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FilterChipGroup, type FilterChipOption } from "@/components/ui/FilterChips";
 import { cn } from "@/lib/cn";
 import { api, errorMessage } from "@/lib/api";
-import type { Report, ReportStatus, ReportStatusFilter } from "@/lib/api";
+import type { Report, ReportReason, ReportStatus, ReportStatusFilter } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
+import { formatReportRange, reasonLabel, REPORT_REASONS } from "@/lib/report-reasons";
 import { usePagedList } from "@/lib/use-paged-list";
 
 const MAX_NOTE_LEN = 2000;
@@ -77,12 +80,13 @@ export function ModerationQueue() {
 function Queue() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const list = usePagedList<Report>({
-    filterKeys: ["status"],
+    filterKeys: ["status", "reason"],
     load: (query, signal) =>
       api
         .getReports(
           {
             status: (query.filters.status as ReportStatusFilter) ?? DEFAULT_STATUS,
+            ...(query.filters.reason ? { reason: query.filters.reason as ReportReason } : {}),
             limit: query.limit,
             offset: query.offset,
           },
@@ -97,6 +101,7 @@ function Queue() {
   });
 
   const status = (list.filters.status as ReportStatusFilter) ?? DEFAULT_STATUS;
+  const reasonFilter = list.filters.reason ?? "";
   const { items, patch, drop } = list;
 
   // The selection is DERIVED, not synchronised: whatever the moderator picked,
@@ -138,12 +143,26 @@ function Queue() {
       list={list}
       noun="report"
       toolbar={
-        <FilterChipGroup<ReportStatusFilter>
-          label="Filter reports"
-          options={STATUS_OPTIONS}
-          value={status}
-          onChange={(next) => list.setFilter("status", next === DEFAULT_STATUS ? "" : next)}
-        />
+        <div className="flex flex-wrap items-center gap-3">
+          <FilterChipGroup<ReportStatusFilter>
+            label="Filter reports"
+            options={STATUS_OPTIONS}
+            value={status}
+            onChange={(next) => list.setFilter("status", next === DEFAULT_STATUS ? "" : next)}
+          />
+          <Select
+            aria-label="Filter reports by category"
+            value={reasonFilter}
+            onChange={(e) => list.setFilter("reason", e.target.value)}
+          >
+            <option value="">All categories</option>
+            {REPORT_REASONS.map((r) => (
+              <option key={r.value} value={r.value}>
+                {r.label}
+              </option>
+            ))}
+          </Select>
+        </div>
       }
       errorMessage="Could not load the moderation queue."
       emptyIcon={<FlagIcon size={24} />}
@@ -276,7 +295,28 @@ function ReportRow({
         {report.reporter.username} · {relativeTime(report.created_at)}
       </span>
       <span className="truncate text-footnote text-fg-muted">{report.reason}</span>
+      <ReasonChips report={report} />
     </button>
+  );
+}
+
+// The reporter's predefined categories (core 0170), as quiet chips. Renders
+// nothing for the common case of a report with none.
+// Spans only (no list): the row renders these inside a <button>, where block
+// and list content is invalid HTML. The labels read as one sentence to AT.
+function ReasonChips({ report }: { report: Report }) {
+  // `?? []`: an older core (or a mocked fixture) omits the field entirely.
+  const reasons = report.reasons ?? [];
+  if (reasons.length === 0) return null;
+  return (
+    <span className="flex flex-wrap gap-1">
+      <span className="sr-only">Categories: </span>
+      {reasons.map((r) => (
+        <Badge key={r} variant="strong">
+          {reasonLabel(r)}
+        </Badge>
+      ))}
+    </span>
   );
 }
 
@@ -398,6 +438,19 @@ function ReportDetail({
 
         <ReportTarget report={report} />
 
+        <ReasonChips report={report} />
+        {report.start_seconds !== undefined && report.video_id ? (
+          <p className="text-sm text-fg-muted">
+            <span className="font-semibold text-fg">At:</span>{" "}
+            <Link
+              href={`/videos/${report.video_id}?t=${report.start_seconds}`}
+              className="focus-ring rounded-sm font-semibold text-fg underline underline-offset-2 transition-colors hover:text-fg-muted"
+            >
+              {formatReportRange(report.start_seconds, report.end_seconds)}
+            </Link>
+          </p>
+        ) : null}
+
         <p className="text-sm text-fg-muted">
           <span className="font-semibold text-fg">Reason:</span> {report.reason}
         </p>
@@ -452,6 +505,12 @@ function ReportDetail({
         {error ? <p className="text-sm text-danger">{error}</p> : null}
         {blockError ? <p className="text-sm text-danger">{blockError}</p> : null}
         {deleteError ? <p className="text-sm text-danger">{deleteError}</p> : null}
+
+        {/* The conversation with the reporter (core 0163); keyed so a draft
+            never carries over to the next report. */}
+        <div className="border-t border-border-subtle pt-3">
+          <ReportThread key={report.id} reportId={report.id} viewer="staff" />
+        </div>
       </div>
 
       {/* Action bar — sticky to the viewport bottom while the report scrolls. */}

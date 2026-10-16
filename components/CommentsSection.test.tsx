@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Comment } from "@/lib/api";
+import { ApiError, type Comment } from "@/lib/api";
 
 // Minimal shims so CommentsSection mounts in jsdom without its heavy leaf deps.
 vi.mock("next/link", () => ({
@@ -42,6 +42,7 @@ const pinComment = vi.fn();
 const unpinComment = vi.fn();
 const heartComment = vi.fn();
 const unheartComment = vi.fn();
+const approveComment = vi.fn();
 const muteAccount = vi.fn();
 const blockUser = vi.fn();
 vi.mock("@/lib/api", () => ({
@@ -54,6 +55,7 @@ vi.mock("@/lib/api", () => ({
     unpinComment: (...args: unknown[]) => unpinComment(...args),
     heartComment: (...args: unknown[]) => heartComment(...args),
     unheartComment: (...args: unknown[]) => unheartComment(...args),
+    approveComment: (...args: unknown[]) => approveComment(...args),
     muteAccount: (...args: unknown[]) => muteAccount(...args),
     blockUser: (...args: unknown[]) => blockUser(...args),
   },
@@ -66,6 +68,7 @@ vi.mock("@/lib/api", () => ({
 
 import { setInstanceFeaturesForTests } from "@/lib/instance-features";
 
+import { I18nProvider } from "./I18nProvider";
 import { CommentsSection } from "./CommentsSection";
 
 function features(overrides: Record<string, unknown> = {}) {
@@ -88,6 +91,7 @@ function mk(id: string, overrides: Partial<Comment> = {}): Comment {
     deleted: false,
     pinned: false,
     hearted: false,
+    held_for_review: false,
     ...overrides,
   };
 }
@@ -107,6 +111,23 @@ beforeEach(() => {
   e2ee.available = false;
   muteAccount.mockResolvedValue(undefined);
   blockUser.mockResolvedValue(undefined);
+});
+
+describe("CommentsSection catalog", () => {
+  it("renders the provided catalog, en for a missing key, with the reply plural", async () => {
+    resolveComments([
+      mk("c1", { body: "top" }),
+      mk("c2", { parent_id: "c1", body: "r1" }),
+      mk("c3", { parent_id: "c1", body: "r2" }),
+    ]);
+    render(
+      <I18nProvider locale="fr" messages={{ "comments.reply": "Répondre" }}>
+        <CommentsSection videoId="v1" />
+      </I18nProvider>,
+    );
+    expect(await screen.findByRole("button", { name: "Répondre" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "View 2 replies" })).toBeTruthy();
+  });
 });
 
 describe("CommentsSection reply attribution", () => {
@@ -152,9 +173,9 @@ describe("CommentsSection reply attribution", () => {
     fireEvent.click(toggle);
     const replies = screen.getByRole("list", { name: "Replies" });
 
-    // r2 answers r1, so it leads with "@ada" (r1's author) in the same paragraph.
+    // r2 answers r1, so its body block leads with "@ada" (r1's author).
     const nested = within(replies).getByText("nested reply");
-    expect(nested.textContent).toBe("@ada nested reply");
+    expect(nested.closest("div.text-sm")?.textContent).toBe("@adanested reply");
     // r1 answers the top-level comment directly → no mention (would be redundant).
     const direct = within(replies).getByText("first reply");
     expect(direct.textContent).toBe("first reply");
@@ -511,5 +532,82 @@ describe("CommentsSection block removes the author's comments at once", () => {
 
     await waitFor(() => expect(blockUser).toHaveBeenCalled());
     expect(screen.getByText("bob first")).toBeTruthy();
+  });
+
+  it("loads the next 100 comments under a Load more button and hides it at the total", async () => {
+    const page1 = Array.from({ length: 100 }, (_, i) => mk(`c${i}`, { body: `body-c${i}` }));
+    const page2 = [mk("c100", { body: "the hundred-and-first" })];
+    getVideoComments.mockImplementation((_id: string, params: { offset?: number }) =>
+      Promise.resolve(
+        params.offset
+          ? { comments: page2, total: 101, limit: 100, offset: 100 }
+          : { comments: page1, total: 101, limit: 100, offset: 0 },
+      ),
+    );
+    session = { status: "anon" };
+    render(<CommentsSection videoId="v1" />);
+    await screen.findByText("body-c0");
+    expect(screen.queryByText("the hundred-and-first")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+    expect(await screen.findByText("the hundred-and-first")).toBeTruthy();
+    expect(getVideoComments).toHaveBeenLastCalledWith(
+      "v1",
+      expect.objectContaining({ limit: 100, offset: 100 }),
+      expect.anything(),
+    );
+    expect(screen.queryByRole("button", { name: "Load more" })).toBeNull();
+    // A hundred full comment rows mount here; allow for a loaded CI machine.
+  }, 30_000);
+});
+
+// Comment approval (core 0161): a held comment reaches only its author and the
+// video's reviewers. The author sees it marked as pending (and cannot build a
+// thread under it); a reviewer can approve or reject it inline.
+describe("CommentsSection held comments", () => {
+  it("marks the author's own held comment as pending approval and offers no Reply", async () => {
+    session = { status: "authed", user: { username: "eve" } };
+    resolveComments([mk("h1", { author_username: "eve", held_for_review: true })]);
+    render(<CommentsSection videoId="v1" />);
+    expect(await screen.findByText("Pending approval")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Reply" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
+  });
+
+  it("lets the video's reviewer approve a held comment in place", async () => {
+    resolveComments([mk("h1", { author_username: "eve", held_for_review: true })]);
+    approveComment.mockResolvedValue(mk("h1", { author_username: "eve", held_for_review: false }));
+    render(<CommentsSection videoId="v1" canManageComments />);
+    fireEvent.click(await screen.findByRole("button", { name: "Approve" }));
+    await waitFor(() => expect(approveComment).toHaveBeenCalledWith("v1", "h1", "2026-01-01T00:00:00.000Z"));
+    await waitFor(() => expect(screen.queryByText("Pending approval")).toBeNull());
+    expect(screen.getByRole("button", { name: "Reply" })).toBeTruthy();
+  });
+
+  it("lets the video's reviewer reject (delete) a held comment", async () => {
+    resolveComments([mk("h1", { author_username: "eve", held_for_review: true, body: "spam" })]);
+    deleteComment.mockResolvedValue(undefined);
+    render(<CommentsSection videoId="v1" canManageComments />);
+    fireEvent.click(await screen.findByRole("button", { name: "Reject" }));
+    await waitFor(() => expect(deleteComment).toHaveBeenCalledWith("h1"));
+    await waitFor(() => expect(screen.queryByText("spam")).toBeNull());
+  });
+});
+
+describe("CommentsSection approve of a changed comment", () => {
+  it("on 409 keeps it held and shows the version that is there now", async () => {
+    resolveComments([mk("h1", { author_username: "eve", held_for_review: true, body: "as loaded" })]);
+    // An ApiError instance with status 409 (the mocked class takes no args).
+    const stale: unknown = Object.assign(Object.create(ApiError.prototype), { status: 409 });
+    approveComment.mockRejectedValue(stale);
+    render(<CommentsSection videoId="v1" canManageComments />);
+    await screen.findByText("as loaded");
+    getVideoComments.mockResolvedValue({
+      comments: [mk("h1", { author_username: "eve", held_for_review: true, body: "changed since" })],
+      limit: 100,
+      offset: 0,
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    expect(await screen.findByText("changed since")).toBeTruthy();
+    expect(screen.getByText("Pending approval")).toBeTruthy();
   });
 });

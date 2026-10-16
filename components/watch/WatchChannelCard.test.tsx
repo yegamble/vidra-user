@@ -19,6 +19,7 @@ vi.mock("@/components/auth/AuthProvider", () => ({
   useSession: () => ({ status: "anon" }),
 }));
 
+import { I18nProvider } from "@/components/I18nProvider";
 import { WatchChannelCard } from "./WatchChannelCard";
 
 afterEach(cleanup);
@@ -37,6 +38,16 @@ describe("WatchChannelCard", () => {
   it("omits the follower line when the count is not yet known (never fabricated)", () => {
     render(<WatchChannelCard handle="grade-house" name="Grade House" followerCount={null} />);
     expect(screen.getByText("Grade House")).toBeTruthy();
+    expect(screen.queryByText(/followers/)).toBeNull();
+  });
+
+  it("renders the provided catalog for the follower line", () => {
+    render(
+      <I18nProvider locale="fr" messages={{ "watch.channel.followers": "{count} abonnés" }}>
+        <WatchChannelCard handle="grade-house" name="Grade House" followerCount={48200} />
+      </I18nProvider>,
+    );
+    expect(screen.getByText(/abonnés/)).toBeTruthy();
     expect(screen.queryByText(/followers/)).toBeNull();
   });
 });

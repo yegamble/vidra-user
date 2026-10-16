@@ -67,6 +67,28 @@ function isKnownDuration(duration: number | null | undefined): duration is numbe
   return typeof duration === "number" && Number.isFinite(duration) && duration > 0;
 }
 
+export type TimestampSegment = string | { token: string; seconds: number };
+
+/**
+ * Split `text` into plain strings and valid timestamp tokens (out-of-duration
+ * and malformed tokens stay inside the surrounding string). Shared by the React
+ * tokenizer below and the hast plugin in lib/user-text-plugins.ts.
+ */
+export function splitTimestamps(text: string, durationSeconds?: number | null): TimestampSegment[] {
+  const out: TimestampSegment[] = [];
+  let lastIndex = 0;
+  TIMESTAMP_RE.lastIndex = 0;
+  for (let m = TIMESTAMP_RE.exec(text); m !== null; m = TIMESTAMP_RE.exec(text)) {
+    const seconds = parseTimestampToken(m[0]);
+    if (seconds === null || (isKnownDuration(durationSeconds) && seconds > durationSeconds)) continue;
+    if (m.index > lastIndex) out.push(text.slice(lastIndex, m.index));
+    out.push({ token: m[0], seconds });
+    lastIndex = m.index + m[0].length;
+  }
+  if (lastIndex < text.length) out.push(text.slice(lastIndex));
+  return out;
+}
+
 /**
  * Split `text` into a flat ReactNode[] where every (h:)mm:ss timestamp becomes an
  * anchor (seek + `?t=` href) and everything else stays a plain string. Safe to

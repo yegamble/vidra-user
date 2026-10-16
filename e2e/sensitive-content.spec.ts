@@ -8,7 +8,7 @@ const CAPTIONS = /\/api\/v1\/videos\/v1\/captions$/;
 const COMMENTS = /\/api\/v1\/videos\/v1\/comments/;
 const RATING = /\/api\/v1\/videos\/v1\/rating/;
 const CHANNEL = /\/api\/v1\/channels\/ada_makes$/;
-const CHANNEL_VIDEOS = /\/api\/v1\/channels\/ada_makes\/videos$/;
+const CHANNEL_VIDEOS = /\/api\/v1\/channels\/ada_makes\/videos(\?|$)/;
 
 function instance(policy: "hide" | "warn" | "blur" | "display") {
   return {

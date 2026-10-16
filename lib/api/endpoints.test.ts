@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  adminWatchedWordLists,
   api,
+  myWatchedWordLists,
   channelAvatarUrl,
   channelBannerUrl,
   ipfsHlsMasterUrl,
@@ -17,6 +19,7 @@ import {
   videoThumbnailUrl,
   playlistThumbnailUrl,
 } from "./endpoints";
+import { setAccessToken } from "./auth-store";
 
 function okJson(): Response {
   return new Response(JSON.stringify({}), {
@@ -39,6 +42,27 @@ describe("api endpoints", () => {
   function calledUrl(): string {
     return (fetchMock.mock.calls[0] as [string])[0];
   }
+
+  it("remote-video rating endpoints use the remote-videos path with PUT/DELETE verbs", async () => {
+    fetchMock.mockImplementation(async () => okJson());
+    await api.setRemoteVideoRating("r1", "dislike");
+    const [url, put] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/remote-videos/r1/rating");
+    expect(put.method).toBe("PUT");
+    expect(put.body).toBe(JSON.stringify({ rating: "dislike" }));
+    fetchMock.mockClear();
+    await api.clearRemoteVideoRating("r1");
+    expect((fetchMock.mock.calls[0] as [string, RequestInit])[1].method).toBe("DELETE");
+  });
+
+  it("clears the encoded user login lockout with DELETE", async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
+    await api.clearUserLoginLockout("user/one");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/admin/users/user%2Fone/login-lockout");
+    expect(init.method).toBe("DELETE");
+    expect(init.body).toBeUndefined();
+  });
 
   it("getFeed targets the feed with sort + pagination", async () => {
     await api.getFeed({ sort: "trending", limit: 10 });
@@ -126,6 +150,21 @@ describe("api endpoints", () => {
     const init = (fetchMock.mock.calls[0] as [string, RequestInit])[1];
     expect(init.method).toBe("POST");
     expect(init.body).toBe(JSON.stringify({ password: "hunter2" }));
+    expect(res.reset_url).toContain("token=t");
+  });
+
+  it("createAdminUser POSTs the account and the admin's own password to /admin/users", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ user: { id: "u1" }, link_emailed: false, reset_url: "https://v.example/x?token=t", expires_at: "2026-10-02T13:00:00Z" }), {
+        status: 201,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const res = await api.createAdminUser({ username: "nina", email: "n@example.test", role: "user", password: "hunter2" });
+    expect(calledUrl()).toContain("/api/v1/admin/users");
+    const init = (fetchMock.mock.calls[0] as [string, RequestInit])[1];
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ username: "nina", email: "n@example.test", role: "user", password: "hunter2" });
     expect(res.reset_url).toContain("token=t");
   });
 
@@ -454,9 +493,27 @@ describe("api endpoints", () => {
     expect(JSON.parse(init.body as string)).toEqual({ title: "Faves", visibility: "public" });
   });
 
+  it("listChannelPlaylists pages a channel's playlists", async () => {
+    await api.listChannelPlaylists("ada", undefined, { limit: 20, offset: 20 });
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/channels/ada/playlists?limit=20&offset=20");
+  });
+
+  it("listUserVideos pages and sorts an account's videos", async () => {
+    await api.listUserVideos("ada", undefined, { limit: 20, offset: 0, sort: "published_at" });
+    const url = calledUrl();
+    expect(url).toContain("http://localhost:8080/api/v1/users/ada/videos?");
+    expect(url).toContain("sort=published_at");
+    expect(url).toContain("limit=20");
+  });
+
   it("getPlaylist targets the detail endpoint", async () => {
     await api.getPlaylist("p1");
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/playlists/p1");
+  });
+
+  it("getPlaylist pages its items with limit/offset", async () => {
+    await api.getPlaylist("p1", { limit: 20, offset: 40 });
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/playlists/p1?limit=20&offset=40");
   });
 
   it("updatePlaylist PATCHes the playlist", async () => {
@@ -488,12 +545,18 @@ describe("api endpoints", () => {
     expect(init.method).toBe("DELETE");
   });
 
-  it("reorderPlaylist PUTs the ordered video ids", async () => {
-    await api.reorderPlaylist("p1", ["v2", "v1"]);
+  it("movePlaylistItem POSTs the anchor the video should follow", async () => {
+    await api.movePlaylistItem("p1", "v2", "v1");
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("http://localhost:8080/api/v1/playlists/p1/videos");
-    expect(init.method).toBe("PUT");
-    expect(JSON.parse(init.body as string)).toEqual({ video_ids: ["v2", "v1"] });
+    expect(url).toBe("http://localhost:8080/api/v1/playlists/p1/videos/v2/move");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ after_video_id: "v1" });
+  });
+
+  it("movePlaylistItem sends a null anchor to move a video to the front", async () => {
+    await api.movePlaylistItem("p1", "v2", null);
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({ after_video_id: null });
   });
 
   it("getMyChannels targets the channels endpoint", async () => {
@@ -722,12 +785,46 @@ describe("api endpoints", () => {
     expect(init.method).toBe("DELETE");
   });
 
+  it("approveComment POSTs the reviewed version to the video-scoped approve endpoint", async () => {
+    await api.approveComment("v/1", "c 1", "2026-10-12T10:00:00.123456Z");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/videos/v%2F1/comments/c%201/approve");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ updated_at: "2026-10-12T10:00:00.123456Z" });
+  });
+
+  it("listManagedComments targets the review queue with the held filter and paging", async () => {
+    await api.listManagedComments({ held: true, limit: 10, offset: 20 });
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/me/videos/comments?held=true&limit=10&offset=20");
+  });
+
+  it("listManagedComments omits held when the caller wants every comment", async () => {
+    await api.listManagedComments({ limit: 10 });
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/me/videos/comments?limit=10");
+  });
+
   it("reportVideo POSTs the reason to the video report endpoint", async () => {
     await api.reportVideo("v1", "spam");
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("http://localhost:8080/api/v1/videos/v1/report");
     expect(init.method).toBe("POST");
     expect(JSON.parse(init.body as string)).toEqual({ reason: "spam" });
+  });
+
+  it("reportVideo sends predefined reasons and the time range when given", async () => {
+    await api.reportVideo("v1", "spam", { reasons: ["captions"], start_seconds: 5, end_seconds: 9 });
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({
+      reason: "spam",
+      reasons: ["captions"],
+      start_seconds: 5,
+      end_seconds: 9,
+    });
+  });
+
+  it("getReports passes the reason filter", async () => {
+    await api.getReports({ status: "open", reason: "privacy" });
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/reports?status=open&reason=privacy");
   });
 
   it("reportComment POSTs the reason to the comment report endpoint", async () => {
@@ -752,6 +849,31 @@ describe("api endpoints", () => {
     expect(url).toBe("http://localhost:8080/api/v1/videos/v1");
     expect(init.method).toBe("PATCH");
     expect(JSON.parse(init.body as string)).toEqual({ title: "New title", privacy: "unlisted" });
+  });
+
+  it("listMyVideos sends only the filters that are set, plus the page window", async () => {
+    await api.listMyVideos({ q: "holiday", privacy: "internal", channel_id: "c1", limit: 20, offset: 40 });
+    const url = new URL(calledUrl());
+    expect(url.pathname).toBe("/api/v1/me/videos");
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      q: "holiday",
+      privacy: "internal",
+      channel_id: "c1",
+      limit: "20",
+      offset: "40",
+    });
+  });
+
+  it("bulkMyVideos POSTs the action to /me/videos/bulk", async () => {
+    await api.bulkMyVideos({ video_ids: ["a", "b"], action: "set_privacy", privacy: "private" });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/me/videos/bulk");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({
+      video_ids: ["a", "b"],
+      action: "set_privacy",
+      privacy: "private",
+    });
   });
 
   it("deleteVideo DELETEs the video", async () => {
@@ -801,6 +923,12 @@ describe("api endpoints", () => {
   it("getLiveStream targets the single live-stream endpoint", async () => {
     await api.getLiveStream("s1");
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/live/s1");
+  });
+
+  it("listUpcomingLiveStreams targets /live/upcoming with the channel filter", async () => {
+    await api.listUpcomingLiveStreams({ channel: "ada", limit: 1 });
+    const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/live/upcoming?limit=1&channel=ada");
   });
 
   it("updateLiveStream PATCHes the metadata (incl. replay_enabled)", async () => {
@@ -1194,6 +1322,43 @@ describe("api endpoints", () => {
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/me/mutes/accounts?limit=100");
   });
 
+  it("getVideoOwnershipChanges pages the caller's incoming ownership requests", async () => {
+    await api.getVideoOwnershipChanges({ limit: 20, offset: 20 });
+    expect(calledUrl()).toBe(
+      "http://localhost:8080/api/v1/me/video-ownership-changes?limit=20&offset=20",
+    );
+  });
+
+  it("giveVideoOwnership POSTs the recipient's username", async () => {
+    await api.giveVideoOwnership("v1", "bob");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/videos/v1/give-ownership");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ username: "bob" });
+  });
+
+  it("cancelVideoOwnership DELETEs the caller's pending offer", async () => {
+    await api.cancelVideoOwnership("v1");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/videos/v1/give-ownership");
+    expect(init.method).toBe("DELETE");
+  });
+
+  it("acceptVideoOwnershipChange POSTs the chosen channel", async () => {
+    await api.acceptVideoOwnershipChange("oc1", "c2");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/me/video-ownership-changes/oc1/accept");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ channel_id: "c2" });
+  });
+
+  it("refuseVideoOwnershipChange POSTs to the refuse route", async () => {
+    await api.refuseVideoOwnershipChange("oc1");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/me/video-ownership-changes/oc1/refuse");
+    expect(init.method).toBe("POST");
+  });
+
   it("startConversation POSTs the recipient id to the conversations endpoint", async () => {
     await api.startConversation("u2");
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
@@ -1467,6 +1632,19 @@ describe("api endpoints", () => {
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/comments?q=spam&limit=100");
   });
 
+  it("getAdminComments forwards the auto_tag filter", async () => {
+    await api.getAdminComments({ auto_tag: "external-link", limit: 10 });
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/comments?auto_tag=external-link&limit=10");
+  });
+
+  it("bulkRemoveAdminComments POSTs the account to the bulk-remove endpoint", async () => {
+    await api.bulkRemoveAdminComments("spammer");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/admin/comments/bulk-remove");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ account: "spammer" });
+  });
+
   it("getCaptions targets the video captions endpoint", async () => {
     await api.getCaptions("v1");
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/videos/v1/captions");
@@ -1489,6 +1667,35 @@ describe("api endpoints", () => {
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("http://localhost:8080/api/v1/videos/v1/captions/en");
     expect(init.method).toBe("DELETE");
+  });
+
+  it("downloadCaptionText GETs the WebVTT body with the bearer token, as text", async () => {
+    fetchMock.mockResolvedValueOnce(new Response("WEBVTT\n", { status: 200 }));
+    await expect(api.downloadCaptionText("v1", "pt-BR")).resolves.toBe("WEBVTT\n");
+    const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/videos/v1/captions/pt-BR");
+  });
+
+  it("downloadCaptionText throws an ApiError carrying the status on failure", async () => {
+    fetchMock.mockResolvedValueOnce(new Response("", { status: 404 }));
+    await expect(api.downloadCaptionText("v1", "en")).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("downloadCaptionText retries once with a refreshed token after a 401", async () => {
+    setAccessToken("old");
+    fetchMock
+      .mockResolvedValueOnce(new Response("", { status: 401 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ token: "fresh", user: {} }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(new Response("WEBVTT\n", { status: 200 }));
+    await expect(api.downloadCaptionText("v1", "en")).resolves.toBe("WEBVTT\n");
+    const last = fetchMock.mock.calls[2] as [string, RequestInit];
+    expect((last[1].headers as Record<string, string>).authorization).toBe("Bearer fresh");
+    setAccessToken(null);
   });
 
   it("requestAutoCaption POSTs the auto-caption endpoint with a language hint", async () => {
@@ -1553,6 +1760,27 @@ describe("api endpoints", () => {
     expect(init.method).toBe("DELETE");
   });
 
+  it("watched-word lists: the admin scope and the account scope are distinct URLs", async () => {
+    await adminWatchedWordLists.list({ limit: 20 });
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/watched-word-lists?limit=20");
+    fetchMock.mockClear();
+    fetchMock.mockResolvedValue(okJson());
+    await myWatchedWordLists.get("l 1");
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/me/watched-word-lists/l%201");
+  });
+
+  it("watched-word lists: update PATCHes the replaced words, remove DELETEs", async () => {
+    await myWatchedWordLists.update("l1", { action: "hold", words: [] });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/me/watched-word-lists/l1");
+    expect(init.method).toBe("PATCH");
+    expect(JSON.parse(init.body as string)).toEqual({ action: "hold", words: [] });
+    fetchMock.mockClear();
+    fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
+    await adminWatchedWordLists.remove("l1");
+    expect((fetchMock.mock.calls[0] as [string, RequestInit])[1].method).toBe("DELETE");
+  });
+
   it("getVideoStats targets the video stats endpoint with the id encoded", async () => {
     await api.getVideoStats("v 1");
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/videos/v%201/stats");
@@ -1574,6 +1802,14 @@ describe("api endpoints", () => {
     expect(url).toBe("http://localhost:8080/api/v1/me/notification-prefs");
     expect(init.method).toBe("PATCH");
     expect(JSON.parse(init.body as string)).toEqual({ prefs: { follow: false } });
+  });
+
+  it("updateNotificationEmailPrefs PATCHes only the partial email map", async () => {
+    await api.updateNotificationEmailPrefs({ new_video: true });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/me/notification-prefs");
+    expect(init.method).toBe("PATCH");
+    expect(JSON.parse(init.body as string)).toEqual({ email: { new_video: true } });
   });
 
   it("getPlayerSettings targets the player-settings endpoint", async () => {
@@ -1810,6 +2046,62 @@ describe("api endpoints", () => {
     expect(init.method).toBe("DELETE");
   });
 
+  it("blocklist subscription calls hit the admin routes with ids and domains encoded", async () => {
+    const base = "http://localhost:8080/api/v1/admin/instances/blocklist-subscriptions";
+    fetchMock.mockImplementation(async () => okJson()); // one Response per call: a body is read once
+    await api.getBlocklistSubscriptions({ limit: 10 });
+    expect(calledUrl()).toBe(`${base}?limit=10`);
+    await api.createBlocklistSubscription({ url: "https://l.example/a.csv", format: "mastodon_csv" });
+    let [url, init] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect([url, init.method]).toEqual([base, "POST"]);
+    expect(JSON.parse(init.body as string)).toEqual({ url: "https://l.example/a.csv", format: "mastodon_csv" });
+    await api.updateBlocklistSubscription("abc", { enabled: false });
+    [url, init] = fetchMock.mock.calls[2] as [string, RequestInit];
+    expect([url, init.method]).toEqual([`${base}/abc`, "PATCH"]);
+    await api.syncBlocklistSubscription("abc");
+    [url, init] = fetchMock.mock.calls[3] as [string, RequestInit];
+    expect([url, init.method]).toEqual([`${base}/abc/sync`, "POST"]);
+    await api.deleteBlocklistSubscription("abc");
+    [url, init] = fetchMock.mock.calls[4] as [string, RequestInit];
+    expect([url, init.method]).toEqual([`${base}/abc`, "DELETE"]);
+    await api.removeBlocklistAllow("spam.example:8443");
+    [url, init] = fetchMock.mock.calls[5] as [string, RequestInit];
+    expect([url, init.method]).toEqual([
+      "http://localhost:8080/api/v1/admin/instances/blocklist-allowlist/spam.example%3A8443",
+      "DELETE",
+    ]);
+    await api.addBlocklistAllow({ domain: "ok.example" });
+    [url, init] = fetchMock.mock.calls[6] as [string, RequestInit];
+    expect([url, init.method]).toEqual(["http://localhost:8080/api/v1/admin/instances/blocklist-allowlist", "POST"]);
+  });
+
+  it("getBlockedRemoteActors targets the instance-wide actor blocklist", async () => {
+    await api.getBlockedRemoteActors({ limit: 10, offset: 20 });
+    expect(calledUrl()).toBe(
+      "http://localhost:8080/api/v1/admin/federation/blocked-actors?limit=10&offset=20",
+    );
+  });
+
+  it("blockRemoteActorInstanceWide POSTs the actor + reason", async () => {
+    await api.blockRemoteActorInstanceWide({ actor: "@kaisa@peer.example", reason: "harassment" });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/admin/federation/blocked-actors");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({
+      actor: "@kaisa@peer.example",
+      reason: "harassment",
+    });
+  });
+
+  it("unblockRemoteActorInstanceWide DELETEs with the actor URL as a query param", async () => {
+    await api.unblockRemoteActorInstanceWide("https://peer.example/accounts/kaisa");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(
+      "http://localhost:8080/api/v1/admin/federation/blocked-actors?actor=https%3A%2F%2Fpeer.example%2Faccounts%2Fkaisa",
+    );
+    expect(init.method).toBe("DELETE");
+  });
+
   it("getInstanceSettings targets the admin instance-settings endpoint", async () => {
     await api.getInstanceSettings();
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/instance-settings");
@@ -1901,6 +2193,20 @@ describe("api endpoints", () => {
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("http://localhost:8080/api/v1/admin/ipfs/reconcile?network=private");
     expect(init.method).toBe("POST");
+  });
+
+  it("starts and polls the playback-only re-pin", async () => {
+    fetchMock.mockImplementation(async () => okJson());
+    await api.startIPFSRepin();
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/admin/ipfs/repin-playback-only");
+    expect(init.method).toBe("POST");
+    fetchMock.mockClear();
+    await api.getIPFSRepin();
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/ipfs/repin-playback-only");
+    fetchMock.mockClear();
+    await api.cancelIPFSRepin();
+    expect((fetchMock.mock.calls[0] as [string, RequestInit])[1].method).toBe("DELETE");
   });
 
   it("reads and atomically saves IPFS configuration with its expected revision", async () => {

@@ -16,12 +16,12 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Tabs } from "@/components/ui/Tabs";
 import { VideoActionsMenu } from "@/components/VideoActionsMenu";
 import { VideoCardPreview } from "@/components/VideoCardPreview";
+import { useT } from "@/components/I18nProvider";
 import { ApiError, api, errorMessage, getAccessToken } from "@/lib/api";
 import type { AccountSearchResult, Channel, Video } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { resolveBrowseScrollMode } from "@/lib/feed-defaults";
 import { formatCount, formatDuration, pluralize, relativeTime } from "@/lib/format";
-import { t } from "@/lib/i18n";
 import type { InstanceSearchBlock } from "@/lib/instance-config.server";
 import { useInstanceDefaults } from "@/lib/instance-defaults";
 import { miniatureDisplayName } from "@/lib/miniature-name";
@@ -370,6 +370,7 @@ function VideoResults({
   personalizedActive: boolean;
   autoLoad: boolean;
 }) {
+  const t = useT();
   // Resolved URI/handle hits ride the first page's response, not the row list —
   // they are a different question ("what does this pasted link point at") with a
   // different answer shape, and they are not paginated.

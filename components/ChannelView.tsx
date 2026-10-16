@@ -4,66 +4,87 @@ import { useMemo, useState } from "react";
 
 import { AccountModerationMenu } from "@/components/AccountModerationMenu";
 import { useSession } from "@/components/auth/AuthProvider";
+import { useFormat, useT } from "@/components/I18nProvider";
+import { ChannelFeedLink } from "@/components/ChannelFeedLink";
 import { ChannelLiveBadge } from "@/components/ChannelLiveBadge";
-import { ChannelVideoCard } from "@/components/ChannelVideoCard";
+import { ChannelPlaylistsTab } from "@/components/ChannelPlaylistsTab";
+import { ChannelUpcomingBadge } from "@/components/ChannelUpcomingBadge";
+import { ChannelVideoGrid } from "@/components/ChannelVideoGrid";
 import { FollowButton } from "@/components/FollowButton";
+import { RemoteInteractionButton } from "@/components/RemoteInteractionButton";
 import { MessageButton } from "@/components/MessageButton";
 import { SupportButton } from "@/components/SupportButton";
 import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
-import { LoadMoreButton, PAGE_SIZE } from "@/components/ui/LoadMoreButton";
+import { ListTail } from "@/components/ui/ListTail";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, api, channelAvatarUrl, channelBannerUrl } from "@/lib/api";
 import type { Channel, Video } from "@/lib/api";
-import { formatCount, formatMonthYear, pluralize } from "@/lib/format";
+import type { PlainMessageKey } from "@/lib/i18n";
 import { useApiResource } from "@/lib/use-api-resource";
+import { useAppendingList } from "@/lib/use-appending-list";
+import { useBrowseAutoLoad } from "@/lib/use-browse-auto-load";
 import { useSettledSession } from "@/lib/use-settled-session";
 import { useViewerModeration } from "@/lib/use-viewer-moderation";
+import { UserText } from "@/components/UserText";
 
-type Section = "videos" | "about";
+type Section = "videos" | "playlists" | "about";
 
-// Channel-grid sort. Both keys ride on `created_at`, the one card field the
-// channel-videos contract always carries (views is detail-only), so the chips
-// never depend on data the list omits. "Latest" is the backend's natural
-// newest-first order (no client re-sort — the default view is untouched);
-// "Oldest" sorts ascending by created_at.
+// Channel-grid sort. Both chips are SERVER sorts: `GET /channels/{handle}/videos`
+// takes `sort=-published_at` (newest first, its default) or `sort=published_at`
+// (oldest first). Sorting the loaded page client-side would order only the
+// first page, so a channel's real oldest video would never surface.
 type ChannelSort = "latest" | "oldest";
-const CHANNEL_SORTS: { sort: ChannelSort; label: string }[] = [
-  { sort: "latest", label: "Latest" },
-  { sort: "oldest", label: "Oldest" },
+const CHANNEL_SORTS: { sort: ChannelSort; label: PlainMessageKey }[] = [
+  { sort: "latest", label: "channel.sort.latest" },
+  { sort: "oldest", label: "channel.sort.oldest" },
 ];
+const SERVER_SORT = { latest: "-published_at", oldest: "published_at" } as const;
 
 // Channel reads include viewer-specific follow state and video visibility.
 // Wait for restoration and discard data when the session identity changes.
 export function ChannelView({ handle }: { handle: string }) {
+  const t = useT();
   const { status, user } = useSession();
-  if (status === "restoring") return <Spinner label="Loading channel" />;
+  if (status === "restoring") return <Spinner label={t("channel.loading")} />;
   // Session changes also discard pending optimistic edits and editor state.
   return <ChannelForViewer key={`${handle}:${status}:${user?.id ?? ""}`} handle={handle} />;
 }
 
 function ChannelForViewer({ handle }: { handle: string }) {
+  const t = useT();
+  const { formatCount } = useFormat();
   const { user, status: sessionStatus } = useSession();
-  const { status, data, retry, setData } = useApiResource<{
-    channel: Channel | null;
-    videos: Video[];
-  }>(async (signal) => {
-    if (signal.aborted || sessionStatus === "restoring") return new Promise(() => {});
-    try {
-      const [channel, list] = await Promise.all([
-        api.getChannel(handle, signal),
-        api.listChannelVideos(handle, undefined, signal),
-      ]);
-      return { channel, videos: list.videos };
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 404) return { channel: null, videos: [] };
-      throw err;
-    }
-  }, [handle, sessionStatus, user?.id]);
+  const { status, data, retry, setData } = useApiResource<{ channel: Channel | null }>(
+    async (signal) => {
+      if (signal.aborted || sessionStatus === "restoring") return new Promise(() => {});
+      try {
+        return { channel: await api.getChannel(handle, signal) };
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 404) return { channel: null };
+        throw err;
+      }
+    },
+    [handle, sessionStatus, user?.id],
+  );
   const channel = data?.channel ?? null;
-  const serverVideos = useMemo(() => data?.videos ?? [], [data]);
+  const [sort, setSort] = useState<ChannelSort>("latest");
+  const [section, setSection] = useState<Section>("videos");
+  const autoLoad = useBrowseAutoLoad();
+  // The grid pages from the server (limit/offset) and re-asks from page one
+  // when the handle or sort changes. Remounting on a session change is the
+  // outer `key`, so the viewer is fixed for this component's life.
+  const list = useAppendingList<Video>({
+    queryKey: JSON.stringify([handle, sort]),
+    getId: (v) => v.id,
+    load: (window, signal) =>
+      api
+        .listChannelVideos(handle, undefined, signal, { ...window, sort: SERVER_SORT[sort] })
+        .then((res) => ({ items: res.videos, total: res.total })),
+  });
+  const serverVideos = list.items;
   // Has THIS viewer muted or blocked the channel's owner? `GET
   // /channels/{handle}/videos` already answers with none of their videos for
   // such a viewer (A16 ruling), so on a hard load `serverVideos` is empty and
@@ -76,38 +97,25 @@ function ChannelForViewer({ handle }: { handle: string }) {
   const ownerHidden =
     channel !== null && (mutedIds.has(channel.owner_id) || blockedIds.has(channel.owner_id));
   const videos = useMemo(() => (ownerHidden ? [] : serverVideos), [ownerHidden, serverVideos]);
-  // The channel-videos contract has no limit/offset (the backend returns the
-  // full list), so "Load more" is a client-side reveal in PAGE_SIZE chunks.
-  // Switch to server paging if/when the contract grows pagination params.
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  const [sort, setSort] = useState<ChannelSort>("latest");
-  const [section, setSection] = useState<Section>("videos");
-
-  // "latest" keeps the backend's natural (newest-first) order untouched;
-  // "oldest" sorts a copy ascending by the always-present created_at.
-  const sortedVideos = useMemo(() => {
-    if (sort !== "oldest") return videos;
-    return [...videos].sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
-  }, [videos, sort]);
+  // The header count is the server's total, not the length of the loaded pages.
+  const videoCount = ownerHidden ? 0 : (list.total ?? videos.length);
 
   function changeSort(next: ChannelSort) {
-    if (next === sort) return;
-    setSort(next);
-    setVisibleCount(PAGE_SIZE); // reveal the top of the re-sorted list
+    if (next !== sort) setSort(next);
   }
 
   if (status === "loading") {
     return (
       <div className="flex justify-center py-24">
-        <Spinner label="Loading channel" />
+        <Spinner label={t("channel.loading")} />
       </div>
     );
   }
   if (status === "ready" && channel === null) {
-    return <EmptyState title="Channel not found" message={`No channel @${handle} exists.`} />;
+    return <EmptyState title={t("channel.notFound.title")} message={t("channel.notFound.message", { handle })} />;
   }
   if (status === "error" || channel === null) {
-    return <ErrorState message="Could not load this channel." onRetry={retry} />;
+    return <ErrorState message={t("channel.error.load")} onRetry={retry} />;
   }
 
   const name = channel.display_name || channel.handle;
@@ -144,14 +152,25 @@ function ChannelForViewer({ handle }: { handle: string }) {
             />
             <div className="order-last w-full min-w-0 pb-1 sm:order-none sm:w-auto sm:flex-1">
               <h1 className="text-title sm:text-large-title">{name}</h1>
-              <p className="mt-1 text-subhead tabular-nums text-fg-muted">
-                @{channel.handle} · {formatCount(channel.follower_count)}{" "}
-                {pluralize(channel.follower_count, "follower")} ·{" "}
-                {videos.length} {videos.length === 1 ? "video" : "videos"}
-              </p>
+              {/* The feed link lives with the stats (a shrinkable, wrapping
+                  column), NOT in the actions row: at sm that row is
+                  `w-auto shrink-0`, so one more control there overflowed and
+                  clipped the signed-out "Follow from another server" button
+                  at 640px. */}
+              <div className="mt-1 flex flex-wrap items-center gap-x-2">
+                <p className="text-subhead tabular-nums text-fg-muted">
+                  {t("channel.stats", {
+                    handle: channel.handle,
+                    followers: t("channel.followers", { count: formatCount(channel.follower_count) }),
+                    videos: t("channel.videoCount", { count: String(videoCount) }),
+                  })}
+                </p>
+                <ChannelFeedLink handle={channel.handle} name={name} />
+              </div>
             </div>
             <div className="order-last flex w-full flex-wrap items-center gap-2 pb-1 sm:order-none sm:w-auto sm:shrink-0">
               <ChannelLiveBadge handle={channel.handle} ownerId={channel.owner_id} />
+              <ChannelUpcomingBadge handle={channel.handle} />
               {isOwner ? null : (
                 <>
                   <FollowButton
@@ -166,6 +185,7 @@ function ChannelForViewer({ handle }: { handle: string }) {
                       } : current)
                     }
                   />
+                  <RemoteInteractionButton kind="channel" id={channel.handle} />
                   <SupportButton
                     sources={[
                       { kind: "channel", handle: channel.handle },
@@ -174,6 +194,7 @@ function ChannelForViewer({ handle }: { handle: string }) {
                     name={name}
                     variant="outline"
                     compact
+                    text={channel.support}
                   />
                   {sessionStatus === "authed" ? (
                     <MessageButton recipientId={channel.owner_id} variant="pill" compact />
@@ -194,9 +215,11 @@ function ChannelForViewer({ handle }: { handle: string }) {
           </div>
         </div>
         {channel.description ? (
-          <p className="whitespace-pre-wrap px-2 text-subhead leading-relaxed text-fg-muted sm:max-w-[640px] sm:px-4">
-            {channel.description}
-          </p>
+          <UserText
+            variant="description"
+            text={channel.description}
+            className="px-2 text-subhead leading-relaxed text-fg-muted sm:max-w-[640px] sm:px-4"
+          />
         ) : null}
       </header>
 
@@ -204,62 +227,64 @@ function ChannelForViewer({ handle }: { handle: string }) {
           strip). The panel below swaps with the selected section. */}
       <div className="flex flex-col gap-5">
         <SegmentedControl
-          label="Channel sections"
+          label={t("channel.sections.label")}
           value={section}
           onChange={setSection}
           options={[
-            { value: "videos", label: "Videos" },
-            { value: "about", label: "About" },
+            { value: "videos", label: t("channel.section.videos") },
+            { value: "playlists", label: t("channel.section.playlists") },
+            { value: "about", label: t("channel.section.about") },
           ]}
         />
         {section === "videos" ? (
-          videos.length === 0 ? (
-            ownerHidden ? (
-              // The honest empty state. "No videos yet" would be a lie told to
-              // the one viewer who can see it: the channel publishes, and this
-              // viewer asked not to see it. The unmute is the menu in the
-              // header, two lines up, which is why the header stays.
-              <EmptyState
-                title="Videos hidden"
-                message={
-                  blockedIds.has(channel.owner_id)
-                    ? "You blocked this account, so its videos are hidden from you. Unblock it from the menu above to see them again."
-                    : "You muted this account, so its videos are hidden from you. Unmute it from the menu above to see them again."
-                }
-              />
-            ) : (
-              <EmptyState
-                title="No videos yet"
-                message="This channel has not published anything."
-              />
-            )
+          ownerHidden ? (
+            // The honest empty state. "No videos yet" would be a lie told to
+            // the one viewer who can see it: the channel publishes, and this
+            // viewer asked not to see it. The unmute is the menu in the
+            // header, two lines up, which is why the header stays.
+            <EmptyState
+              title={t("channel.hidden.title")}
+              message={
+                blockedIds.has(channel.owner_id)
+                  ? t("channel.hidden.blocked")
+                  : t("channel.hidden.muted")
+              }
+            />
+          ) : list.status === "error" ? (
+            <ErrorState message={t("channel.videos.error")} onRetry={list.reload} />
+          ) : list.status === "ready" && videos.length === 0 && sort === "latest" ? (
+            <EmptyState title={t("channel.videos.empty.title")} message={t("channel.videos.empty.message")} />
           ) : (
             <div className="flex flex-col gap-5">
               {/* Sort chips in the shared template pill language (filled =
                   active), above the dense channel grid. */}
               <ChannelSortChips sort={sort} onChange={changeSort} />
-              <ul
-                aria-label={`Videos by ${name}`}
-                className="grid grid-cols-2 gap-x-4 gap-y-6 lg:grid-cols-4 lg:gap-x-[18px]"
-              >
-                {sortedVideos.slice(0, visibleCount).map((video) => (
-                  <li key={video.id}>
-                    <ChannelVideoCard
-                      video={video}
-                      onDeleted={() =>
-                        setData((current) => current ? { ...current, videos: current.videos.filter((v) => v.id !== video.id) } : current)
-                      }
-                    />
-                  </li>
-                ))}
-              </ul>
-              {sortedVideos.length > visibleCount ? (
-                <LoadMoreButton onClick={() => setVisibleCount((c) => c + PAGE_SIZE)} />
-              ) : null}
+              {list.status === "loading" ? (
+                <div className="flex justify-center py-12">
+                  <Spinner label={t("channel.videos.loading")} />
+                </div>
+              ) : (
+                <>
+                  <ChannelVideoGrid
+                    videos={videos}
+                    label={t("channel.videos.label", { name })}
+                    onDeleted={(video) => list.drop((v) => v.id !== video.id)}
+                  />
+                  <ListTail
+                    hasMore={list.hasMore}
+                    autoLoad={autoLoad}
+                    busy={list.moreStatus === "loading"}
+                    error={list.moreStatus === "error" ? t("channel.videos.moreError") : null}
+                    onLoadMore={list.loadMore}
+                  />
+                </>
+              )}
             </div>
           )
+        ) : section === "playlists" ? (
+          <ChannelPlaylistsTab handle={channel.handle} name={name} />
         ) : (
-          <ChannelAbout channel={channel} videoCount={videos.length} />
+          <ChannelAbout channel={channel} videoCount={videoCount} />
         )}
       </div>
     </div>
@@ -268,15 +293,15 @@ function ChannelForViewer({ handle }: { handle: string }) {
 
 // ChannelAbout is the About tab: the channel's own facts, all real fields on the
 // public Channel payload (join date, follower count) plus the listed-video count.
-// A "Playlists" tab is intentionally absent — no contract lists a channel's public
-// playlists (only /me/playlists + create/get-by-id exist), so it is a backend
-// dependency, not stubbed here.
+// Playlists have their own tab (ChannelPlaylistsTab).
 function ChannelAbout({ channel, videoCount }: { channel: Channel; videoCount: number }) {
+  const t = useT();
+  const { formatCount, formatMonthYear } = useFormat();
   const joined = formatMonthYear(channel.created_at);
   const facts: { label: string; value: string }[] = [
-    ...(joined ? [{ label: "Joined", value: joined }] : []),
-    { label: "Followers", value: formatCount(channel.follower_count) },
-    { label: "Videos", value: String(videoCount) },
+    ...(joined ? [{ label: t("channel.about.joined"), value: joined }] : []),
+    { label: t("channel.about.followers"), value: formatCount(channel.follower_count) },
+    { label: t("channel.about.videos"), value: String(videoCount) },
   ];
   return (
     <div className="max-w-2xl">
@@ -313,7 +338,7 @@ function ChannelBanner({ handle }: { handle: string }) {
 // ChannelSortChips is the channel grid's sort switcher in the shared pill-chip
 // language (filled = active, outlined = inactive), a role="group" of
 // aria-pressed buttons — the same vocabulary as the home feed's FeedSortTabs,
-// but client-side (the sort re-orders the already-loaded list, no navigation).
+// but server-side (a chip re-asks the endpoint from page one, no navigation).
 function ChannelSortChips({
   sort,
   onChange,
@@ -321,8 +346,9 @@ function ChannelSortChips({
   sort: ChannelSort;
   onChange: (next: ChannelSort) => void;
 }) {
+  const t = useT();
   return (
-    <div role="group" aria-label="Sort videos" className="inline-flex items-center gap-2">
+    <div role="group" aria-label={t("channel.sort.label")} className="inline-flex items-center gap-2">
       {CHANNEL_SORTS.map(({ sort: value, label }) => (
         <button
           key={value}
@@ -335,7 +361,7 @@ function ChannelSortChips({
               : "focus-ring rounded-full border border-border px-4 py-1.5 text-[13px] font-semibold text-fg-muted transition-colors hover:bg-surface-muted"
           }
         >
-          {label}
+          {t(label)}
         </button>
       ))}
     </div>

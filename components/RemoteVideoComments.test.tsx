@@ -245,3 +245,17 @@ describe("RemoteVideoComments — states", () => {
     expect(screen.getByRole("textbox", { name: "Add a comment" })).toBeTruthy();
   });
 });
+
+describe("RemoteVideoComments bodies are untrusted user text", () => {
+  it("renders mirrored and authored links safely and keeps javascript: inert", async () => {
+    const body = "[ok](https://e.test/a) and [bad](javascript:alert(1))";
+    resolve([mirrored("m1", { body })], [authored("a1", { body })]);
+    const { container } = render(<RemoteVideoComments videoId="v1" domain="peer.example" />);
+    await screen.findByRole("heading", { name: "Replies from this instance" });
+    const ok = screen.getAllByRole("link", { name: "ok" });
+    expect(ok).toHaveLength(2);
+    for (const a of ok) expect(a.getAttribute("href")).toBe("https://e.test/a");
+    expect(screen.queryByRole("link", { name: "bad" })).toBeNull();
+    expect(container.querySelector('a[href^="javascript"]')).toBeNull();
+  });
+});

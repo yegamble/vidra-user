@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, render } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Video } from "@/lib/api";
@@ -13,7 +13,7 @@ vi.mock("next/navigation", async () => (await import("@/lib/test-navigation")).n
 
 // The session the watch page sees.
 let sessionStatus: "restoring" | "anon" | "authed" = "anon";
-let sessionUser: { id: string } | null = null;
+let sessionUser: { id: string; role?: string } | null = null;
 vi.mock("@/components/auth/AuthProvider", () => ({
   useSession: () => ({ status: sessionStatus, user: sessionUser }),
   useOptionalSession: () => ({ status: sessionStatus, user: sessionUser }),
@@ -23,13 +23,27 @@ vi.mock("@/components/auth/AuthProvider", () => ({
 // file asserts (which requests go out, and when) — stub them so jsdom has no
 // media, HLS or IntersectionObserver work to do.
 vi.mock("@/components/player/VideoPlayer", () => ({ VideoPlayer: () => <div /> }));
-vi.mock("@/components/CommentsSection", () => ({ CommentsSection: () => <div /> }));
+// The props the comments section was last rendered with (reviewer gating).
+const commentsProps = vi.hoisted(() => ({ last: null as null | { canManageComments?: boolean } }));
+vi.mock("@/components/CommentsSection", () => ({
+  CommentsSection: (p: { canManageComments?: boolean }) => {
+    commentsProps.last = p;
+    return <div />;
+  },
+}));
 vi.mock("@/components/RelatedVideos", () => ({ RelatedVideos: () => <div /> }));
 vi.mock("@/components/RatingControls", () => ({ RatingControls: () => <div /> }));
 vi.mock("@/components/DownloadButton", () => ({ DownloadButton: () => <div /> }));
 vi.mock("@/components/SaveButton", () => ({ SaveButton: () => <div /> }));
 vi.mock("@/components/AddToPlaylistButton", () => ({ AddToPlaylistButton: () => <div /> }));
-vi.mock("@/components/SupportButton", () => ({ SupportButton: () => <div /> }));
+// A spy, so the wiring of the video's own support text into the button is observable.
+const supportButton = vi.hoisted(() => vi.fn());
+vi.mock("@/components/SupportButton", () => ({
+  SupportButton: (props: { text?: string | null }) => {
+    supportButton(props);
+    return <div />;
+  },
+}));
 vi.mock("@/components/VideoActionsMenu", () => ({ VideoActionsMenu: () => <div /> }));
 vi.mock("@/components/ReportButton", () => ({
   ReportButton: () => <div />,
@@ -49,6 +63,7 @@ const mocks = vi.hoisted(() => ({
   getWatchProgress: vi.fn(),
   recordVideoView: vi.fn(),
   recordWatchProgress: vi.fn(),
+  getMyChannels: vi.fn(),
 }));
 
 vi.mock("@/lib/api", () => ({
@@ -71,6 +86,8 @@ vi.mock("@/lib/api", () => ({
   setPlaybackToken: () => {},
   ipfsHlsMasterUrl: () => undefined,
 }));
+
+import { invalidateVideoActionPermissionCache } from "@/lib/use-video-action-permissions";
 
 import { WatchView } from "./WatchView";
 
@@ -103,6 +120,9 @@ beforeEach(() => {
   mocks.getCaptions.mockResolvedValue({ captions: [] });
   mocks.getWatchProgress.mockResolvedValue({ position_seconds: 0 });
   mocks.recordVideoView.mockResolvedValue(undefined);
+  mocks.getMyChannels.mockResolvedValue({ channels: [] });
+  commentsProps.last = null;
+  invalidateVideoActionPermissionCache();
 });
 
 afterEach(() => {
@@ -139,5 +159,104 @@ describe("WatchView session settling", () => {
     await act(async () => {});
     expect(mocks.getChannel).toHaveBeenCalledTimes(1);
     expect(mocks.getChannel).toHaveBeenCalledWith("film-house", expect.any(AbortSignal));
+  });
+});
+
+// Comment approval (core 0161): every reviewer the server accepts — the owner,
+// an editor member, staff — gets the inline Approve/Reject (and pin/heart)
+// controls, through the shared video-permissions seam; nobody else does.
+describe("WatchView comment reviewer controls", () => {
+  const reviewerFlag = async (user: { id: string; role?: string }, myChannels: string[]) => {
+    sessionStatus = "authed";
+    sessionUser = user;
+    mocks.getMyChannels.mockResolvedValue({ channels: myChannels.map((id) => ({ id })) });
+    render(<WatchView id="v1" initialVideo={video()} />);
+    await act(async () => {});
+    return commentsProps.last?.canManageComments;
+  };
+
+  it("gives the channel owner the controls from the video's own channel alone", async () => {
+    // The owner is known from the channel the page already loaded; their Pin/
+    // Heart (and Approve/Reject) must never wait on, or depend on, /me/channels.
+    mocks.getChannel.mockResolvedValue({ handle: "film-house", display_name: "Film House", owner_id: "u-owner" });
+    mocks.getMyChannels.mockReturnValue(new Promise(() => {}));
+    sessionStatus = "authed";
+    sessionUser = { id: "u-owner" };
+    render(<WatchView id="v1" initialVideo={video()} />);
+    await waitFor(() => expect(commentsProps.last?.canManageComments).toBe(true));
+  });
+
+  it("gives a channel editor the reviewer controls", async () => {
+    await reviewerFlag({ id: "u-editor" }, ["c1"]);
+    await waitFor(() => expect(commentsProps.last?.canManageComments).toBe(true));
+  });
+
+  it("gives staff the reviewer controls", async () => {
+    expect(await reviewerFlag({ id: "u-mod", role: "moderator" }, [])).toBe(true);
+  });
+
+  it("withholds them from a viewer who manages none of the video's channels", async () => {
+    expect(await reviewerFlag({ id: "u-viewer" }, ["some-other-channel"])).toBe(false);
+  });
+});
+
+// An internal video (PeerTube's members-only tier) answers an anonymous read
+// with 401 sign_in_required. The page offers the app's ordinary sign-in prompt
+// — not "not found", which would tell a member the video does not exist, and
+// not the retry surface, which would never succeed.
+describe("WatchView internal video", () => {
+  it("offers an anonymous viewer the sign-in prompt", async () => {
+    mocks.getVideo.mockRejectedValue(Object.assign(new Error("sign in"), { status: 401, code: "sign_in_required" }));
+    render(<WatchView id="v1" />);
+    await act(async () => {});
+    expect(screen.getByText("Sign in to watch this video")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Sign in" }).getAttribute("href")).toBe("/login");
+    expect(screen.queryByText("Video not found")).toBeNull();
+  });
+
+  it("keeps the generic error for a 401 that is not a sign-in refusal", async () => {
+    mocks.getVideo.mockRejectedValue(Object.assign(new Error("expired"), { status: 401, code: "unauthorized" }));
+    render(<WatchView id="v1" />);
+    await act(async () => {});
+    expect(screen.queryByText("Sign in to watch this video")).toBeNull();
+  });
+});
+
+// PeerTube's free-text "support" message is the VIDEO'S own (a new video
+// snapshots its channel's), and rides the one Support button rather than a
+// second affordance.
+describe("WatchView support text", () => {
+  it("hands the video's support text to the Support button", async () => {
+    supportButton.mockClear();
+    render(<WatchView id="v1" initialVideo={{ ...video(), support: "Liberapay: film-house" }} />);
+    await act(async () => {});
+    expect(supportButton).toHaveBeenCalledWith(
+      expect.objectContaining({ text: "Liberapay: film-house" }),
+    );
+  });
+
+  it("passes no text for a video without one", async () => {
+    supportButton.mockClear();
+    render(<WatchView id="v1" initialVideo={video()} />);
+    await act(async () => {});
+    expect(supportButton).toHaveBeenCalled();
+    expect(supportButton.mock.calls.every(([p]) => !p.text)).toBe(true);
+  });
+});
+
+describe("WatchView signed-out resume", () => {
+  it("offers Resume from the position this browser remembers", async () => {
+    window.localStorage.setItem("vidra.position.v1", "75");
+    render(<WatchView id="v1" initialVideo={video()} />);
+    await act(async () => {});
+    expect(screen.getByRole("button", { name: "Resume from 1:15" })).toBeTruthy();
+    expect(mocks.getWatchProgress).not.toHaveBeenCalled();
+    window.localStorage.clear();
+  });
+
+  it("offers nothing when no position is remembered or the URL carries ?t=", async () => {
+    render(<WatchView id="v1" initialVideo={video()} />);
+    await act(async () => {});
+    expect(screen.queryByRole("button", { name: /Resume from/ })).toBeNull();
   });
 });

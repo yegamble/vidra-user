@@ -2,6 +2,7 @@
 
 import { useId, type FormEvent } from "react";
 
+import { useT } from "@/components/I18nProvider";
 import { SearchIcon } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
@@ -35,6 +36,8 @@ export function AdminSearch({
   onSubmit,
   onClear,
   hasQuery,
+  submitLabel,
+  clearLabel,
 }: {
   label: string;
   placeholder: string;
@@ -43,7 +46,11 @@ export function AdminSearch({
   onSubmit: () => void;
   onClear: () => void;
   hasQuery: boolean;
+  /** Button text; override when two searches share a page so names stay unique. */
+  submitLabel?: string;
+  clearLabel?: string;
 }) {
+  const t = useT();
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     onSubmit();
@@ -63,11 +70,11 @@ export function AdminSearch({
         />
       </div>
       <Button type="submit" size="sm">
-        Search
+        {submitLabel ?? t("admin.search.submit")}
       </Button>
       {hasQuery ? (
         <Button variant="secondary" size="sm" onClick={onClear}>
-          Clear
+          {clearLabel ?? t("admin.search.clear")}
         </Button>
       ) : null}
     </form>
@@ -128,6 +135,7 @@ export function AdminPagination({
    */
   onPageSize?: (pageSize: number) => void;
 }) {
+  const t = useT();
   const sizeLabelId = useId();
   if (!onPageSize && total <= limit && offset === 0) return null;
   if (onPageSize && total === 0) return null;
@@ -144,22 +152,22 @@ export function AdminPagination({
     : [...PAGE_SIZE_OPTIONS, selectedSize].sort((a, b) => a - b);
   return (
     <nav
-      aria-label={`Paginate ${label}`}
+      aria-label={t("admin.pagination.label", { label })}
       className="flex flex-wrap items-center justify-between gap-3"
     >
       <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
         <span className="text-xs tabular-nums text-fg-muted">
-          {start}–{end} of {total}
+          {t("admin.pagination.range", { start, end, total })}
         </span>
         <span className="text-xs tabular-nums text-fg-muted">
-          Page {page} of {pageCount}
+          {t("admin.pagination.page", { page, pageCount })}
         </span>
       </span>
       <div className="flex flex-wrap items-center gap-2">
         {onPageSize ? (
           <div className="flex items-center gap-2">
             <span id={sizeLabelId} className="text-xs text-fg-muted">
-              Rows per page
+              {t("admin.pagination.rowsPerPage")}
             </span>
             {/* Fixed-width wrapper rather than a width utility on the Select:
                 `cn()` is a plain concat (no tailwind-merge), so a competing
@@ -185,7 +193,7 @@ export function AdminPagination({
           disabled={offset === 0}
           onClick={() => onOffset(Math.max(0, offset - limit))}
         >
-          Previous
+          {t("admin.pagination.previous")}
         </Button>
         <Button
           variant="secondary"
@@ -193,7 +201,7 @@ export function AdminPagination({
           disabled={offset + limit >= total}
           onClick={() => onOffset(offset + limit)}
         >
-          Next
+          {t("admin.pagination.next")}
         </Button>
       </div>
     </nav>

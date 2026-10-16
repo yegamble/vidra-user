@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 
+import { useFormat, useT } from "@/components/I18nProvider";
 import { FollowButton } from "@/components/FollowButton";
+import { RemoteInteractionButton } from "@/components/RemoteInteractionButton";
 import { Avatar } from "@/components/ui/Avatar";
 import { channelAvatarUrl } from "@/lib/api";
 import type { NotificationSetting } from "@/lib/api";
-import { formatCount } from "@/lib/format";
 
 // WatchChannelCard is the channel row under the watch metadata (DR5): the owning
 // channel's avatar + name (a link to the channel) and its follower count, plus a
@@ -22,6 +23,7 @@ export function WatchChannelCard({
   isFollowing = false,
   notificationSetting,
   onDelta,
+  videoId,
 }: {
   handle: string;
   name: string;
@@ -30,7 +32,11 @@ export function WatchChannelCard({
   /** The caller's bell for this channel, straight off the channel payload. */
   notificationSetting?: NotificationSetting;
   onDelta?: (delta: number) => void;
+  /** The local video being watched; enables the signed-out "interact from your instance" action. */
+  videoId?: string;
 }) {
+  const t = useT();
+  const { formatCount } = useFormat();
   return (
     <div className="flex items-center gap-3 py-1">
       <Link
@@ -44,7 +50,7 @@ export function WatchChannelCard({
           </div>
           {followerCount !== null ? (
             <div className="text-footnote tabular-nums text-fg-muted">
-              {formatCount(followerCount)} followers
+              {t("watch.channel.followers", { count: formatCount(followerCount) })}
             </div>
           ) : null}
         </div>
@@ -57,6 +63,7 @@ export function WatchChannelCard({
         onDelta={onDelta}
         className="shrink-0 px-4"
       />
+      {videoId ? <RemoteInteractionButton kind="video" id={videoId} className="shrink-0" /> : null}
     </div>
   );
 }

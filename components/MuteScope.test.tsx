@@ -26,6 +26,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/search-events", () => ({ trackSearchEvent: vi.fn() }));
 vi.mock("@/components/FollowButton", () => ({ FollowButton: () => <button>Follow</button> }));
 vi.mock("@/components/ChannelLiveBadge", () => ({ ChannelLiveBadge: () => null }));
+vi.mock("@/components/ChannelUpcomingBadge", () => ({ ChannelUpcomingBadge: () => null }));
 vi.mock("@/components/MessageButton", () => ({ MessageButton: () => null }));
 vi.mock("@/components/SupportButton", () => ({ SupportButton: () => null }));
 // The real card drags in the whole video-actions menu (own-channel permissions,

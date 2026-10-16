@@ -10,7 +10,7 @@ import {
 import { useRestrictedMode } from "@/lib/device-preferences";
 import { useInstanceFeatures } from "@/lib/instance-features";
 import { usePlayerSettings } from "@/lib/player-settings";
-import { useSensitiveContentPolicy } from "@/lib/use-sensitive-policy";
+import { useVideoSensitivePolicy } from "@/lib/use-video-sensitive-policy";
 import { watchPath } from "@/lib/watch-path";
 
 export type VideoCardPresentation = {
@@ -87,7 +87,7 @@ export function useVideoCardPresentation(
 ): VideoCardPresentation {
   const previewFeatureEnabled = useInstanceFeatures()?.video_card_previews === true;
   const previewPreferenceEnabled = usePlayerSettings().video_card_previews_enabled;
-  const policy = useSensitiveContentPolicy();
+  const policy = useVideoSensitivePolicy(video);
   const restrictedMode = useRestrictedMode();
 
   const isRemote = options.localOnly === true ? false : video.remote === true;
@@ -106,6 +106,7 @@ export function useVideoCardPresentation(
     video.state === "published" &&
     video.privacy !== "private" &&
     video.privacy !== "password" &&
+    video.privacy !== "internal" &&
     !blurSensitive;
 
   // > 0 guard: a sub-second clip probes to 0 whole seconds, and a "0:00" badge is
