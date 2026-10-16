@@ -1,4 +1,10 @@
 export const admin = {
+  "admin.loginLockout.action": "Unlock sign-in",
+  "admin.loginLockout.busy": "Unlocking…",
+  "admin.loginLockout.aria": "Unlock sign-in for {name}",
+  "admin.loginLockout.success": "Sign-in unlocked for {name}.",
+  "admin.loginLockout.error": "Could not unlock sign-in. Please try again.",
+
   // Shared admin controls (AdminControls, ListToolbar, ListBoundary, PagedListShell, AdminTable).
   "admin.search.submit": "Search",
   "admin.search.clear": "Clear",

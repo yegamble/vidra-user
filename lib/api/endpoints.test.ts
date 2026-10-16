@@ -55,6 +55,15 @@ describe("api endpoints", () => {
     expect((fetchMock.mock.calls[0] as [string, RequestInit])[1].method).toBe("DELETE");
   });
 
+  it("clears the encoded user login lockout with DELETE", async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
+    await api.clearUserLoginLockout("user/one");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:8080/api/v1/admin/users/user%2Fone/login-lockout");
+    expect(init.method).toBe("DELETE");
+    expect(init.body).toBeUndefined();
+  });
+
   it("getFeed targets the feed with sort + pagination", async () => {
     await api.getFeed({ sort: "trending", limit: 10 });
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/videos?sort=trending&limit=10");
