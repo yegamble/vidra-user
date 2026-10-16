@@ -1,37 +1,84 @@
 import type { Messages } from "../index";
 
-import { account } from "./account";
 import { a11y } from "./a11y";
+import { account } from "./account";
 import { admin } from "./admin";
 import { auth } from "./auth";
+import { channel } from "./channel";
+import { comments } from "./comments";
 import { common } from "./common";
+import { create } from "./create";
+import { header } from "./header";
 import { home } from "./home";
+import { live } from "./live";
+import { nav } from "./nav";
+import { notifications } from "./notifications";
+import { panels } from "./panels";
+import { playlists } from "./playlists";
 import { report } from "./report";
 import { search } from "./search";
 import { settings } from "./settings";
-import { create } from "./create";
-import { header } from "./header";
-import { nav } from "./nav";
-import { channel } from "./channel";
-import { watch } from "./watch";
-import { panels } from "./panels";
-import { notifications } from "./notifications";
-import { studio } from "./studio";
-import { comments } from "./comments";
-import { playlists } from "./playlists";
-import { live } from "./live";
 import { state } from "./state";
+import { studio } from "./studio";
 import { theme } from "./theme";
+import { watch } from "./watch";
 
 /**
- * French — a SEED proving the pipeline (LOCALES marks it partial, so only a
- * viewer who picks French sees it); a key missing here renders the English.
+ * French has parity with the current English catalog. Explicit selection is
+ * available; automatic selection still awaits native-speaker review.
  * Same layout as ../en: one file per surface, merged here.
  *
- * REVIEW STATUS: every string under a "machine-drafted" rule was drafted by an
- * AI model (2026-10-12) and has not been read by a native speaker. A reviewer
- * moves each string they approve ABOVE that rule.
+ * REVIEW STATUS: strings under a "machine-drafted" rule were drafted by an
+ * AI model and have not been read by a native speaker. A reviewer moves each
+ * approved string ABOVE that rule. Catalog parity does not imply that every
+ * hardcoded string in the UI has been extracted.
  */
-export const FR_NAMESPACES = { account, a11y, admin, auth, channel, common, create, header, home, nav, notifications, panels, report, search, settings, comments, playlists, live, state, studio, theme, watch };
+export const FR_NAMESPACES = {
+  a11y,
+  account,
+  admin,
+  auth,
+  channel,
+  comments,
+  common,
+  create,
+  header,
+  home,
+  live,
+  nav,
+  notifications,
+  panels,
+  playlists,
+  report,
+  search,
+  settings,
+  state,
+  studio,
+  theme,
+  watch,
+};
 
-export const fr = { ...account, ...a11y, ...admin, ...auth, ...common, ...home, ...report, ...search, ...settings, ...create, ...header, ...nav, ...channel, ...watch, ...panels, ...notifications, ...comments, ...playlists, ...live, ...state, ...studio, ...theme } satisfies Messages;
+export const fr = {
+  ...a11y,
+  ...account,
+  ...admin,
+  ...auth,
+  ...channel,
+  ...comments,
+  ...common,
+  ...create,
+  ...header,
+  ...home,
+  ...live,
+  ...nav,
+  ...notifications,
+  ...panels,
+  ...playlists,
+  ...report,
+  ...search,
+  ...settings,
+  ...state,
+  ...studio,
+  ...theme,
+  ...watch,
+} satisfies Messages;
