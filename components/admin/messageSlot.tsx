@@ -22,3 +22,20 @@ export function withSlot(text: string, node: ReactNode): ReactNode {
     </>
   );
 }
+
+/** Placeholder for the NAMED slot `name`; pass it as a message var, then `withSlots`. */
+export function slot(name: string): string {
+  return `\u0001${name}\u0002`;
+}
+
+/** `withSlot` for a sentence with several styled nodes, keyed by slot name. */
+export function withSlots(text: string, nodes: Record<string, ReactNode>): ReactNode {
+  const parts = text.split(/\u0001(\w+)\u0002/);
+  return (
+    <>
+      {parts.map((part, i) =>
+        i % 2 === 0 ? <Fragment key={i}>{part}</Fragment> : <Fragment key={i}>{nodes[part]}</Fragment>,
+      )}
+    </>
+  );
+}
