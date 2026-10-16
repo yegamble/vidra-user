@@ -35,7 +35,6 @@ vi.mock("@/components/RelatedVideos", () => ({ RelatedVideos: () => <div /> }));
 vi.mock("@/components/RatingControls", () => ({ RatingControls: () => <div /> }));
 vi.mock("@/components/DownloadButton", () => ({ DownloadButton: () => <div /> }));
 vi.mock("@/components/SaveButton", () => ({ SaveButton: () => <div /> }));
-vi.mock("@/components/AddToPlaylistButton", () => ({ AddToPlaylistButton: () => <div /> }));
 // A spy, so the wiring of the video's own support text into the button is observable.
 const supportButton = vi.hoisted(() => vi.fn());
 vi.mock("@/components/SupportButton", () => ({
