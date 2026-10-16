@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useT } from "@/components/I18nProvider";
 import { useSession } from "@/components/auth/AuthProvider";
 import { api } from "@/lib/api";
 
@@ -14,6 +15,7 @@ export function PlaylistCoverImage(props: Props) {
 }
 
 function CoverBytes({ playlistId, alt, className }: Props) {
+  const t = useT();
   const [src, setSrc] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
@@ -32,7 +34,7 @@ function CoverBytes({ playlistId, alt, className }: Props) {
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [playlistId]);
-  if (failed) return <span className="text-xs text-fg-muted">Cover unavailable</span>;
+  if (failed) return <span className="text-xs text-fg-muted">{t("playlists.cover.unavailable")}</span>;
   if (!src) return null;
   // eslint-disable-next-line @next/next/no-img-element -- authenticated object URL
   return <img src={src} alt={alt} className={className} onError={() => setFailed(true)} />;

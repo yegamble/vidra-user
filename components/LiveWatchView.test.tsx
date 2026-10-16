@@ -38,6 +38,7 @@ vi.mock("@/components/auth/AuthProvider", () => ({
 }));
 
 import { LiveWatchView } from "./LiveWatchView";
+import { I18nProvider } from "./I18nProvider";
 
 beforeEach(() => {
   optionalSession = null;
@@ -185,6 +186,20 @@ describe("LiveWatchView viewer count", () => {
     mocks.getLiveStream.mockResolvedValue(liveStream({ viewer_count: 1 }));
     render(<LiveWatchView id="s1" />);
     expect(await screen.findByText("1 viewer")).toBeTruthy();
+  });
+
+  it("uses the selected locale's number format and plural rule for a high viewer count", async () => {
+    optionalSession = { status: "anon", user: null };
+    mocks.getLiveStream.mockResolvedValue(liveStream({ viewer_count: 1_000_000 }));
+    render(
+      <I18nProvider locale="fr" messages={{
+        "live.watch.viewers": { one: "{count} personne", many: "{count} de personnes", other: "{count} personnes" },
+      }}>
+        <LiveWatchView id="s1" />
+      </I18nProvider>,
+    );
+    const count = await screen.findByText(/de personnes$/);
+    expect(count.textContent).toBe("1\u202f000\u202f000 de personnes");
   });
 
   it("renders a real zero — 'nobody is watching' is a fact core measured", async () => {

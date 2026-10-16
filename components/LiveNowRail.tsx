@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { useT } from "@/components/I18nProvider";
 import { PlayIcon } from "@/components/icons";
 import { api } from "@/lib/api";
 import type { LiveStreamCard } from "@/lib/api";
@@ -22,6 +23,7 @@ import { RAIL_TILE, RAIL_TRACK } from "@/lib/rail";
 //     surface-muted tile with a faint decorative play glyph and the LIVE badge —
 //     no invented thumbnail.
 export function LiveNowRail() {
+  const t = useT();
   const [streams, setStreams] = useState<LiveStreamCard[]>([]);
 
   useEffect(() => {
@@ -39,11 +41,11 @@ export function LiveNowRail() {
   if (streams.length === 0) return null;
 
   return (
-    <section aria-label="Live now" className="mt-10">
+    <section aria-label={t("live.rail.label")} className="mt-10">
       <div className="mb-4 flex items-baseline justify-between gap-3">
-        <h2 className="text-title2 text-fg">Live now</h2>
+        <h2 className="text-title2 text-fg">{t("live.rail.heading")}</h2>
         <span className="shrink-0 text-[13px] tabular-nums text-fg-muted">
-          {streams.length} {streams.length === 1 ? "stream" : "streams"}
+          {t("live.rail.streams", { count: String(streams.length) })}
         </span>
       </div>
       {/* Horizontal scroll rail: 240px cards, hidden scrollbar (the row scrolls
@@ -55,7 +57,7 @@ export function LiveNowRail() {
             <li key={stream.id} className={RAIL_TILE}>
               <Link
                 href={`/live/${encodeURIComponent(stream.id)}`}
-                aria-label={`${stream.title}, live now — ${channel}`}
+                aria-label={t("live.rail.cardLabel", { title: stream.title, channel })}
                 className="focus-ring group block rounded-2xl transition-transform duration-200 ease-out hover:-translate-y-px active:translate-y-0 active:scale-[0.995]"
               >
                 <div className="media-placeholder relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-2xl transition-shadow duration-200 group-hover:shadow-[0_10px_24px_rgba(0,0,0,0.10)]">
@@ -73,7 +75,7 @@ export function LiveNowRail() {
                       aria-hidden="true"
                       className="h-1.5 w-1.5 rounded-full bg-live animate-[live-pulse_1.6s_ease-in-out_infinite]"
                     />
-                    Live
+                    {t("live.rail.badge")}
                   </span>
                   {/* Concurrent viewers, when the instance can measure them. The
                       field is OMITTED rather than zeroed by core on an instance
@@ -81,7 +83,7 @@ export function LiveNowRail() {
                       busy streams from all reading "0 watching". */}
                   {typeof stream.viewer_count === "number" ? (
                     <span className="absolute bottom-2.5 right-2.5 rounded-md bg-black/55 px-1.5 py-0.5 text-[11px] font-semibold leading-none tabular-nums text-white backdrop-blur">
-                      {stream.viewer_count.toLocaleString()} watching
+                      {t("live.rail.watching", { viewers: stream.viewer_count.toLocaleString() })}
                     </span>
                   ) : null}
                 </div>
