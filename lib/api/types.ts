@@ -213,6 +213,12 @@ export type MailConfigSecretStatus = MailConfigState["secret_status"];
 export type MailConfigEnvironment = Schemas["MailConfigEnvironment"];
 export type MailConfigDocument = Schemas["MailConfigDocument"];
 export type MailTransport = MailConfigDocument["transport"];
+// Admin-managed OIDC sign-in providers (/admin/oidc-providers). The client
+// secret is write-only: reads carry `secret_configured`, never the value.
+export type OIDCProvider = Schemas["OIDCProvider"];
+export type OIDCProviderList = Schemas["OIDCProviderList"];
+export type OIDCProviderCreateRequest = Schemas["OIDCProviderCreateRequest"];
+export type OIDCProviderUpdateRequest = Schemas["OIDCProviderUpdateRequest"];
 export type MailConfigSMTP = Schemas["MailConfigSMTP"];
 export type MailSMTPEncryption = MailConfigSMTP["encryption"];
 export type MailConfigMailgun = Schemas["MailConfigMailgun"];
