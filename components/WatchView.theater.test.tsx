@@ -126,7 +126,6 @@ vi.mock("@/components/player/VideoPlayer", async () => {
     },
   };
 });
-vi.mock("@/components/AddToPlaylistButton", () => ({ AddToPlaylistButton: stub("playlist") }));
 vi.mock("@/components/CommentsSection", () => ({ CommentsSection: stub("comments") }));
 vi.mock("@/components/DownloadButton", () => ({ DownloadButton: stub("download") }));
 vi.mock("@/components/KeyboardShortcutsHelp", () => ({ KeyboardShortcutsHelp: stub("kbd") }));
