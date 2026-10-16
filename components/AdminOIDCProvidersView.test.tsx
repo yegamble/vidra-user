@@ -16,6 +16,8 @@ vi.mock("@/lib/api", async (importActual) => {
 
 import { ApiError } from "@/lib/api";
 import type { OIDCProviderList } from "@/lib/api";
+import { I18nProvider } from "@/components/I18nProvider";
+import { fr } from "@/lib/i18n/fr";
 
 import { OIDCProvidersPanel } from "./AdminOIDCProvidersView";
 
@@ -52,6 +54,39 @@ const password = (value: string) =>
   fireEvent.change(screen.getByLabelText("Confirm with your password"), { target: { value } });
 
 describe("OIDCProvidersPanel", () => {
+  it("shows loading and waits before allowing a provider to be added", () => {
+    mocks.listOIDCProviders.mockReturnValue(new Promise(() => {}));
+    render(<OIDCProvidersPanel />);
+    expect(screen.getByRole("status", { name: "Loading Sign-in providers" })).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Add provider" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("offers an add action when no providers have been configured", async () => {
+    mocks.listOIDCProviders.mockResolvedValue({ ...list, providers: [], environment: [] });
+    render(<OIDCProvidersPanel />);
+    expect(await screen.findByText("No sign-in providers added here")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Add provider" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("recovers from a failed list request through the retry action", async () => {
+    mocks.listOIDCProviders.mockRejectedValueOnce(new Error("unavailable")).mockResolvedValueOnce(list);
+    render(<OIDCProvidersPanel />);
+    expect(await screen.findByText("Could not load the sign-in providers.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText("Corp SSO")).toBeTruthy();
+    expect(mocks.listOIDCProviders).toHaveBeenCalledTimes(2);
+  });
+
+  it("renders the admin view and create dialog in French", async () => {
+    mocks.listOIDCProviders.mockResolvedValue(list);
+    render(<I18nProvider locale="fr" messages={fr}><OIDCProvidersPanel /></I18nProvider>);
+    expect(await screen.findByRole("heading", { name: "Fournisseurs de connexion" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Ajouter un fournisseur" }));
+    expect(screen.getByLabelText("Nom du fournisseur")).toBeTruthy();
+    expect(screen.getByLabelText("Confirmez avec votre mot de passe")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Enregistrer le fournisseur" })).toBeTruthy();
+  });
+
   it("lists providers and never shows a secret, only that one is configured", async () => {
     await open();
     expect(screen.getByText("Configured")).toBeTruthy();
@@ -88,6 +123,18 @@ describe("OIDCProvidersPanel", () => {
     password("pw");
     fireEvent.click(screen.getByRole("button", { name: "Save provider" }));
     expect(await screen.findAllByText(/must use the environment issuer/)).not.toHaveLength(0);
+  });
+
+  it("shows a duplicate provider-name conflict without an unrelated password remedy", async () => {
+    await open();
+    mocks.createOIDCProvider.mockRejectedValue(new ApiError({
+      status: 409, code: "conflict", message: "an OIDC provider with this name already exists",
+    }));
+    fireEvent.click(screen.getByRole("button", { name: "Add provider" }));
+    password("pw");
+    fireEvent.click(screen.getByRole("button", { name: "Save provider" }));
+    expect(await screen.findByText("an OIDC provider with this name already exists")).toBeTruthy();
+    expect(screen.queryByText(/Set a password on your account first/)).toBeNull();
   });
 
   it("toggling asks for the password, then sends enabled=false", async () => {

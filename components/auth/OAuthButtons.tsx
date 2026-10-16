@@ -1,6 +1,7 @@
 "use client";
 
 import { oauthBeginUrl } from "@/lib/api";
+import type { InstanceResponse } from "@/lib/api";
 
 // OAuthButtons renders one "Continue with <Provider>" entry per configured
 // OIDC provider (GET /instance oauth_providers). Each entry is a plain anchor:
@@ -12,9 +13,11 @@ import { oauthBeginUrl } from "@/lib/api";
 // provider is configured.
 export function OAuthButtons({
   providers,
+  details = [],
   returnTo,
 }: {
   providers: string[];
+  details?: InstanceResponse["oauth_provider_details"];
   returnTo: string;
 }) {
   if (providers.length === 0) return null;
@@ -34,7 +37,7 @@ export function OAuthButtons({
               href={oauthBeginUrl(provider, returnTo)}
               className="focus-ring flex min-h-12 items-center justify-center gap-2 rounded-[10px] bg-surface-muted px-5 py-2.5 text-base font-semibold text-fg transition-colors hover:bg-surface-strong"
             >
-              Continue with {providerDisplayName(provider)}
+              Continue with {providerDisplayName(provider, details.find((p) => p.name === provider)?.display_name)}
             </a>
           </li>
         ))}
@@ -61,13 +64,15 @@ export function AuthOrDivider() {
 }
 
 /**
+ * Configured labels take precedence; older instances supply only provider names.
  * "google" -> "Google" — provider names are configured lowercase identifiers.
  * "atproto" is the one that is not operator-configured: it is the fixed provider
  * key ATProto identity login writes, and every other surface calls it by the
  * network's name ("Continue with Bluesky", "Connect a Bluesky account"), so the
  * settings row must not be the single place that says "Atproto".
  */
-export function providerDisplayName(provider: string): string {
+export function providerDisplayName(provider: string, label?: string): string {
+  if (label?.trim()) return label;
   if (provider === "atproto") return "Bluesky";
   return provider.charAt(0).toUpperCase() + provider.slice(1);
 }
