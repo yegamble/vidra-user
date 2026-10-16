@@ -897,7 +897,7 @@ export interface paths {
          *
          *     Two callbacks do NOT end in a session. When the resolved account has two-factor enabled, no session is issued: the challenge token is set as the httpOnly `vidra_mfa_pending` cookie and the redirect carries `?mfa=required`, to be finished at POST /api/v1/auth/mfa/challenge. And when a session is ALREADY signed in in this browser, the callback is treated as a request to connect that identity to THAT account (`?link=<provider>`), or refused with `?oauth_error=identity_belongs_to_another_account` — never an account switch. (A callback started from `/link/start` uses `?link_error=` instead: the failure key is the one the ORIGIN page renders, and a refusal the landing page cannot show is a silent one.)
          *
-         *     User-actionable failures redirect with an `oauth_error` query code (`access_denied`, `email_conflict`, `email_required`, `account_disabled`, `conflict`); protocol violations (missing/forged/ expired state, nonce mismatch) are 400.
+         *     User-actionable failures redirect with an `oauth_error` query code (`access_denied`, `email_conflict`, `email_required`, `account_disabled`, `conflict`, and for a provider that does not create accounts `signup_disabled` or `email_domain_not_allowed` — the latter also when the address in an allowed domain is unverified); protocol violations (missing/forged/ expired state, nonce mismatch) are 400.
          */
         get: operations["completeOAuth"];
         put?: never;
