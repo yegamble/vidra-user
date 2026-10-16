@@ -84,4 +84,14 @@ describe("errors", () => {
       "disable or edit it instead",
     );
   });
+
+  it("preserves a duplicate provider-name conflict instead of asking for a password", () => {
+    const message = "an OIDC provider with this name already exists";
+    expect(providerErrorMessage(err(409, "conflict", message), t, "f")).toBe(message);
+  });
+
+  it("preserves the server's concrete remedy for other conflicts", () => {
+    const message = "your account has no password to confirm this with: complete a step-up with your sign-in provider and send step_up_token";
+    expect(providerErrorMessage(err(409, "conflict", message), t, "f")).toBe(message);
+  });
 });
