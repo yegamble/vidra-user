@@ -8,6 +8,7 @@ import { common } from "./common";
 import { home } from "./home";
 import { report } from "./report";
 import { search } from "./search";
+import { settings } from "./settings";
 import { state } from "./state";
 import { theme } from "./theme";
 
@@ -20,6 +21,6 @@ import { theme } from "./theme";
  * AI model (2026-10-12) and has not been read by a native speaker. A reviewer
  * moves each string they approve ABOVE that rule.
  */
-export const FR_NAMESPACES = { account, a11y, admin, auth, common, home, report, search, state, theme };
+export const FR_NAMESPACES = { account, a11y, admin, auth, common, home, report, search, settings, state, theme };
 
-export const fr = { ...account, ...a11y, ...admin, ...auth, ...common, ...home, ...report, ...search, ...state, ...theme } satisfies Messages;
+export const fr = { ...account, ...a11y, ...admin, ...auth, ...common, ...home, ...report, ...search, ...settings, ...state, ...theme } satisfies Messages;
