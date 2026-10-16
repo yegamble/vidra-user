@@ -1,6 +1,12 @@
 import type { Messages } from "../index";
 
 export const admin = {
+  "admin.loginLockout.action": "Débloquer la connexion",
+  "admin.loginLockout.busy": "Déblocage…",
+  "admin.loginLockout.aria": "Débloquer la connexion de {name}",
+  "admin.loginLockout.success": "La connexion de {name} est débloquée.",
+  "admin.loginLockout.error": "Impossible de débloquer la connexion. Réessayez.",
+
   // ── machine-drafted, awaiting native-speaker review ──────────────────────
   "admin.oidc.title": "Fournisseurs de connexion",
   "admin.oidc.intro": "Fournisseurs OpenID Connect permettant de se connecter. Un fournisseur ajouté ici remplace celui du même nom défini dans l’environnement ; le secret client est chiffré et ne sera plus affiché.",
