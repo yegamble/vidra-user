@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   getRemoteVideoComments: vi.fn(),
   blockRemoteActor: vi.fn(),
   unblockRemoteActor: vi.fn(),
+  recordRemoteVideoView: vi.fn(),
   useSession: vi.fn(),
   push: vi.fn(),
 }));
@@ -35,6 +36,7 @@ vi.mock("@/lib/api", async (importActual) => {
       getRemoteVideoComments: mocks.getRemoteVideoComments,
       blockRemoteActor: mocks.blockRemoteActor,
       unblockRemoteActor: mocks.unblockRemoteActor,
+      recordRemoteVideoView: mocks.recordRemoteVideoView,
     },
   };
 });
@@ -114,6 +116,7 @@ beforeEach(() => {
     .mockResolvedValue({ comments: [], authored: [], total: 0, limit: 50, offset: 0 });
   mocks.blockRemoteActor.mockReset().mockResolvedValue(undefined);
   mocks.unblockRemoteActor.mockReset().mockResolvedValue(undefined);
+  mocks.recordRemoteVideoView.mockReset().mockResolvedValue(undefined);
   mocks.useSession.mockReturnValue({ status: "anonymous" });
 });
 
@@ -450,5 +453,37 @@ describe("RemoteWatchView description is untrusted user text", () => {
     expect(link.getAttribute("rel")).toBe("nofollow noopener noreferrer ugc");
     expect(screen.queryByRole("link", { name: "bad" })).toBeNull();
     expect(container.querySelector('a[href^="javascript"]')).toBeNull();
+  });
+});
+
+describe("RemoteWatchView view reporting", () => {
+  async function renderPlayer() {
+    restoreCanPlayType = pretendNativeHlsSupport();
+    mocks.getRemoteVideo.mockResolvedValue(remoteVideo({ stream_url: HLS_MASTER }));
+    const { container } = render(<RemoteWatchView id="r1" />);
+    return waitFor(() => {
+      const el = container.querySelector("video");
+      expect(el).not.toBeNull();
+      return el as HTMLVideoElement;
+    });
+  }
+
+  it("reports one view to the origin on first play, not on re-play or seek", async () => {
+    const player = await renderPlayer();
+    expect(mocks.recordRemoteVideoView).not.toHaveBeenCalled();
+    fireEvent.play(player);
+    fireEvent.pause(player);
+    fireEvent.seeked(player);
+    fireEvent.play(player);
+    expect(mocks.recordRemoteVideoView).toHaveBeenCalledTimes(1);
+    expect(mocks.recordRemoteVideoView).toHaveBeenCalledWith("11111111-2222-4333-8444-555555555555");
+  });
+
+  it("swallows a failed report", async () => {
+    mocks.recordRemoteVideoView.mockRejectedValue(new Error("429"));
+    const player = await renderPlayer();
+    expect(() => fireEvent.play(player)).not.toThrow();
+    await Promise.resolve();
+    expect(mocks.recordRemoteVideoView).toHaveBeenCalledTimes(1);
   });
 });
