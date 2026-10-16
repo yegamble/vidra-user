@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 
 import { AdminPagination, RolePill } from "@/components/admin/AdminControls";
+import { UnlockSignInButton } from "@/components/admin/UnlockSignInButton";
 import { BanUserDialog } from "@/components/admin/BanUserDialog";
 import { CreateUserDialog } from "@/components/admin/CreateUserDialog";
 import { PasswordResetLinkCard } from "@/components/admin/PasswordResetLinkCard";
@@ -1077,6 +1078,8 @@ function UserDetail({
             <RemoveSecondFactorCard user={user} onUpdated={onUpdated} />
           ) : null}
 
+          {viewerIsAdmin && !deleted ? <UnlockSignInButton userId={user.id} username={user.username} /> : null}
+
           {viewerIsAdmin && !deleted ? <PasswordResetLinkCard user={user} /> : null}
 
           {viewerIsOwner && !isSelf ? (
@@ -1328,6 +1331,7 @@ function UserRow({
             >
               {user.is_active ? "Deactivate" : "Reactivate"}
             </Button>
+            {viewerIsAdmin ? <UnlockSignInButton userId={user.id} username={user.username} /> : null}
             {viewerIsAdmin && !deleteArmed ? (
               <Button
                 variant="danger-outline"

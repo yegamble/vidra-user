@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   getAdminUsers: vi.fn(),
+  clearUserLoginLockout: vi.fn(),
+  toast: vi.fn(),
   updateAdminUser: vi.fn(),
   deleteAdminUser: vi.fn(),
   transferInstanceOwnership: vi.fn(),
@@ -30,6 +32,7 @@ vi.mock("@/components/auth/AuthProvider", () => ({
 vi.mock("@/lib/api", () => ({
   api: {
     getAdminUsers: mocks.getAdminUsers,
+    clearUserLoginLockout: mocks.clearUserLoginLockout,
     updateAdminUser: mocks.updateAdminUser,
     deleteAdminUser: mocks.deleteAdminUser,
     transferInstanceOwnership: mocks.transferInstanceOwnership,
@@ -38,6 +41,10 @@ vi.mock("@/lib/api", () => ({
     createAdminUser: mocks.createAdminUser,
   },
   errorMessage: (_error: unknown, fallback: string) => fallback,
+}));
+
+vi.mock("@/components/ui/Toast", () => ({
+  useToast: () => ({ toast: mocks.toast }),
 }));
 
 import { AdminUsersView } from "@/components/AdminUsersView";
@@ -77,6 +84,8 @@ function page(offset: number, count: number, total = TOTAL) {
 beforeEach(() => {
   navigation.reset("/admin/users");
   mocks.getAdminUsers.mockReset();
+  mocks.clearUserLoginLockout.mockReset();
+  mocks.toast.mockReset();
   mocks.updateAdminUser.mockReset();
   mocks.deleteAdminUser.mockReset();
   mocks.transferInstanceOwnership.mockReset();
@@ -869,5 +878,56 @@ describe("AdminUsersView create user", () => {
       expect.objectContaining({ username: "nina", role: "user" }),
     );
     await waitFor(() => expect(mocks.getAdminUsers).toHaveBeenCalledTimes(2));
+  });
+});
+
+
+describe("AdminUsersView sign-in unlock", () => {
+  it("unlocks an account on mobile and reports success", async () => {
+    mocks.getAdminUsers.mockResolvedValue(page(0, 1));
+    mocks.clearUserLoginLockout.mockResolvedValue(undefined);
+    render(<AdminUsersView />);
+    const button = await screen.findByRole("button", { name: "Unlock sign-in for person0" });
+    fireEvent.click(button);
+    await waitFor(() => expect(mocks.clearUserLoginLockout).toHaveBeenCalledWith("user-0"));
+    await waitFor(() => expect(mocks.toast).toHaveBeenCalledWith({
+      message: "Sign-in unlocked for person0.", variant: "success",
+    }));
+  });
+
+  it("also mounts the action in the desktop detail", async () => {
+    mocks.getAdminUsers.mockResolvedValue(page(0, 1));
+    mocks.clearUserLoginLockout.mockResolvedValue(undefined);
+    render(<AdminUsersView />);
+    fireEvent.click(await screen.findByRole("button", { name: "Open person0" }));
+    const buttons = await screen.findAllByRole("button", { name: "Unlock sign-in for person0" });
+    expect(buttons).toHaveLength(2);
+    fireEvent.click(buttons[1]);
+    await waitFor(() => expect(mocks.clearUserLoginLockout).toHaveBeenCalledWith("user-0"));
+  });
+
+  it("disables duplicate requests and lets an admin retry after a failure", async () => {
+    mocks.getAdminUsers.mockResolvedValue(page(0, 1));
+    let reject!: (error: Error) => void;
+    mocks.clearUserLoginLockout.mockImplementationOnce(() => new Promise((_, no) => { reject = no; }));
+    render(<AdminUsersView />);
+    fireEvent.click(await screen.findByRole("button", { name: "Unlock sign-in for person0" }));
+    expect(screen.getByRole("button", { name: "Unlock sign-in for person0" }).hasAttribute("disabled")).toBe(true);
+    reject(new Error("offline"));
+    await waitFor(() => expect(mocks.toast).toHaveBeenCalledWith({
+      message: "Could not unlock sign-in. Please try again.", variant: "error",
+    }));
+    mocks.clearUserLoginLockout.mockResolvedValue(undefined);
+    fireEvent.click(screen.getByRole("button", { name: "Unlock sign-in for person0" }));
+    await waitFor(() => expect(mocks.clearUserLoginLockout).toHaveBeenCalledTimes(2));
+  });
+
+  it("does not offer the admin-only action to a moderator", async () => {
+    mocks.session = { user: { id: "mod-1", role: "moderator" } };
+    mocks.getAdminUsers.mockResolvedValue(page(0, 1));
+    render(<AdminUsersView />);
+    await screen.findByRole("button", { name: "Open person0" });
+    expect(screen.queryByRole("button", { name: "Unlock sign-in for person0" })).toBeNull();
+    expect(mocks.clearUserLoginLockout).not.toHaveBeenCalled();
   });
 });
