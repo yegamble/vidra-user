@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
+import { useFormat, useT } from "@/components/I18nProvider";
 import { BatchUploadQueue } from "@/components/BatchUploadQueue";
 import { TagsInput } from "@/components/TagsInput";
 import { CheckIcon, ChevronDownIcon, LoaderIcon, UploadIcon, VideoIcon } from "@/components/icons";
@@ -33,7 +34,8 @@ import type {
   VideoPrivacy,
 } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import { formatBytes, formatDateTime, formatDuration } from "@/lib/format";
+import type { PlainMessageKey } from "@/lib/i18n";
+import { formatBytes, formatDuration } from "@/lib/format";
 import { logger } from "@/lib/logger";
 import { isAcceptedVideoFile, videoAcceptAttr } from "@/lib/upload-accept";
 import { titleFromFilename } from "@/lib/upload-queue";
@@ -63,6 +65,21 @@ import {
   taxonomyFields,
 } from "./shared";
 
+// The shared lists (VIDEO_PRIVACY_CHOICES, IMPORT_STAGES) carry English labels
+// for their other consumers; this form renders them through the catalog by value.
+const PRIVACY_LABEL_KEY: Record<string, PlainMessageKey> = {
+  public: "studio.privacy.public",
+  unlisted: "studio.privacy.unlisted",
+  internal: "studio.upload.privacyInternal",
+  private: "studio.privacy.private",
+};
+const STAGE_LABEL_KEY: Record<string, PlainMessageKey> = {
+  queued: "studio.upload.stage.queued",
+  metadata: "studio.upload.stage.metadata",
+  downloading: "studio.upload.stage.downloading",
+  processing: "studio.upload.stage.processing",
+};
+
 // Exported for tests (the W9 prefill-race regression coverage renders it directly).
 export function UploadSection({
   channels,
@@ -82,6 +99,8 @@ export function UploadSection({
   onAutoOpenConsumed?: () => void;
   onUploaded?: () => void;
 }) {
+  const t = useT();
+  const { formatDateTime } = useFormat();
   const [handle, setHandle] = useState(defaultHandle ?? channels[0]?.handle ?? "");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -311,7 +330,7 @@ export function UploadSection({
   // quarantined/processing result clears the form.
   function finishWithVideo(video: Video, from: "file" | "url") {
     if (video.state === "failed") {
-      setError(failedStateError(from));
+      setError(failedStateError(from, t));
       setState("error");
       return;
     }
@@ -386,7 +405,7 @@ export function UploadSection({
     if (job.state === "failed") {
       return {
         ok: false,
-        error: job.error && job.error.trim() !== "" ? job.error : failedStateError("url"),
+        error: job.error && job.error.trim() !== "" ? job.error : failedStateError("url", t),
       };
     }
     const video = await api.getVideo(videoId, undefined, signal);
@@ -446,7 +465,7 @@ export function UploadSection({
       }
       // A 422 with a url field error renders inline on the URL input (not a retry).
       if (applyFieldErrors(err)) return;
-      setError(importOrUploadError(err, "url"));
+      setError(importOrUploadError(err, "url", t));
       setRetryCtx({ videoId, url });
       setState("error");
     }
@@ -644,7 +663,7 @@ export function UploadSection({
       uploadedVideoRef.current = res.video;
       if (res.video.state === "failed") {
         // A probe/scan rejected the file: nothing to publish, surface it honestly.
-        setError(failedStateError("file"));
+        setError(failedStateError("file", t));
         setState("error");
         return;
       }
@@ -677,7 +696,7 @@ export function UploadSection({
       // Draft-create (422 quota / 403 feature_disabled / 429) or upload failure:
       // keep the picked file, map the error inline, and offer a retry.
       if (applyFieldErrors(err)) return;
-      setError(importOrUploadError(err, "file"));
+      setError(importOrUploadError(err, "file", t));
       setState("error");
     } finally {
       abortRef.current = null;
@@ -751,7 +770,7 @@ export function UploadSection({
       // A 422 (e.g. publish_at on an already-published video, or a bad title)
       // renders inline; anything else is a mapped form-level error.
       if (applyFieldErrors(err)) return;
-      setError(importOrUploadError(err, "file"));
+      setError(importOrUploadError(err, "file", t));
       setState("error");
     }
   }
@@ -773,7 +792,7 @@ export function UploadSection({
     } catch (err) {
       setPublishAfterTranscode(!next);
       setPublishTimingError(
-        errorMessage(err, "Couldn’t update the publish timing. Please try again."),
+        errorMessage(err, t("studio.errors.timingFailed")),
       );
     }
   }
@@ -810,7 +829,7 @@ export function UploadSection({
     // Keep only accepted video files (the server's 415 stays the final authority).
     const videos = dropped.filter((f) => isAcceptedVideoFile(f, additionalExts));
     if (videos.length === 0) {
-      setError("That is not a supported video type.");
+      setError(t("studio.errors.unsupportedType"));
       return;
     }
     handleFiles(videos);
@@ -917,7 +936,7 @@ export function UploadSection({
         return;
       }
       if (applyFieldErrors(err)) return;
-      setError(importOrUploadError(err, "url"));
+      setError(importOrUploadError(err, "url", t));
       setState("error");
     } finally {
       abortRef.current = null;
@@ -947,7 +966,7 @@ export function UploadSection({
       if (status.state !== "active") {
         forgetUploadSession(cand.uploadId);
         setResumeCandidate(null);
-        setError("That unfinished upload is no longer available — publish to start a new one.");
+        setError(t("studio.errors.sessionGone"));
         setState("error");
         return;
       }
@@ -982,11 +1001,11 @@ export function UploadSection({
       if (err instanceof ApiError && err.status === 404) {
         forgetUploadSession(cand.uploadId);
         setResumeCandidate(null);
-        setError("That unfinished upload is no longer available — publish to start a new one.");
+        setError(t("studio.errors.sessionGone"));
         setState("error");
         return;
       }
-      setError(importOrUploadError(err, "file"));
+      setError(importOrUploadError(err, "file", t));
       setState("error");
     } finally {
       abortRef.current = null;
@@ -1019,8 +1038,8 @@ export function UploadSection({
   return (
     <section className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-[15px] font-bold tracking-tight">Upload a video</h2>
-        <Button onClick={openSheet}>Upload video</Button>
+        <h2 className="text-[15px] font-bold tracking-tight">{t("studio.upload.heading")}</h2>
+        <Button onClick={openSheet}>{t("studio.upload.open")}</Button>
       </div>
       {/* Section-level outcome: a successful publish minimizes the sheet and
           surfaces the honest result here (with a "View" link) so it stays
@@ -1028,34 +1047,33 @@ export function UploadSection({
       {state === "done" && result ? (
         result.state === "published" ? (
           <p role="status" className="text-sm text-success">
-            Published!{" "}
+            {t("studio.upload.published")}{" "}
             <Link href={watchPath(result)} className="font-semibold underline">
-              View “{result.title}”
+              {t("studio.upload.view", { title: result.title })}
             </Link>
           </p>
         ) : result.state === "scheduled" ? (
           <p role="status" className="text-sm text-fg-muted">
-            “{result.title}” is scheduled — it will publish automatically
             {result.publish_at
-              ? ` on ${formatDateTime(result.publish_at)}`
-              : " at the scheduled time"}
-            .
+              ? t("studio.upload.scheduledOn", {
+                  title: result.title,
+                  date: formatDateTime(result.publish_at),
+                })
+              : t("studio.upload.scheduledLater", { title: result.title })}
           </p>
         ) : result.state === "quarantined" ? (
           <p role="status" className="text-sm text-warning">
-            “{result.title}” was received and is held for review — this instance reviews new uploads
-            before they go public. It will publish once a moderator approves it.
+            {t("studio.upload.quarantined", { title: result.title })}
           </p>
         ) : (
           <p role="status" className="text-sm text-warning">
-            “{result.title}” was received and is still processing — it will appear in Your videos
-            once it’s ready.
+            {t("studio.upload.stillProcessing", { title: result.title })}
           </p>
         )
       ) : null}
       {open ? (
         <Modal
-          title="Upload video"
+          title={t("studio.upload.open")}
           onClose={() => setOpen(false)}
           variant={sheet ? "sheet" : "dialog"}
           className="max-h-[85vh] overflow-y-auto sm:max-w-xl"
@@ -1079,13 +1097,12 @@ export function UploadSection({
                     // A cancelled file upload lands back here — the metadata form is
                     // kept; choosing (or dropping) a file starts a fresh upload.
                     <p role="status" className="text-sm text-fg-muted">
-                      Upload cancelled — nothing was published. Your details are kept, so choose a
-                      file to start again.
+                      {t("studio.upload.cancelledPick")}
                     </p>
                   ) : null}
                   <div className="flex flex-col gap-1.5 text-sm">
                     <span id="video-source-label" className="font-medium text-fg">
-                      Source
+                      {t("studio.upload.source")}
                     </span>
                     <SegmentedControl
                       value={source}
@@ -1094,8 +1111,8 @@ export function UploadSection({
                       disabled={state === "uploading" || state === "uploaded"}
                       fullWidth
                       options={[
-                        { value: "file", label: "Upload file" },
-                        { value: "url", label: "Import from URL" },
+                        { value: "file", label: t("studio.upload.sourceFile") },
+                        { value: "url", label: t("studio.upload.sourceUrl") },
                       ]}
                     />
                   </div>
@@ -1107,8 +1124,8 @@ export function UploadSection({
                     // honest empty state beats a dropzone that eats a 2 GB file
                     // and then fails.
                     <EmptyState
-                      title="Uploads are unavailable on this instance"
-                      message="This instance is not accepting new video files right now. Try again later, or ask the operator."
+                      title={t("studio.upload.unavailableTitle")}
+                      message={t("studio.upload.unavailableMessage")}
                     />
                   ) : source === "file" ? (
                     // Design's dashed dropzone: the file input is a full-bleed
@@ -1118,7 +1135,7 @@ export function UploadSection({
                     // Real drag-and-drop is layered on the wrapper (the input's
                     // accept only filters the OS picker), with an accent drag-over.
                     <div className="flex flex-col gap-2 text-sm">
-                      <span className="font-medium text-fg">Video file</span>
+                      <span className="font-medium text-fg">{t("studio.upload.videoFile")}</span>
                       <div
                         className="relative"
                         onDragEnter={onDropZoneDragEnter}
@@ -1134,7 +1151,7 @@ export function UploadSection({
                           // 415 gate stays the enforcement truth.
                           accept={videoAcceptAttr(additionalExts)}
                           multiple
-                          aria-label="Video file"
+                          aria-label={t("studio.upload.videoFile")}
                           onChange={onFileInputChange}
                           className="peer absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
                         />
@@ -1148,29 +1165,31 @@ export function UploadSection({
                             <UploadIcon size={24} className="text-accent" />
                           </span>
                           <span className="max-w-full truncate text-[15px] font-semibold text-fg">
-                            {dragOver ? "Drop to upload" : (fileName ?? "Choose or drop a video")}
+                            {dragOver
+                              ? t("studio.upload.dropActive")
+                              : (fileName ?? t("studio.upload.dropPrompt"))}
                           </span>
                           <span className="text-[13px] leading-relaxed text-fg-muted">
-                            MP4, MOV, WebM, MKV · up to 8 GB
+                            {t("studio.upload.dropFormats")}
                             <br />
-                            Starts uploading as soon as you choose · pick several for a batch
+                            {t("studio.upload.dropAuto")}
                           </span>
                         </div>
                       </div>
                       <span className="text-center text-xs text-fg-muted">
-                        New uploads are scanned and may be held briefly for review.
+                        {t("studio.upload.scanNote")}
                       </span>
                     </div>
                   ) : importsEnabled === false ? (
                     // Imports are turned off on this instance — an honest empty
                     // state, never a dead form the creator can submit into a 503.
                     <EmptyState
-                      title="Imports are disabled on this instance"
-                      message="The operator has turned off URL video import here. Upload a file instead, or check back later."
+                      title={t("studio.upload.importsOffTitle")}
+                      message={t("studio.upload.importsOffMessage")}
                     />
                   ) : (
                     <label className="flex flex-col gap-1 text-sm">
-                      <span className="font-medium text-fg">Video URL</span>
+                      <span className="font-medium text-fg">{t("studio.upload.videoUrl")}</span>
                       <input
                         value={videoUrl}
                         onChange={(e) => setVideoUrl(e.target.value)}
@@ -1184,16 +1203,15 @@ export function UploadSection({
                           }
                         }}
                         type="url"
-                        placeholder="https://example.com/clip.mp4"
-                        aria-label="Video URL"
+                        placeholder={t("studio.upload.urlPlaceholder")}
+                        aria-label={t("studio.upload.videoUrl")}
                         aria-invalid={fieldErrors.url ? true : undefined}
                         aria-describedby={fieldErrors.url ? "publish-url-error" : undefined}
                         className={FIELD}
                       />
                       <FieldErrorText id="publish-url-error" message={fieldErrors.url} />
                       <span className="text-xs text-fg-muted">
-                        A public link to a video file or a supported platform watch page. We fetch,
-                        scan, and publish it.
+                        {t("studio.upload.urlHint")}
                       </span>
                     </label>
                   )}
@@ -1205,12 +1223,11 @@ export function UploadSection({
                       className="flex flex-col gap-3 rounded-2xl bg-surface-muted p-4 text-sm"
                     >
                       <p className="text-fg">
-                        Unfinished upload found for “{resumeCandidate.filename}
-                        ”. Resume where you left off, or start a new upload.
+                        {t("studio.upload.resumeFound", { filename: resumeCandidate.filename })}
                       </p>
                       <div className="flex gap-2">
                         <Button size="sm" onClick={() => void resumeUpload()}>
-                          Resume upload
+                          {t("studio.upload.resume")}
                         </Button>
                         <Button
                           variant="secondary"
@@ -1229,7 +1246,7 @@ export function UploadSection({
                             }
                           }}
                         >
-                          Discard &amp; start over
+                          {t("studio.upload.discard")}
                         </Button>
                       </div>
                     </div>
@@ -1239,7 +1256,7 @@ export function UploadSection({
                     // to auto-start before submit); the file path advances on select.
                     <div className="flex flex-wrap items-center gap-3 pt-1">
                       <Button type="button" onClick={() => setStep("details")} disabled={!canContinue}>
-                        Continue
+                        {t("studio.upload.continue")}
                       </Button>
                     </div>
                   ) : null}
@@ -1251,9 +1268,9 @@ export function UploadSection({
                   {source === "url" ? (
                     <div className="flex flex-wrap items-center justify-between gap-2 text-[13px] text-fg-muted">
                       <span className="tabular-nums font-medium text-fg-muted">
-                        Step 2 of 2 · Details
+                        {t("studio.upload.step2")}
                       </span>
-                      <span className="truncate">{videoUrl.trim() || "Import from URL"}</span>
+                      <span className="truncate">{videoUrl.trim() || t("studio.upload.sourceUrl")}</span>
                     </div>
                   ) : pickedFile ? (
                     // File card: filename, technical chips, and the live upload
@@ -1278,20 +1295,20 @@ export function UploadSection({
                             className="inline-flex shrink-0 items-center gap-1 text-[13px] font-semibold text-fg-muted"
                           >
                             <LoaderIcon size={14} className="animate-spin" aria-hidden="true" />{" "}
-                            Processing…
+                            {t("studio.upload.processing")}
                           </span>
                         ) : (state === "uploading" || releaseCompletionRef.current) && !publishPending ? (
                           <Button
                             variant="secondary"
                             size="sm"
-                            aria-label="Cancel upload"
+                            aria-label={t("studio.upload.cancelUpload")}
                             onClick={cancelUpload}
                           >
-                            Cancel
+                            {t("common.cancel")}
                           </Button>
                         ) : state === "uploaded" ? (
                           <span className="inline-flex shrink-0 items-center gap-1 text-[13px] font-semibold text-success">
-                            <CheckIcon size={14} aria-hidden="true" /> Uploaded
+                            <CheckIcon size={14} aria-hidden="true" /> {t("studio.upload.uploaded")}
                           </span>
                         ) : null}
                       </div>
@@ -1311,7 +1328,7 @@ export function UploadSection({
                         <div className="flex items-center gap-2">
                           <div
                             role="progressbar"
-                            aria-label="Upload progress"
+                            aria-label={t("studio.upload.progress")}
                             aria-valuemin={0}
                             aria-valuemax={100}
                             aria-valuenow={progress}
@@ -1332,29 +1349,30 @@ export function UploadSection({
                       ) : null}
                       {state === "uploaded" && releaseCompletionRef.current ? (
                         <p role="status" className="text-[12.5px] text-fg-muted">
-                          Upload ready — save your details with Publish to begin processing.
+                          {t("studio.upload.ready")}
                         </p>
                       ) : state === "uploading" && uploadPhase === "processing" ? (
                         <p className="text-[12.5px] text-fg-muted">
-                          Upload complete — we’re processing your video. This can take a few minutes
-                          for a large file; you can keep filling in the details.
+                          {t("studio.upload.completeProcessing")}
                         </p>
                       ) : state === "uploading" && bytes ? (
                         <p className="text-[12.5px] tabular-nums text-fg-muted">
-                          {formatBytes(bytes.loaded)} of {formatBytes(bytes.total)} · resumes from the
-                          last completed chunk if interrupted
+                          {t("studio.upload.bytes", {
+                            loaded: formatBytes(bytes.loaded),
+                            total: formatBytes(bytes.total),
+                          })}
                         </p>
                       ) : null}
                     </div>
                   ) : null}
                   {channels.length > 1 ? (
                     <label className="flex flex-col gap-1 text-sm">
-                      <span className="font-medium text-fg">Channel</span>
+                      <span className="font-medium text-fg">{t("studio.upload.channel")}</span>
                       <span className="relative">
                         <select
                           value={handle}
                           onChange={(e) => setHandle(e.target.value)}
-                          aria-label="Channel"
+                          aria-label={t("studio.upload.channel")}
                           className={SELECT_FIELD}
                         >
                           {channels.map((ch) => (
@@ -1371,12 +1389,12 @@ export function UploadSection({
                     </label>
                   ) : null}
                   <label className="flex flex-col gap-1 text-sm">
-                    <span className="font-medium text-fg">Title</span>
+                    <span className="font-medium text-fg">{t("studio.upload.title")}</span>
                     <input
                       value={title}
                       onChange={(e) => setTitle(e.target.value)}
-                      placeholder="My video"
-                      aria-label="Video title"
+                      placeholder={t("studio.upload.titlePlaceholder")}
+                      aria-label={t("studio.upload.titleAria")}
                       maxLength={200}
                       aria-invalid={fieldErrors.title ? true : undefined}
                       aria-describedby={fieldErrors.title ? "publish-title-error" : undefined}
@@ -1385,12 +1403,12 @@ export function UploadSection({
                     <FieldErrorText id="publish-title-error" message={fieldErrors.title} />
                   </label>
                   <label className="flex flex-col gap-1 text-sm">
-                    <span className="font-medium text-fg">Description</span>
+                    <span className="font-medium text-fg">{t("studio.upload.description")}</span>
                     <textarea
                       value={description}
                       onChange={(e) => setDescription(e.target.value)}
-                      placeholder="Tell viewers about your video (optional)"
-                      aria-label="Video description"
+                      placeholder={t("studio.upload.descriptionPlaceholder")}
+                      aria-label={t("studio.upload.descriptionAria")}
                       rows={3}
                       maxLength={5000}
                       aria-invalid={fieldErrors.description ? true : undefined}
@@ -1405,8 +1423,8 @@ export function UploadSection({
                     />
                   </label>
                   <TaxonomySelect
-                    label="Category"
-                    ariaLabel="Video category"
+                    label={t("studio.upload.category")}
+                    ariaLabel={t("studio.upload.categoryAria")}
                     value={category}
                     onChange={setCategory}
                     options={config?.categories ?? []}
@@ -1414,8 +1432,8 @@ export function UploadSection({
                     errorId="publish-category-error"
                   />
                   <TaxonomySelect
-                    label="Language"
-                    ariaLabel="Video language"
+                    label={t("studio.upload.language")}
+                    ariaLabel={t("studio.upload.languageAria")}
                     value={language}
                     onChange={setLanguage}
                     options={config?.languages ?? []}
@@ -1423,8 +1441,8 @@ export function UploadSection({
                     errorId="publish-language-error"
                   />
                   <TaxonomySelect
-                    label="License"
-                    ariaLabel="Video license"
+                    label={t("studio.upload.license")}
+                    ariaLabel={t("studio.upload.licenseAria")}
                     value={license}
                     onChange={(v) => {
                       publishTouchedRef.current.add("license");
@@ -1434,9 +1452,9 @@ export function UploadSection({
                     error={fieldErrors.license}
                     errorId="publish-license-error"
                   />
-                  <TagsInput value={tags} onChange={setTags} ariaLabel="Video tags" />
+                  <TagsInput value={tags} onChange={setTags} ariaLabel={t("studio.upload.tagsAria")} />
                   <label className="flex flex-col gap-1 text-sm">
-                    <span className="font-medium text-fg">Privacy</span>
+                    <span className="font-medium text-fg">{t("studio.upload.privacy")}</span>
                     <span className="relative">
                       <select
                         value={privacy}
@@ -1444,14 +1462,14 @@ export function UploadSection({
                           publishTouchedRef.current.add("privacy");
                           setPrivacy(e.target.value as VideoPrivacy);
                         }}
-                        aria-label="Privacy"
+                        aria-label={t("studio.upload.privacy")}
                         aria-invalid={fieldErrors.privacy ? true : undefined}
                         aria-describedby={fieldErrors.privacy ? "publish-privacy-error" : undefined}
                         className={SELECT_FIELD}
                       >
                         {VIDEO_PRIVACY_CHOICES.map((c) => (
                           <option key={c.value} value={c.value}>
-                            {c.label}
+                            {t(PRIVACY_LABEL_KEY[c.value])}
                           </option>
                         ))}
                       </select>
@@ -1464,15 +1482,15 @@ export function UploadSection({
                   </label>
                   <div className="flex items-center justify-between gap-4 text-sm">
                     <div className="min-w-0">
-                      <span className="block font-medium text-fg">Contains sensitive content</span>
+                      <span className="block font-medium text-fg">{t("studio.upload.sensitive")}</span>
                       <span className="block text-xs text-fg-muted">
-                        Some instances hide, blur, or warn before playing sensitive videos.
+                        {t("studio.upload.sensitiveHint")}
                       </span>
                     </div>
                     <Toggle
                       checked={sensitive}
                       onChange={setSensitive}
-                      label="Contains sensitive content"
+                      label={t("studio.upload.sensitive")}
                       disabled={formLocked}
                     />
                   </div>
@@ -1487,12 +1505,12 @@ export function UploadSection({
                   ) : null}
                   {sensitive ? (
                     <label className="flex flex-col gap-1 text-sm">
-                      <span className="font-medium text-fg">Content warning (optional)</span>
+                      <span className="font-medium text-fg">{t("studio.upload.warning")}</span>
                       <input
                         value={sensitiveReason}
                         onChange={(e) => setSensitiveReason(e.target.value)}
-                        placeholder="Briefly describe what viewers will see"
-                        aria-label="Content warning"
+                        placeholder={t("studio.upload.warningPlaceholder")}
+                        aria-label={t("studio.upload.warningAria")}
                         maxLength={280}
                         disabled={formLocked}
                         className={FIELD}
@@ -1503,10 +1521,9 @@ export function UploadSection({
             instance defaults.publish block. */}
                   <div className="flex items-center justify-between gap-4 text-sm">
                     <div className="min-w-0">
-                      <span className="block font-medium text-fg">Allow comments</span>
+                      <span className="block font-medium text-fg">{t("studio.upload.comments")}</span>
                       <span className="block text-xs text-fg-muted">
-                        Viewers can comment on this video. Existing comments stay visible if turned
-                        off later.
+                        {t("studio.upload.commentsHint")}
                       </span>
                     </div>
                     <Toggle
@@ -1515,16 +1532,15 @@ export function UploadSection({
                         publishTouchedRef.current.add("comments");
                         setCommentsPolicy(on ? commentsOnPolicy.current : "disabled");
                       }}
-                      label="Allow comments"
+                      label={t("studio.upload.comments")}
                       disabled={formLocked}
                     />
                   </div>
                   <div className="flex items-center justify-between gap-4 text-sm">
                     <div className="min-w-0">
-                      <span className="block font-medium text-fg">Allow downloads</span>
+                      <span className="block font-medium text-fg">{t("studio.upload.downloads")}</span>
                       <span className="block text-xs text-fg-muted">
-                        Viewers can download this video&apos;s files — only while the instance
-                        allows downloads at all.
+                        {t("studio.upload.downloadsHint")}
                       </span>
                     </div>
                     <Toggle
@@ -1533,7 +1549,7 @@ export function UploadSection({
                         publishTouchedRef.current.add("download");
                         setDownloadEnabled(on);
                       }}
-                      label="Allow downloads"
+                      label={t("studio.upload.downloads")}
                       disabled={formLocked}
                     />
                   </div>
@@ -1543,29 +1559,29 @@ export function UploadSection({
                   <div className="flex flex-col gap-1">
                     <div className="flex items-center justify-between gap-4 text-sm">
                       <div className="min-w-0">
-                        <span className="block font-medium text-fg">Publish after transcoding</span>
+                        <span className="block font-medium text-fg">{t("studio.upload.afterTranscode")}</span>
                         <span className="block text-xs text-fg-muted">
                           {publishAt.trim() !== ""
-                            ? "Scheduled videos publish at the scheduled time."
-                            : "Your video stays hidden until processing finishes. Otherwise it goes live immediately and viewers watch the original file while processing completes."}
+                            ? t("studio.upload.afterTranscodeScheduled")
+                            : t("studio.upload.afterTranscodeHint")}
                         </span>
                       </div>
                       <Toggle
                         checked={publishAfterTranscode}
                         onChange={(on) => void togglePublishTiming(on)}
-                        label="Publish after transcoding"
+                        label={t("studio.upload.afterTranscode")}
                         disabled={formLocked || publishAt.trim() !== ""}
                       />
                     </div>
                     <FieldErrorText id="publish-timing-error" message={publishTimingError ?? undefined} />
                   </div>
                   <label className="flex flex-col gap-1 text-sm">
-                    <span className="font-medium text-fg">Schedule publish (optional)</span>
+                    <span className="font-medium text-fg">{t("studio.upload.schedule")}</span>
                     <input
                       type="datetime-local"
                       value={publishAt}
                       onChange={(e) => setPublishAt(e.target.value)}
-                      aria-label="Schedule publish"
+                      aria-label={t("studio.upload.scheduleAria")}
                       aria-invalid={fieldErrors.publish_at ? true : undefined}
                       aria-describedby={
                         fieldErrors.publish_at ? "publish-schedule-error" : undefined
@@ -1574,8 +1590,7 @@ export function UploadSection({
                     />
                     <FieldErrorText id="publish-schedule-error" message={fieldErrors.publish_at} />
                     <span className="text-xs text-fg-muted">
-                      Leave empty to publish as soon as processing finishes. A scheduled video stays
-                      hidden from public surfaces until this time (must be in the future).
+                      {t("studio.upload.scheduleHint")}
                     </span>
                   </label>
                   {source === "url" && state === "uploading" ? (
@@ -1586,13 +1601,12 @@ export function UploadSection({
                     // moving — the video goes live automatically once the upload
                     // finishes (branching on its final state).
                     <p role="status" className="text-sm text-fg-muted">
-                      Publishing when the upload completes…
+                      {t("studio.upload.publishingPending")}
                     </p>
                   ) : null}
                   {state === "cancelled" ? (
                     <p role="status" className="text-sm text-fg-muted">
-                      Upload cancelled — nothing was published. Your details are kept so you can try
-                      again.
+                      {t("studio.upload.cancelledDetails")}
                     </p>
                   ) : null}
                   {error ? (
@@ -1604,13 +1618,13 @@ export function UploadSection({
                         // A failed URL import keeps its draft, so Retry re-enqueues against
                         // the same video via the same endpoint — no re-entry of the form.
                         <Button variant="secondary" size="sm" onClick={() => void retryImport()}>
-                          Retry import
+                          {t("studio.upload.retryImport")}
                         </Button>
                       ) : source === "file" && pickedFile && !releaseCompletionRef.current ? (
                         // A failed draft-create/upload keeps the picked file — retry
                         // restarts the auto-upload without re-choosing the file.
                         <Button variant="secondary" size="sm" onClick={retryUpload}>
-                          Retry upload
+                          {t("studio.upload.retryUpload")}
                         </Button>
                       ) : null}
                     </div>
@@ -1623,7 +1637,7 @@ export function UploadSection({
                         onClick={() => setStep("pick")}
                         disabled={state === "uploading"}
                       >
-                        Back
+                        {t("studio.upload.back")}
                       </Button>
                     ) : null}
                     <button
@@ -1638,11 +1652,11 @@ export function UploadSection({
                     >
                       {source === "url"
                         ? state === "uploading"
-                          ? "Importing…"
-                          : "Publish"
+                          ? t("studio.upload.importing")
+                          : t("studio.upload.publish")
                         : publishPending
-                          ? "Publishing…"
-                          : "Publish"}
+                          ? t("studio.upload.publishing")
+                          : t("studio.upload.publish")}
                     </button>
                   </div>
                 </>
@@ -1662,7 +1676,9 @@ export function UploadSection({
         >
           <LoaderIcon size={16} className="animate-spin text-accent" aria-hidden="true" />
           <span className="text-[13px] font-semibold tabular-nums text-fg">
-            {source === "url" ? "Importing…" : `Uploading ${progress}%`}
+            {source === "url"
+              ? t("studio.upload.importing")
+              : t("studio.upload.pill", { progress })}
           </span>
         </button>
       ) : null}
@@ -1677,10 +1693,11 @@ export function UploadSection({
 // studio uses elsewhere. `job` is null for the brief window before the enqueue
 // POST returns; the rail then reads as "Queued".
 function ImportStageRail({ job }: { job: ImportJob | null }) {
+  const t = useT();
   const active = job ? importActiveStage(job) : 0;
   return (
     <ol
-      aria-label="Import progress"
+      aria-label={t("studio.upload.importProgress")}
       className="flex flex-col gap-2 rounded-2xl bg-surface-muted p-4"
     >
       {IMPORT_STAGES.map((stage, i) => {
@@ -1710,9 +1727,9 @@ function ImportStageRail({ job }: { job: ImportJob | null }) {
               )}
             </span>
             <span className={current ? "font-semibold text-fg" : "text-fg-muted"}>
-              {stage.label}
+              {t(STAGE_LABEL_KEY[stage.key])}
             </span>
-            {current ? <span className="sr-only">— in progress</span> : null}
+            {current ? <span className="sr-only">{t("studio.upload.inProgress")}</span> : null}
           </li>
         );
       })}

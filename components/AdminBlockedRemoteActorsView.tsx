@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 
+import { useT } from "@/components/I18nProvider";
 import { ListBoundary } from "@/components/admin/ListBoundary";
 import { PagedListShell } from "@/components/admin/PagedListShell";
 import { UserIcon } from "@/components/icons";
@@ -31,6 +32,7 @@ export function AdminBlockedRemoteActorsView() {
 }
 
 function ActorsList() {
+  const t = useT();
   const list = usePagedList<BlockedRemoteActor>({
     load: (query, signal) =>
       api
@@ -54,10 +56,10 @@ function ActorsList() {
       list={list}
       noun="blocked remote account"
       toolbar={<BlockActorForm onBlocked={onBlocked} />}
-      errorMessage="Could not load the blocked remote accounts."
+      errorMessage={t("admin.remoteActors.loadError")}
       emptyIcon={<UserIcon size={24} />}
-      emptyTitle="No blocked remote accounts"
-      emptyMessage="Block a single remote account above and it disappears for everyone on this server, without defederating the instance it lives on."
+      emptyTitle={t("admin.remoteActors.emptyTitle")}
+      emptyMessage={t("admin.remoteActors.emptyMessage")}
     >
       <ul className="flex flex-col gap-2">
         {list.items.map((actor) => (
@@ -74,6 +76,7 @@ function ActorsList() {
 }
 
 function BlockActorForm({ onBlocked }: { onBlocked: () => void }) {
+  const t = useT();
   const [actor, setActor] = useState("");
   const [reason, setReason] = useState("");
   const { run, busy, error, clearError } = useAsyncAction(
@@ -88,14 +91,13 @@ function BlockActorForm({ onBlocked }: { onBlocked: () => void }) {
     },
     // errorMessage quotes the backend's own sentence (local identity, cannot be
     // resolved, ...), so a 422 says which it was.
-    "Could not block this account.",
+    t("admin.remoteActors.blockError"),
   );
 
   return (
     <div className="flex flex-col gap-2">
       <p className="text-[13px] text-fg-muted">
-        Unlike your personal block list, this hides the account across the whole instance: for
-        every viewer, including signed-out ones.
+        {t("admin.remoteActors.intro")}
       </p>
       <form
         className="flex flex-col gap-2"
@@ -109,8 +111,8 @@ function BlockActorForm({ onBlocked }: { onBlocked: () => void }) {
         <div className="flex flex-wrap gap-2">
           <input
             type="text"
-            aria-label="Remote account to block"
-            placeholder="@user@host or actor URL"
+            aria-label={t("admin.remoteActors.actorLabel")}
+            placeholder={t("admin.remoteActors.actorPlaceholder")}
             value={actor}
             onChange={(e) => {
               setActor(e.target.value);
@@ -120,15 +122,15 @@ function BlockActorForm({ onBlocked }: { onBlocked: () => void }) {
           />
           <input
             type="text"
-            aria-label="Reason for blocking (optional)"
-            placeholder="Reason (optional, visible to other moderators)"
+            aria-label={t("admin.block.reasonLabel")}
+            placeholder={t("admin.remoteActors.reasonPlaceholder")}
             maxLength={MAX_REASON_LEN}
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             className="focus-ring w-full max-w-sm rounded-xl border border-border bg-surface px-3.5 py-2 text-sm text-fg placeholder:text-fg-muted"
           />
           <Button type="submit" size="sm" disabled={busy || actor.trim() === ""}>
-            {busy ? "Blocking…" : "Block"}
+            {busy ? t("admin.action.blocking") : t("admin.action.block")}
           </Button>
         </div>
         {error ? (
@@ -148,6 +150,7 @@ function BlockedActorRow({
   actor: BlockedRemoteActor;
   onUnblocked: (actorUrl: string) => void;
 }) {
+  const t = useT();
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -163,7 +166,7 @@ function BlockedActorRow({
       await api.unblockRemoteActorInstanceWide(actor.actor_url);
       onUnblocked(actor.actor_url);
     } catch (err) {
-      setError(errorMessage(err, "Could not unblock this account."));
+      setError(errorMessage(err, t("admin.remoteActors.unblockError")));
       setBusy(false);
       setConfirming(false);
     }
@@ -174,7 +177,7 @@ function BlockedActorRow({
       <div className="min-w-0">
         <p className="truncate text-sm font-semibold tracking-tight text-fg">{label}</p>
         <p className="text-[13px] text-fg-muted">
-          {actor.domain} · blocked {relativeTime(actor.blocked_at)}
+          {t("admin.remoteActors.meta", { domain: actor.domain, when: relativeTime(actor.blocked_at) })}
         </p>
         {actor.reason ? <p className="mt-1 text-[13px] text-fg-muted">{actor.reason}</p> : null}
         {error ? (
@@ -187,7 +190,7 @@ function BlockedActorRow({
         {confirming ? (
           <>
             <Button variant="danger" size="sm" disabled={busy} onClick={() => void unblock()}>
-              {busy ? "Unblocking…" : "Confirm unblock"}
+              {busy ? t("admin.action.unblocking") : t("admin.remoteActors.confirmUnblock")}
             </Button>
             <Button
               variant="secondary"
@@ -195,17 +198,17 @@ function BlockedActorRow({
               disabled={busy}
               onClick={() => setConfirming(false)}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
           </>
         ) : (
           <Button
             variant="secondary"
             size="sm"
-            aria-label={`Unblock ${label}`}
+            aria-label={t("admin.action.unblockTarget", { name: label })}
             onClick={() => setConfirming(true)}
           >
-            Unblock
+            {t("admin.action.unblock")}
           </Button>
         )}
       </div>

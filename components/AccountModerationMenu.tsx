@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { useT } from "@/components/I18nProvider";
 import { EyeOffIcon, MoreVerticalIcon, SlashCircleIcon } from "@/components/icons";
 import { Dropdown, type DropdownItem } from "@/components/ui/Dropdown";
 import { api } from "@/lib/api";
@@ -69,6 +70,7 @@ function AccountModerationMenuForViewer({
   channelHandles,
   session,
 }: AccountModerationMenuProps) {
+  const t = useT();
   const { ready, mutedIds, blockedIds } = useViewerModeration(session);
   const [busy, setBusy] = useState(false);
   const viewerKey = session.viewerKey;
@@ -100,14 +102,14 @@ function AccountModerationMenuForViewer({
   const items: DropdownItem[] = [
     muted
       ? {
-          label: "Unmute",
+          label: t("admin.accountMenu.unmute"),
           icon: <EyeOffIcon size={16} />,
           disabled: busy,
           onSelect: () =>
             void run(() => api.unmuteAccount(accountId), { muted: false }),
         }
       : {
-          label: "Mute",
+          label: t("comments.menu.mute"),
           icon: <EyeOffIcon size={16} />,
           disabled: busy,
           onSelect: () =>
@@ -115,14 +117,14 @@ function AccountModerationMenuForViewer({
         },
     blocked
       ? {
-          label: "Unblock",
+          label: t("admin.accountMenu.unblock"),
           icon: <SlashCircleIcon size={16} />,
           disabled: busy,
           onSelect: () =>
             void run(() => api.unblockUser(accountId), { blocked: false }),
         }
       : {
-          label: "Block",
+          label: t("comments.menu.block"),
           icon: <SlashCircleIcon size={16} />,
           disabled: busy,
           danger: true,
@@ -136,7 +138,7 @@ function AccountModerationMenuForViewer({
       trigger={<MoreVerticalIcon size={20} />}
       // Named for WHO, not just what: a page can carry several menus, and
       // "More" alone would leave a screen-reader user counting them.
-      triggerLabel={`Actions for ${accountName}`}
+      triggerLabel={t("admin.accountMenu.trigger", { name: accountName })}
       items={items}
       align="end"
       triggerVariant="icon"
