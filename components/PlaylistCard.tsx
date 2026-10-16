@@ -1,16 +1,18 @@
+import { useFormat, useT } from "@/components/I18nProvider";
 import { PlaylistCoverImage } from "@/components/PlaylistCoverImage";
 import Link from "next/link";
 
 import { PlaylistIcon } from "@/components/icons";
 import { PrivacyBadge } from "@/components/PrivacyBadge";
 import { type Playlist } from "@/lib/api";
-import { relativeTime } from "@/lib/format";
 
 // PlaylistCard is the grid card for a playlist (used on /playlists): the uploaded
 // cover image when one is set (else a stacked-list placeholder), the video count
 // badge, the title, a Private/Unlisted badge for non-public playlists, and the
 // last-updated time. The whole title links to the playlist detail page.
 export function PlaylistCard({ playlist }: { playlist: Playlist }) {
+  const t = useT();
+  const { relativeTime } = useFormat();
   const updated = relativeTime(playlist.updated_at);
   return (
     <div className="flex flex-col gap-2">
@@ -30,7 +32,7 @@ export function PlaylistCard({ playlist }: { playlist: Playlist }) {
             <PlaylistIcon size={32} className="text-fg-muted" />
           )}
           <span className="absolute bottom-1.5 right-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-white tabular-nums">
-            {playlist.video_count} {playlist.video_count === 1 ? "video" : "videos"}
+            {t("playlists.card.videos", { count: String(playlist.video_count) })}
           </span>
         </div>
         <h3 className="line-clamp-2 text-sm font-semibold text-fg transition-colors group-hover:text-fg-muted">
@@ -39,7 +41,7 @@ export function PlaylistCard({ playlist }: { playlist: Playlist }) {
       </Link>
       <div className="flex flex-wrap items-center gap-2 text-[13px] text-fg-muted">
         <PrivacyBadge privacy={playlist.visibility} />
-        {updated ? <span>Updated {updated}</span> : null}
+        {updated ? <span>{t("playlists.card.updated", { when: updated })}</span> : null}
       </div>
     </div>
   );
