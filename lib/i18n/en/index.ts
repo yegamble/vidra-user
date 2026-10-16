@@ -10,9 +10,11 @@ import { common } from "./common";
 import { create } from "./create";
 import { header } from "./header";
 import { home } from "./home";
+import { live } from "./live";
 import { nav } from "./nav";
 import { notifications } from "./notifications";
 import { panels } from "./panels";
+import { playlists } from "./playlists";
 import { report } from "./report";
 import { search } from "./search";
 import { settings } from "./settings";
@@ -33,7 +35,7 @@ import { watch } from "./watch";
  * Values are plain text. `{name}` placeholders become `t()`'s typed vars; a
  * plural is an object of CLDR forms (`one`, `other`, …) picked by `count`.
  */
-export const EN_NAMESPACES = { a11y, account, admin, auth, channel, comments, common, create, header, home, nav, notifications, panels, report, search, settings, state, studio, theme, watch };
+export const EN_NAMESPACES = { a11y, account, admin, auth, channel, comments, common, create, header, home, live, nav, notifications, panels, playlists, report, search, settings, state, studio, theme, watch };
 
 export const en = {
   ...a11y,
@@ -46,9 +48,11 @@ export const en = {
   ...create,
   ...header,
   ...home,
+  ...live,
   ...nav,
   ...notifications,
   ...panels,
+  ...playlists,
   ...report,
   ...search,
   ...settings,

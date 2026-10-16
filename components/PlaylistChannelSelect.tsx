@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { useT } from "@/components/I18nProvider";
 import { Select } from "@/components/ui";
 import { api } from "@/lib/api";
 import type { Channel } from "@/lib/api";
@@ -19,6 +20,7 @@ export function PlaylistChannelSelect({
   onChange: (channelId: string) => void;
   disabled?: boolean;
 }) {
+  const t = useT();
   const [channels, setChannels] = useState<Channel[]>([]);
   useEffect(() => {
     const controller = new AbortController();
@@ -37,13 +39,13 @@ export function PlaylistChannelSelect({
   }, []);
   return (
     <Select
-      label="Channel"
-      aria-label="Channel"
+      label={t("playlists.channel.label")}
+      aria-label={t("playlists.channel.label")}
       value={value}
       disabled={disabled}
       onChange={(e) => onChange(e.target.value)}
     >
-      <option value="">None</option>
+      <option value="">{t("playlists.channel.none")}</option>
       {channels.map((c) => (
         <option key={c.id} value={c.id}>
           {c.display_name || c.handle}
