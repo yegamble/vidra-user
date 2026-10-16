@@ -80,6 +80,10 @@ export function providerDisplayName(provider: string): string {
  */
 export function oauthErrorMessage(code: string, t?: Translate): string {
   switch (code) {
+    case "oauth_not_configured":
+      return t?.("auth.oauth.notConfigured") ?? auth["auth.oauth.notConfigured"];
+    case "oauth_exchange_failed":
+      return t?.("auth.oauth.exchangeFailed") ?? auth["auth.oauth.exchangeFailed"];
     case "access_denied":
       return "The sign-in was cancelled at the provider.";
     // The refusal that protects an existing account from a provider's word
