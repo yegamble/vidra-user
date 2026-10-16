@@ -395,7 +395,7 @@ function ViewerCount({ count }: { count: number }) {
   const t = useT();
   return (
     <span className="text-[12.5px] font-medium text-fg-muted" aria-live="polite">
-      {t("live.watch.viewers", { count: count.toLocaleString() })}
+      {t("live.watch.viewers", { count })}
     </span>
   );
 }

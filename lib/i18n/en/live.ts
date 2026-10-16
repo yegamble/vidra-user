@@ -44,6 +44,6 @@ export const live = {
   "live.watch.playerLabel": "Live: {title}",
   "live.watch.noVideoTag": "Your browser does not support the video tag.",
   "live.watch.refresh": "Refresh",
-  // `{count}` is the locale-grouped number as a String.
+  // Keep `{count}` numeric so the translator applies locale plural and number rules.
   "live.watch.viewers": { one: "{count} viewer", other: "{count} viewers" },
 } as const;
