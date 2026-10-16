@@ -2576,6 +2576,12 @@ export const api = {
       body,
     }),
 
+  /** Clears failed-login counters; core returns 204 even if no lock existed. */
+  clearUserLoginLockout: (id: string) =>
+    apiRequest<void>(`/api/v1/admin/users/${encodeURIComponent(id)}/login-lockout`, {
+      method: "DELETE",
+    }),
+
   /**
    * DELETE /api/v1/admin/users/{id}/mfa — remove a user's second factor
    * (admin). The operator answer to a lost authenticator AND lost recovery
