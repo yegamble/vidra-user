@@ -16,6 +16,7 @@ import {
   VideoIcon,
   XIcon,
 } from "@/components/icons";
+import { useT } from "@/components/I18nProvider";
 import { useInstanceAboutBootstrap } from "@/components/InstanceAboutProvider";
 import { formatVersion } from "@/lib/format";
 import { InstanceAboutSkeleton } from "@/components/InstanceAboutSkeleton";
@@ -689,8 +690,7 @@ function VidraSection({ instance }: { instance: ExtendedInstanceResponse }) {
 // one screen where protocol color may breathe (design-system.md). Its hero
 // carries the sanctioned ProtocolRibbon placement (b): the gradient divider
 // under the intro copy. Three tinted protocol cards name the networks Vidra
-// speaks; the federation-behaviour cards and the channel-level peers note keep
-// the honest architecture (Vidra has no instance-wide peer graph).
+// speaks; the federation cards describe both channel and instance relationships.
 function NetworkSection({
   instance,
   platformLabel: label,
@@ -705,6 +705,7 @@ function NetworkSection({
   platformLabel: string;
   softwareHidden: boolean;
 }) {
+  const t = useT();
   const federated = instance.federation_enabled;
   return (
     <section aria-labelledby="about-network-heading" className="flex flex-col gap-9">
@@ -754,8 +755,8 @@ function NetworkSection({
         />
         <AboutFeatureCard
           Icon={UsersIcon}
-          title="Channel-level relationships"
-          copy={`${label} federates individual channels rather than exposing one instance-wide follower graph. Followers and remote relationships therefore belong to channel pages.`}
+          title={t("common.about.followsTitle")}
+          copy={t("common.about.follows", { platform: label })}
         />
         <AboutFeatureCard
           Icon={ShieldIcon}
@@ -771,15 +772,11 @@ function NetworkSection({
 
       {federated ? (
         <div>
-          <h3 className="text-headline text-fg">Peers</h3>
-          <div className="mt-2">
-            <EmptyState
-              icon={<ServerIcon size={24} />}
-              tint="green"
-              title="No instance-wide peer list"
-              message={`${label} federates at the channel level, so remote connections live on individual channel pages rather than in a single peers directory.`}
-            />
-          </div>
+          <AboutFeatureCard
+            Icon={ServerIcon}
+            title={t("common.about.peersTitle")}
+            copy={t("common.about.peers")}
+          />
         </div>
       ) : null}
     </section>

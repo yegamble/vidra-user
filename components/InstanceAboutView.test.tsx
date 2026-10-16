@@ -130,11 +130,13 @@ describe("About → Network", () => {
   it("names the software in the federation prose by default", async () => {
     await show("network", false);
     expect(document.querySelector(".protocol-ribbon")).not.toBeNull();
+    expect(screen.getByText(/Administrators manage instance peers/)).toBeTruthy();
+    expect(screen.queryByText("No instance-wide peer list")).toBeNull();
     expect(
       screen.getByText(/Vidra speaks three open protocols/, { exact: false }),
     ).toBeTruthy();
     expect(
-      screen.getByText(/Vidra federates individual channels/, { exact: false }),
+      screen.getByText(/Vidra supports channel follows and instance follows/, { exact: false }),
     ).toBeTruthy();
   });
 
@@ -145,7 +147,7 @@ describe("About → Network", () => {
       screen.getByText(/This platform speaks three open protocols/, { exact: false }),
     ).toBeTruthy();
     expect(
-      screen.getByText(/This platform federates individual channels/, { exact: false }),
+      screen.getByText(/This platform supports channel follows and instance follows/, { exact: false }),
     ).toBeTruthy();
     // The NETWORKS are not this product and must still be named (ActivityPub
     // appears twice: the protocol card and the federation-behaviour card).
