@@ -103,7 +103,8 @@ export function providerErrorMessage(err: unknown, t: Translate, fallback: strin
   if (!(err instanceof ApiError)) return fallback;
   if (err.status === 403 && err.code === "step_up_required") return t("admin.oidc.error.stepUp");
   if (err.status === 403 && err.code === "forbidden") return t("admin.oidc.error.password");
-  if (err.status === 409 && err.code === "conflict") return t("admin.oidc.error.noPassword");
+  // A generic 409 can mean a duplicate provider name or a missing password.
+  // Preserve the server's concrete explanation rather than guessing a remedy.
   if (err.status === 409 && err.code === "oidc_secrets_key_missing") {
     return t("admin.oidc.error.noKey");
   }
