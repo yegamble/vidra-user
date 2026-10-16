@@ -140,7 +140,6 @@ vi.mock("@/components/TimestampedText", () => ({ TimestampedText: stub("timestam
 vi.mock("@/components/VideoActionsMenu", () => ({ VideoActionsMenu: stub("actions") }));
 vi.mock("@/components/UpNextQueue", () => ({ UpNextQueue: stub("upnext") }));
 vi.mock("@/components/watch/AmbientGlow", () => ({ AmbientGlow: stub("glow") }));
-vi.mock("@/components/watch/IpfsPlayerOverlay", () => ({ IpfsPlayerOverlay: stub("ipfs-overlay") }));
 vi.mock("@/components/watch/IpfsSourceBar", () => ({ IpfsSourceBar: stub("ipfs-bar") }));
 vi.mock("@/components/watch/PasswordUnlockPanel", () => ({ PasswordUnlockPanel: stub("unlock") }));
 vi.mock("@/components/watch/TranscodingNote", () => ({ TranscodingNote: stub("transcoding") }));
