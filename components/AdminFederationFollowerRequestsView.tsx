@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+import { useT } from "@/components/I18nProvider";
+import { SLOT, withSlot } from "@/components/admin/messageSlot";
 import { ListBoundary } from "@/components/admin/ListBoundary";
 import { PagedListShell } from "@/components/admin/PagedListShell";
 import { GlobeIcon } from "@/components/icons";
@@ -31,6 +33,7 @@ export function AdminFederationFollowerRequestsView() {
 }
 
 function RequestQueue() {
+  const t = useT();
   const list = usePagedList<FederationFollowerRequest>({
     load: (query, signal) =>
       api
@@ -47,10 +50,10 @@ function RequestQueue() {
     <PagedListShell
       list={list}
       noun="follower request"
-      errorMessage="Could not load follower requests."
+      errorMessage={t("admin.followers.loadError")}
       emptyIcon={<GlobeIcon size={24} />}
-      emptyTitle="No pending follower requests"
-      emptyMessage="Nothing to review right now. While follower approval is on, new remote followers of local channels appear here."
+      emptyTitle={t("admin.followers.emptyTitle")}
+      emptyMessage={t("admin.followers.emptyMessage")}
     >
       <ul className="flex flex-col gap-3">
         {list.items.map((request) => (
@@ -85,6 +88,7 @@ function RequestRow({
   request: FederationFollowerRequest;
   onResolved: (id: string) => void;
 }) {
+  const t = useT();
   const [rowState, setRowState] = useState<RowState>({ kind: "idle" });
   const [error, setError] = useState<string | null>(null);
 
@@ -105,8 +109,8 @@ function RequestRow({
         errorMessage(
           err,
           action === "approve"
-            ? "Could not approve this follower."
-            : "Could not reject this follower.",
+            ? t("admin.followers.approveError")
+            : t("admin.followers.rejectError"),
         ),
       );
       setRowState({ kind: "idle" });
@@ -121,13 +125,16 @@ function RequestRow({
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
         <span className="font-semibold tracking-tight text-fg">{identity}</span>
         {request.domain ? (
-          <span className="text-[13px] text-fg-muted">from {request.domain}</span>
+          <span className="text-[13px] text-fg-muted">{t("admin.followers.from", { domain: request.domain })}</span>
         ) : null}
         <span className="text-[13px] text-fg-muted">
-          wants to follow <span className="font-medium text-fg">{request.channel_handle}</span>
+          {withSlot(
+            t("admin.followers.wants", { channel: SLOT }),
+            <span className="font-medium text-fg">{request.channel_handle}</span>,
+          )}
         </span>
         <span className="text-[13px] text-fg-muted">
-          requested {relativeTime(request.created_at)}
+          {t("admin.followers.requested", { when: relativeTime(request.created_at) })}
         </span>
       </div>
 
@@ -146,17 +153,24 @@ function RequestRow({
           <>
             <span className="text-sm text-fg-muted">
               {confirming === "approve"
-                ? `Accept ${identity} as a follower? Your channel's public activity will federate to them.`
-                : `Reject ${identity}? The pending follow is removed and a Reject is sent.`}
+                ? t("admin.followers.confirmApproveText", { name: identity })
+                : t("admin.followers.confirmRejectText", { name: identity })}
             </span>
             <Button
               size="sm"
               variant={confirming === "reject" ? "danger" : "primary"}
-              aria-label={`Confirm ${confirming} for ${identity}`}
+              aria-label={t(
+                confirming === "approve"
+                  ? "admin.followers.confirmApproveAria"
+                  : "admin.followers.confirmRejectAria",
+                { name: identity },
+              )}
               disabled={submitting}
               onClick={() => void resolve(confirming)}
             >
-              {confirming === "approve" ? "Confirm approve" : "Confirm reject"}
+              {confirming === "approve"
+                ? t("admin.followers.confirmApprove")
+                : t("admin.followers.confirmReject")}
             </Button>
             <Button
               variant="secondary"
@@ -164,27 +178,27 @@ function RequestRow({
               disabled={submitting}
               onClick={() => setRowState({ kind: "idle" })}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
           </>
         ) : (
           <>
             <Button
               size="sm"
-              aria-label={`Approve ${identity}`}
+              aria-label={t("admin.followers.approveAria", { name: identity })}
               disabled={submitting}
               onClick={() => setRowState({ kind: "confirming", action: "approve" })}
             >
-              Approve
+              {t("admin.action.approve")}
             </Button>
             <Button
               variant="secondary"
               size="sm"
-              aria-label={`Reject ${identity}`}
+              aria-label={t("admin.followers.rejectAria", { name: identity })}
               disabled={submitting}
               onClick={() => setRowState({ kind: "confirming", action: "reject" })}
             >
-              Reject
+              {t("admin.action.reject")}
             </Button>
           </>
         )}

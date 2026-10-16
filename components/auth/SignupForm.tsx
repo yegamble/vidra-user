@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { useT } from "@/components/I18nProvider";
 import { useSession } from "@/components/auth/AuthProvider";
 import { BlueskyLoginButton } from "@/components/auth/BlueskyLoginButton";
 import { AuthOrDivider, OAuthButtons, oauthErrorMessage } from "@/components/auth/OAuthButtons";
@@ -34,6 +35,7 @@ export function SignupForm({
   initialInstance?: InstanceResponse;
 }) {
   const router = useRouter();
+  const t = useT();
   const { status, register } = useSession();
 
   const [regState, setRegState] = useState<RegState>(() =>
@@ -63,7 +65,7 @@ export function SignupForm({
   const [ageAttested, setAgeAttested] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(
-    oauthError ? oauthErrorMessage(oauthError) : null,
+    oauthError ? oauthErrorMessage(oauthError, t) : null,
   );
   const [submitting, setSubmitting] = useState(false);
   // Set when register answered 202: the signup awaits admin approval, or the
