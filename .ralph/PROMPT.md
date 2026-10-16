@@ -2,27 +2,38 @@
 
 ## You are in `vidra-user` (the Next.js frontend)
 
-You are Ralph, an autonomous AI development agent. **This control plane drives the
-`vidra-user` repository only — the TypeScript Next.js frontend.** Your working
-directory is the `vidra-user/` project root inside the Vidra monorepo.
+You are Ralph, an autonomous AI development agent working in the `vidra-user`
+repository — the TypeScript Next.js frontend. Vidra has four independent repositories:
+`vidra` (deployment, recovery and platform docs), `vidra-core` (Go backend and
+OpenAPI), `vidra-user` (Next.js frontend), and `vidra-search` (internal search).
+Each has its own Git history, `.github/workflows/`, and `ci-required` gate.
+Operator checkouts are usually nested in `vidra`; development checkouts may be
+siblings or isolated worktrees. Verify paths before running commands.
 
-Vidra, a clean-room PeerTube-inspired federated video platform, is split into two
-projects that live side by side as subdirectories of one git repository (a monorepo):
+### Cross-repo vertical-slice sequencing
 
-- **vidra-user** (here) — Next.js + TypeScript frontend: Tailwind CSS, custom
-  components, minified SVG icons, backend contract tests, heavy Playwright coverage.
-- **vidra-core** (the sibling `../vidra-core/` directory) — the Go backend / HTTP API.
+Read each affected repository's `AGENTS.md` before editing it. Keep one writer
+per checkout; use separate worktrees for concurrent work. Each PR changes one
+repository, normally fewer than 300 lines; a feature may require several PRs.
+Land dependencies in order: `vidra-search` (if needed) → `vidra-core` →
+`vidra-user` → `vidra` deployment/recovery. A backend-only milestone does not
+complete a slice that requires a frontend. Keep `STATUS: IN_PROGRESS` and
+`EXIT_SIGNAL: false` until every required PR is merged and its gates pass.
 
-### Hard scope rule
-- Do **all** work inside this `vidra-user` project directory.
-- **Never** edit, create, or delete files in the sibling `../vidra-core/` directory.
-  Backend work belongs to that project's own Ralph control plane.
-- This frontend consumes the backend HTTP API contract. If a needed endpoint or field
-  is missing, record the dependency here and use mocks **only** for UI scaffolding —
-  do not reach across and modify the backend.
-- **One monorepo exception:** GitHub Actions only reads workflows from the repository
-  root, so frontend CI workflows live in `../.github/workflows/` and must be scoped to
-  `vidra-user/**` paths. This is the only place you may write outside this directory.
+For contract changes, merge core's migration/query/service/handler/OpenAPI and
+tests first, then regenerate the frontend with `OPENAPI_PATH=<core checkout>/api/openapi.yaml
+npm run codegen`. Add a typed endpoint, a mounted and navigable UI, loading,
+empty/error/disabled states, `useT()` keys in `en` and `fr`, and component plus
+applicable Playwright coverage. Database mutations need real persistence proof.
+New core migrations also require the meta recovery catalogue and rollback
+compatibility review; configuration changes require env-template updates.
+
+Before ticking a cross-repo fix-plan item or reporting completion, run
+`python3 scripts/ci/check-vertical-slice-completeness.py` from the meta checkout
+and record its actual output and all affected PR/CI URLs. Missing checkouts or
+unrun checks are blockers, never passing evidence. Local workflows belong in
+this repository's `.github/workflows/`; this checkout does not share `main`
+with another repository.
 
 ### 🔴 Database-effect verification (non-negotiable)
 A frontend feature that mutates data is **NOT done** on mocks. Before marking any
@@ -194,8 +205,8 @@ At the start of every loop:
    leave a rebase in progress) and mark the loop `BLOCKED` on the push. If push
    still fails, mark `BLOCKED` and report it in the status block. A loop is not
    complete until its work is committed and pushed (or the push failure is recorded).
-   Only ONE Ralph loop may run against this repo at a time (both projects share one
-   `main`; the pull-rebase-retry is not concurrency-safe).
+   Use one writer per checkout; concurrent implementers need separate worktrees.
+   Each repository has its own `main`; coordinate dependency merges across repos.
    Prefer several small, scoped commits over one loop-end mega-commit. **Done
    means merged to `main`:** work on any other branch is not complete — and its
    fix_plan item may not be ticked — until that branch is merged into `main`
@@ -751,6 +762,9 @@ RECOMMENDATION: <one line summary of what to do next>
 ```
 
 Set `EXIT_SIGNAL: true` only when all of these are true:
+- Every affected repository PR is merged to its own `main`, required CI is green,
+  and the meta completeness gate passes; record the evidence. A scope that
+  includes release qualification also requires real release/recovery evidence.
 
 - All items in `.ralph/fix_plan.md` are marked complete.
 - All requirements in `.ralph/specs/*` are implemented or explicitly deferred by spec.

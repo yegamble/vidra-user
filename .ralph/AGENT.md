@@ -1,7 +1,7 @@
 # Agent Build Instructions — vidra-user (Next.js frontend)
 
 > Scope: the `vidra-user` Next.js / TypeScript frontend only. Run all commands from
-> the `vidra-user/` project root. Do not touch the sibling `../vidra-core/` project.
+> the `vidra-user` repository root. Cross-repo work follows `.ralph/PROMPT.md`.
 
 ## Stack
 Next.js · TypeScript (strict) · Tailwind CSS · custom components · minified inline
@@ -310,9 +310,12 @@ separate job from the canonical `npm run ci` gate (which stays mocked/fast).
 — remain available for focused runs.)
 
 ## Key learnings
-- Frontend lives in `vidra-user/` (monorepo subdir).
-- CI workflows live at the monorepo root `../.github/workflows/` (GitHub ignores
-  workflows in subdirectories); scope frontend jobs with `vidra-user/**` path filters.
+- Vidra has four independent repositories: meta `vidra`, `vidra-core`,
+  `vidra-user`, and `vidra-search`; each owns its Git history,
+  `.github/workflows/`, and `ci-required`. This checkout owns its workflows.
+- Read each affected repo's `AGENTS.md` and merge dependent PRs in search →
+  core → user → meta order. Keep cross-repo slices open until all merge and
+  the meta completeness check passes; record its output.
 - Consume the backend contract; never invent response shapes — record a backend
   dependency instead.
 - Update this file with the real commands once the app is scaffolded.
