@@ -102,9 +102,9 @@ npm run test          # vitest, ~1.4k tests
 
 ## Hard rules
 
-1. **One small PR per session** (< 300 changed lines). List every other
-   finding in the PR body under "Also found (not fixed here)" instead of
-   fixing it.
+1. **One small PR per concern** (< 300 changed lines). A cross-repo slice
+   may need several linked PRs; keep it open until every required dependency
+   is merged and verified. Record unrelated findings separately.
 2. **TDD**: write the failing test first. A bugfix without a reproducing test
    will be rejected. Component tests live beside the component
    (`*.test.tsx`, `// @vitest-environment jsdom` when DOM is needed); pure
