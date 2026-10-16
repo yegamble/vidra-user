@@ -81,7 +81,7 @@ export function PlayerMenu<T extends string | number>({
   // Focus the checked entry when the menu OPENS — keyed on `open` ALONE.
   //
   // This used to depend on [open, items, current]. Every caller rebuilds
-  // `items` on each render (SpeedMenu maps PLAYBACK_RATES, QualityMenu maps
+  // `items` on each render (speed menus map PLAYBACK_RATES, QualityMenu maps
   // levels), so the array identity changed on every render and re-ran this
   // effect, re-focusing the checked row and dragging the menu's scrollbox back
   // to it mid-interaction. The ladder is taller than the menu's max-height, so

@@ -3,7 +3,7 @@
 // its labels and the `<`/`>` stepping maths are unit-testable in isolation
 // (lib/player-rates.test.ts).
 //
-// This is the SINGLE shared source of the rate ladder: the SpeedMenu, the shell
+// This is the SINGLE shared source of the rate ladder: the player settings menu, the shell
 // keyboard step helper, the W1.U6 player-settings "Default speed" Select and the
 // vidra-core W1.C3 server-side validation must all agree with this list — keep
 // them in lockstep.
