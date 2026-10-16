@@ -1,0 +1,33 @@
+import type { Messages } from "../index";
+
+// Machine-drafted, awaiting native-speaker review.
+export const watch = {
+  "watch.loading": "Chargement de la vidéo…",
+  "watch.notFound.title": "Vidéo introuvable",
+  "watch.notFound.message": "Cette vidéo n’existe pas ou elle est privée.",
+  "watch.signIn.title": "Connectez-vous pour regarder cette vidéo",
+  "watch.signIn.body": "— elle est réservée aux personnes connectées à cette instance.",
+  "watch.error.load": "Impossible de charger cette vidéo.",
+  "watch.restricted.title": "Indisponible en mode restreint",
+  "watch.restricted.message": "Désactivez le mode restreint dans le menu du compte pour voir le contenu sensible.",
+  "watch.playlist.error": "Impossible de charger cette playlist. La lecture continue est indisponible.",
+  "watch.meta.views": "Vues : {count}",
+  "watch.chip.category": "Catégorie : ",
+  "watch.chip.language": "Langue : ",
+  "watch.chip.license": "Licence : ",
+  "watch.tags.label": "Mots-clés",
+  "watch.tags.browse": "Parcourir les vidéos portant le mot-clé {tag}",
+  "watch.thisCreator": "ce créateur",
+  "watch.actions.label": "Actions de la vidéo",
+  "watch.channel.followers": "Abonnés : {count}",
+  "watch.comments.label": "Commentaires",
+  "watch.comments.heading": "Commentaires ({total})",
+  "watch.comments.off": "Les commentaires sont désactivés pour cette vidéo.",
+  "watch.comments.loading": "Chargement des commentaires",
+  "watch.comments.error": "Impossible de charger les commentaires.",
+  "watch.comments.empty": "Aucun commentaire pour le moment. Soyez la première personne à commenter.",
+  "watch.comments.moreError": "Impossible de charger d’autres commentaires.",
+  "watch.rating.federationOff": "La fédération est désactivée sur cette instance ; les vidéos fédérées ne peuvent donc pas être évaluées.",
+  "watch.rating.rateLimited": "Vous évaluez trop rapidement. Réessayez dans une minute.",
+  "watch.remote.note": "Cette vidéo est fédérée depuis {domain}. Son enregistrement se fait sur l’instance d’origine. Les mentions « J’aime » et « Je n’aime pas » sont transmises à {domain}, qui en tient les comptes. Vous pouvez répondre ici : votre commentaire est hébergé sur cette instance et transmis à {domain}. Les « Commentaires de l’instance d’origine » ci-dessous sont une copie de la discussion d’origine, transmise ici. Les signalements sont envoyés à la modération de cette instance.",
+} satisfies Messages;
