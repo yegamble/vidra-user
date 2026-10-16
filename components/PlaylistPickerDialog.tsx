@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { useT } from "@/components/I18nProvider";
 import { CheckIcon } from "@/components/icons";
 import { Button, Input, Modal, Spinner } from "@/components/ui";
 import { ListTail } from "@/components/ui/ListTail";
@@ -16,6 +17,7 @@ export function PlaylistPickerDialog({
   videoId: string;
   onClose: () => void;
 }) {
+  const t = useT();
   // Paged from the server so a user with more than 20 playlists can reach all
   // of them; the manual "Load more" button is enough inside a small dialog.
   const list = useAppendingList<Playlist>({
@@ -43,7 +45,7 @@ export function PlaylistPickerDialog({
       await api.addToPlaylist(playlistId, videoId);
       markAdded(playlistId);
     } catch (err) {
-      setError(errorMessage(err, "Could not add this video to the playlist."));
+      setError(errorMessage(err, t("playlists.picker.addError")));
     } finally {
       setBusy(null);
     }
@@ -62,20 +64,20 @@ export function PlaylistPickerDialog({
       markAdded(playlist.id);
       setNewTitle("");
     } catch (err) {
-      setError(errorMessage(err, "Could not create the playlist."));
+      setError(errorMessage(err, t("playlists.picker.createError")));
     } finally {
       setCreating(false);
     }
   }
 
   return (
-    <Modal title="Save to playlist" onClose={onClose}>
+    <Modal title={t("playlists.picker.title")} onClose={onClose}>
       <div className="flex flex-col gap-4">
         {list.status === "error" ? (
-          <p role="alert" className="text-sm text-danger">Could not load your playlists.</p>
+          <p role="alert" className="text-sm text-danger">{t("playlists.list.error")}</p>
         ) : playlists === null ? (
           <div className="flex justify-center py-8">
-            <Spinner label="Loading your playlists" />
+            <Spinner label={t("playlists.list.loading")} />
           </div>
         ) : playlists && playlists.length > 0 ? (
           <ul className="max-h-64 overflow-y-auto rounded-xl border border-border-subtle p-1">
@@ -93,7 +95,7 @@ export function PlaylistPickerDialog({
                   </span>
                   <span className="min-w-0 flex-1 truncate">{playlist.title}</span>
                   {added.has(playlist.id) ? (
-                    <span className="text-xs font-medium text-fg-muted">Added</span>
+                    <span className="text-xs font-medium text-fg-muted">{t("playlists.picker.added")}</span>
                   ) : null}
                 </button>
               </li>
@@ -101,7 +103,7 @@ export function PlaylistPickerDialog({
           </ul>
         ) : playlists ? (
           <p className="rounded-xl bg-surface-muted px-3 py-3 text-sm text-fg-muted">
-            No playlists yet. Create one below.
+            {t("playlists.picker.empty")}
           </p>
         ) : null}
 
@@ -109,22 +111,22 @@ export function PlaylistPickerDialog({
           hasMore={list.hasMore}
           autoLoad={false}
           busy={list.moreStatus === "loading"}
-          error={list.moreStatus === "error" ? "Could not load more playlists." : null}
+          error={list.moreStatus === "error" ? t("playlists.list.moreError") : null}
           onLoadMore={list.loadMore}
         />
 
         <form onSubmit={(event) => void createAndAdd(event)} className="flex items-end gap-2">
           <div className="min-w-0 flex-1">
             <Input
-              label="New playlist"
+              label={t("playlists.picker.newLabel")}
               value={newTitle}
               onChange={(event) => setNewTitle(event.target.value)}
-              placeholder="Playlist name"
+              placeholder={t("playlists.picker.newPlaceholder")}
               maxLength={200}
             />
           </div>
           <Button type="submit" size="sm" disabled={creating || newTitle.trim() === ""}>
-            {creating ? "Creating…" : "Create"}
+            {creating ? t("playlists.picker.creating") : t("playlists.create.submit")}
           </Button>
         </form>
 

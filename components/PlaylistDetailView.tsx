@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
+import { useT } from "@/components/I18nProvider";
 import { PlayIcon, PlaylistIcon } from "@/components/icons";
 import { PlaylistChannelSelect } from "@/components/PlaylistChannelSelect";
 import { PlaylistThumbnailManager } from "@/components/PlaylistThumbnailManager";
@@ -29,13 +30,15 @@ type PlaylistVideo = PlaylistDetail["videos"][number];
 // (reorder, remove item, edit, delete playlist) appear when the playlist's
 // owner_id is the signed-in user.
 export function PlaylistDetailView({ id }: { id: string }) {
+  const t = useT();
   const { status, user } = useSession();
-  if (status === "restoring") return <Spinner label="Loading playlist" />;
+  if (status === "restoring") return <Spinner label={t("playlists.detail.loading")} />;
   // Session changes also discard pending optimistic edits and editor state.
   return <PlaylistForViewer key={`${id}:${status}:${user?.id ?? ""}`} id={id} />;
 }
 
 function PlaylistForViewer({ id }: { id: string }) {
+  const t = useT();
   const router = useRouter();
   const { status: session, user } = useSession();
   // The playlist plus its FIRST page of items; later pages are PlaylistItems'.
@@ -69,7 +72,7 @@ function PlaylistForViewer({ id }: { id: string }) {
   if (status === "loading") {
     return (
       <div className="flex justify-center py-24">
-        <Spinner label="Loading playlist" />
+        <Spinner label={t("playlists.detail.loading")} />
       </div>
     );
   }
@@ -78,13 +81,13 @@ function PlaylistForViewer({ id }: { id: string }) {
       <EmptyState
         icon={<PlaylistIcon size={24} />}
         tint="gray"
-        title="Playlist not found"
-        message="This playlist does not exist, or it is private."
+        title={t("playlists.detail.notFound.title")}
+        message={t("playlists.detail.notFound.message")}
       />
     );
   }
   if (status === "error" || playlist === null) {
-    return <ErrorState message="Could not load this playlist." onRetry={retry} />;
+    return <ErrorState message={t("playlists.detail.error")} onRetry={retry} />;
   }
 
   return (
@@ -106,33 +109,33 @@ function PlaylistForViewer({ id }: { id: string }) {
               <div className="flex shrink-0 items-center gap-2">
                 {confirmingDelete ? (
                   <>
-                    <span className="text-[13px] text-fg-muted">Delete this playlist?</span>
+                    <span className="text-[13px] text-fg-muted">{t("playlists.detail.deleteConfirm")}</span>
                     <button
                       type="button"
                       onClick={() => void deletePlaylist()}
                       className="focus-ring rounded-full border border-danger-border px-3.5 py-1.5 text-[13px] font-semibold text-danger transition-colors hover:bg-danger-surface"
                     >
-                      Confirm delete
+                      {t("playlists.detail.confirmDelete")}
                     </button>
                     <button
                       type="button"
                       onClick={() => setConfirmingDelete(false)}
                       className="focus-ring rounded-full px-3.5 py-1.5 text-[13px] font-semibold text-fg-muted transition-colors hover:bg-surface-strong hover:text-fg"
                     >
-                      Cancel delete
+                      {t("playlists.detail.cancelDelete")}
                     </button>
                   </>
                 ) : (
                   <>
                     <Button variant="secondary" size="sm" onClick={() => setEditing(true)}>
-                      Edit
+                      {t("playlists.detail.edit")}
                     </Button>
                     <button
                       type="button"
                       onClick={() => setConfirmingDelete(true)}
                       className="focus-ring rounded-full border border-danger-border px-3.5 py-1.5 text-[13px] font-semibold text-danger transition-colors hover:bg-danger-surface"
                     >
-                      Delete playlist
+                      {t("playlists.detail.delete")}
                     </button>
                   </>
                 )}
@@ -144,11 +147,14 @@ function PlaylistForViewer({ id }: { id: string }) {
               href={playlistWatchHref(playlist.videos[0], playlist.id, 1)}
               className="focus-ring inline-flex w-fit items-center gap-1.5 rounded-full bg-accent px-4 py-2 text-[13px] font-semibold text-accent-fg transition-opacity hover:opacity-90"
             >
-              <PlayIcon size={16} /> Play all
+              <PlayIcon size={16} /> {t("playlists.detail.playAll")}
             </Link>
           ) : null}
           <p className="text-[13px] text-fg-muted tabular-nums">
-            {playlist.video_count} {playlist.video_count === 1 ? "video" : "videos"} · {playlist.visibility}
+            {t("playlists.detail.meta", {
+              videos: t("playlists.card.videos", { count: String(playlist.video_count) }),
+              visibility: playlist.visibility,
+            })}
           </p>
           {playlist.description ? (
             <UserText variant="description" text={playlist.description} className="text-sm text-fg" />
@@ -197,6 +203,7 @@ function PlaylistItems({
   isOwner: boolean;
   onCountChange: (delta: number) => void;
 }) {
+  const t = useT();
   const autoLoad = useBrowseAutoLoad();
   const list = useAppendingList<PlaylistVideo>({
     queryKey: `playlist:${playlist.id}`,
@@ -242,19 +249,19 @@ function PlaylistItems({
   if (list.status === "loading") {
     return (
       <div className="flex justify-center py-12">
-        <Spinner label="Loading videos" />
+        <Spinner label={t("playlists.detail.videosLoading")} />
       </div>
     );
   }
   if (list.status === "error") {
-    return <ErrorState message="Could not load this playlist's videos." onRetry={list.reload} />;
+    return <ErrorState message={t("playlists.detail.videosError")} onRetry={list.reload} />;
   }
   if (items.length === 0) {
     return (
       <EmptyState
         icon={<PlaylistIcon size={24} />}
-        title="This playlist is empty"
-        message="Add videos to it from any watch page with “Save to playlist”."
+        title={t("playlists.detail.empty.title")}
+        message={t("playlists.detail.empty.message")}
       />
     );
   }
@@ -271,9 +278,9 @@ function PlaylistItems({
             <Link
               href={playlistWatchHref(video, playlist.id, index + 1)}
               className="focus-ring inline-flex w-fit items-center gap-1 rounded-full px-2 py-1.5 text-[13px] font-semibold text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg"
-              aria-label={`Play ${video.title} in the playlist`}
+              aria-label={t("playlists.detail.playItem", { title: video.title })}
             >
-              <PlayIcon size={14} /> Play
+              <PlayIcon size={14} /> {t("playlists.detail.play")}
             </Link>
             {isOwner ? (
               <div className="flex items-center justify-between gap-2">
@@ -282,28 +289,28 @@ function PlaylistItems({
                     type="button"
                     onClick={() => void moveItem(index, -1)}
                     disabled={reordering || index === 0}
-                    aria-label={`Move ${video.title} up`}
+                    aria-label={t("playlists.detail.moveUpItem", { title: video.title })}
                     className="focus-ring rounded-full px-2 py-1.5 text-[13px] font-semibold text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg disabled:opacity-40"
                   >
-                    Move up
+                    {t("playlists.detail.moveUp")}
                   </button>
                   <button
                     type="button"
                     onClick={() => void moveItem(index, 1)}
                     disabled={reordering || index === items.length - 1}
-                    aria-label={`Move ${video.title} down`}
+                    aria-label={t("playlists.detail.moveDownItem", { title: video.title })}
                     className="focus-ring rounded-full px-2 py-1.5 text-[13px] font-semibold text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg disabled:opacity-40"
                   >
-                    Move down
+                    {t("playlists.detail.moveDown")}
                   </button>
                 </div>
                 <button
                   type="button"
                   onClick={() => void removeItem(video.id)}
-                  aria-label={`Remove ${video.title} from playlist`}
+                  aria-label={t("playlists.detail.removeItem", { title: video.title })}
                   className="focus-ring rounded-full px-2 py-1.5 text-[13px] font-semibold text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg"
                 >
-                  Remove
+                  {t("playlists.thumb.remove")}
                 </button>
               </div>
             ) : null}
@@ -314,7 +321,7 @@ function PlaylistItems({
         hasMore={list.hasMore}
         autoLoad={autoLoad}
         busy={list.moreStatus === "loading"}
-        error={list.moreStatus === "error" ? "Could not load more videos." : null}
+        error={list.moreStatus === "error" ? t("playlists.detail.moreError") : null}
         onLoadMore={list.loadMore}
       />
     </>
@@ -333,6 +340,7 @@ function EditPlaylistForm({
   onSaved: () => void;
   onCancel: () => void;
 }) {
+  const t = useT();
   const [title, setTitle] = useState(playlist.title);
   const [description, setDescription] = useState(playlist.description);
   const [visibility, setVisibility] = useState<PlaylistVisibility>(playlist.visibility);
@@ -356,7 +364,7 @@ function EditPlaylistForm({
       });
       onSaved();
     } catch (err) {
-      setError(errorMessage(err, "Could not save the playlist."));
+      setError(errorMessage(err, t("playlists.edit.error")));
       setSaving(false);
     }
   }
@@ -369,40 +377,40 @@ function EditPlaylistForm({
         void save();
       }}
     >
-      <h2 className="text-[15px] font-bold tracking-tight">Edit playlist</h2>
+      <h2 className="text-[15px] font-bold tracking-tight">{t("playlists.edit.heading")}</h2>
       <Input
-        label="Title"
-        aria-label="Playlist title"
+        label={t("playlists.edit.title")}
+        aria-label={t("playlists.create.ariaTitle")}
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         maxLength={200}
       />
       <Textarea
-        label="Description"
-        aria-label="Playlist description"
+        label={t("playlists.edit.description")}
+        aria-label={t("playlists.edit.descriptionAria")}
         value={description}
         onChange={(e) => setDescription(e.target.value)}
         rows={3}
         maxLength={5000}
       />
       <Select
-        label="Visibility"
-        aria-label="Playlist visibility"
+        label={t("playlists.create.visibility")}
+        aria-label={t("playlists.edit.visibilityAria")}
         value={visibility}
         onChange={(e) => setVisibility(e.target.value as PlaylistVisibility)}
       >
-        <option value="private">Private</option>
-        <option value="unlisted">Unlisted</option>
-        <option value="public">Public</option>
+        <option value="private">{t("playlists.create.private")}</option>
+        <option value="unlisted">{t("playlists.create.unlisted")}</option>
+        <option value="public">{t("playlists.create.public")}</option>
       </Select>
       <PlaylistChannelSelect value={channelId} onChange={setChannelId} />
       {error ? <p className="text-sm text-danger">{error}</p> : null}
       <div className="flex justify-end gap-2">
         <Button variant="secondary" size="sm" onClick={onCancel}>
-          Cancel
+          {t("common.cancel")}
         </Button>
         <Button type="submit" size="sm" disabled={saving || title.trim() === ""}>
-          {saving ? "Saving…" : "Save"}
+          {saving ? t("playlists.edit.saving") : t("playlists.edit.save")}
         </Button>
       </div>
     </form>

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { EmbedNotice, EmbedVideo, readEmbedContext } from "@/components/EmbedPlayer";
+import { useT } from "@/components/I18nProvider";
 import { ChevronLeftIcon, ChevronRightIcon } from "@/components/icons";
 import { ApiError, api } from "@/lib/api";
 import type { PlaylistDetail, Video } from "@/lib/api";
@@ -32,6 +33,7 @@ function startIndex(search: string): number {
 // disabled or not whitelisted for this site, a password gate, or a detail the
 // server now refuses) is skipped in the direction of travel.
 export function PlaylistEmbedPlayer({ id }: { id: string }) {
+  const t = useT();
   const [params] = useState<EmbedParams>(() =>
     parseEmbedParams(typeof window === "undefined" ? "" : window.location.search),
   );
@@ -138,19 +140,19 @@ export function PlaylistEmbedPlayer({ id }: { id: string }) {
   );
 
   if (refusal === "notfound" || meta?.visibility === "private") {
-    return <EmbedNotice>This playlist is not available.</EmbedNotice>;
+    return <EmbedNotice>{t("playlists.embed.unavailable")}</EmbedNotice>;
   }
   if (refusal === "error" || status === "error") {
-    return <EmbedNotice>Could not load this playlist.</EmbedNotice>;
+    return <EmbedNotice>{t("playlists.detail.error")}</EmbedNotice>;
   }
   if (status === "loading" || (!current && hasMore)) {
     return (
-      <div className="flex h-dvh items-center justify-center bg-black text-sm text-white/65">Loading…</div>
+      <div className="flex h-dvh items-center justify-center bg-black text-sm text-white/65">{t("playlists.menu.loading")}</div>
     );
   }
-  if (items.length === 0) return <EmbedNotice>This playlist has no videos.</EmbedNotice>;
-  if (!current) return <EmbedNotice>This playlist position is not available.</EmbedNotice>;
-  if (stalled) return <EmbedNotice>No video in this playlist can be played here.</EmbedNotice>;
+  if (items.length === 0) return <EmbedNotice>{t("playlists.embed.noVideos")}</EmbedNotice>;
+  if (!current) return <EmbedNotice>{t("playlists.embed.noPosition")}</EmbedNotice>;
+  if (stalled) return <EmbedNotice>{t("playlists.embed.stalled")}</EmbedNotice>;
 
   const bar = (showTitle: boolean) => (
     <div className="absolute inset-x-0 top-0 z-30 flex items-center gap-2 bg-black/60 px-3 py-1.5 text-white backdrop-blur-sm">
@@ -158,7 +160,7 @@ export function PlaylistEmbedPlayer({ id }: { id: string }) {
         type="button"
         onClick={goPrev}
         disabled={prevPos === null}
-        aria-label="Previous video"
+        aria-label={t("playlists.embed.previous")}
         className="rounded-full p-1 hover:bg-white/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:opacity-40"
       >
         <ChevronLeftIcon className="h-5 w-5" />
@@ -167,13 +169,13 @@ export function PlaylistEmbedPlayer({ id }: { id: string }) {
         type="button"
         onClick={goNext}
         disabled={nextPos === null}
-        aria-label="Next video"
+        aria-label={t("playlists.embed.next")}
         className="rounded-full p-1 hover:bg-white/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:opacity-40"
       >
         <ChevronRightIcon className="h-5 w-5" />
       </button>
       <span className="shrink-0 text-xs tabular-nums text-white/80">
-        <span className="sr-only">Playlist position </span>
+        <span className="sr-only">{t("playlists.embed.position")} </span>
         {pos + 1} / {list.total ?? total}
       </span>
       {showTitle && params.title ? <span className="min-w-0 truncate text-sm font-semibold">{current.title}</span> : null}
@@ -213,6 +215,7 @@ function PlaylistItem({
   onPlayable: () => void;
   overlay: (showTitle: boolean) => React.ReactNode;
 }) {
+  const t = useT();
   const [detail, setDetail] = useState<Video | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [failed, setFailed] = useState(false);
@@ -258,7 +261,7 @@ function PlaylistItem({
         {overlay(false)}
         {failed ? (
           <span>
-            Could not load this video.{" "}
+            {t("playlists.embed.videoError")}{" "}
             <button
               type="button"
               className="underline focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
@@ -267,11 +270,11 @@ function PlaylistItem({
                 setAttempt((n) => n + 1);
               }}
             >
-              Retry
+              {t("playlists.embed.retry")}
             </button>
           </span>
         ) : (
-          "Loading…"
+          t("playlists.menu.loading")
         )}
       </div>
     );
