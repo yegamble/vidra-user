@@ -1,6 +1,8 @@
 "use client";
 
 import { oauthBeginUrl } from "@/lib/api";
+import type { Translate } from "@/lib/i18n";
+import { auth } from "@/lib/i18n/en/auth";
 
 // OAuthButtons renders one "Continue with <Provider>" entry per configured
 // OIDC provider (GET /instance oauth_providers). Each entry is a plain anchor:
@@ -76,7 +78,7 @@ export function providerDisplayName(provider: string): string {
  * Honest copy for the machine-readable ?oauth_error=<code> the OAuth callback
  * redirects back with on a user-actionable failure.
  */
-export function oauthErrorMessage(code: string): string {
+export function oauthErrorMessage(code: string, t?: Translate): string {
   switch (code) {
     case "access_denied":
       return "The sign-in was cancelled at the provider.";
@@ -104,6 +106,10 @@ export function oauthErrorMessage(code: string): string {
       return "This server is not accepting new accounts right now, so signing in with a provider cannot create one.";
     case "registration_pending":
       return "Your request to join was sent to the moderators. You will be able to sign in once it is approved.";
+    case "signup_disabled":
+      return t?.("auth.oauth.signupDisabled") ?? auth["auth.oauth.signupDisabled"];
+    case "email_domain_not_allowed":
+      return t?.("auth.oauth.emailDomainNotAllowed") ?? auth["auth.oauth.emailDomainNotAllowed"];
     // The callback refused to switch accounts. A signed-in browser that starts
     // a sign-in flow and authenticates as SOMEBODY ELSE'S provider identity is
     // not making a login — it is asking for an account switch nobody asked for,
