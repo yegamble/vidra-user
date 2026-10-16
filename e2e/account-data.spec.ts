@@ -209,3 +209,33 @@ test("a non-archive file is rejected client-side without a request", async ({ pa
   await expect(page.getByText("That file is not a vidra account archive.")).toBeVisible();
   expect(imported).toBe(false);
 });
+
+test("PeerTube zip import displays skipped items and follows the background progress", async ({ page }) => {
+  await signIn(page);
+  await page.route(EXPORT, (route) => route.fulfill({ status: 404, json: {} }));
+  let multipart = "";
+  await page.route(/\/api\/v1\/me\/import\/peertube$/, (route) => {
+    multipart = route.request().postData() ?? "";
+    return route.fulfill({ json: {
+      channels_created: 1, channels_existing: 0, channels_skipped: 0, channels_mapped: [],
+      playlists_created: 1, playlists_existing: 0, playlists_skipped: 0,
+      playlist_items_added: 2, playlist_items_skipped: 3, settings_applied: 0,
+      skipped_sections: { playlist_items_not_addable: 3 },
+      follows_queued: 1, follows_skipped_federation: 0, follows_job_id: "job1",
+    } });
+  });
+  let reads = 0;
+  await page.route(/\/api\/v1\/me\/import\/peertube\/follows\/job1$/, (route) => {
+    reads++;
+    return route.fulfill({ json: { id: "job1", created_at: new Date().toISOString(),
+      total: 1, pending: reads === 1 ? 1 : 0, done: reads === 1 ? 0 : 1,
+      failed: 0, skipped_federation: 0, skipped_invalid: 0 } });
+  });
+  await openSettings(page);
+  await page.getByLabel("PeerTube export (.zip)").setInputFiles({ name: "export.zip", mimeType: "application/zip", buffer: Buffer.from("PK mocked archive") });
+  await page.getByRole("button", { name: "Import PeerTube archive" }).click();
+  await expect(page.getByText("PeerTube archive imported")).toBeVisible();
+  await expect(page.getByText("Videos unavailable for playlists: 3")).toBeVisible();
+  await expect(page.getByText(/Follow import finished/)).toBeVisible({ timeout: 10_000 });
+  expect(multipart).toContain('name="archive"; filename="export.zip"');
+});
