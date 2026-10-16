@@ -1,5 +1,8 @@
 // @vitest-environment jsdom
+import { renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+
+import { useT } from "@/components/I18nProvider";
 
 import {
   SAFETY_SCAN_REJECTED_CODE,
@@ -8,6 +11,9 @@ import {
   importOrUploadError,
 } from "@/components/studio/shared";
 import { ApiError } from "@/lib/api";
+
+// The default context is the English translator, so no provider is needed.
+const t = renderHook(() => useT()).result.current;
 
 // A28's first ruling-shaped finding was that a malware rejection reached the
 // creator as a bare FAILED badge with an empty reason — beside a `quarantined`
@@ -22,14 +28,18 @@ describe("safety-scan rejection copy", () => {
       code: SAFETY_SCAN_REJECTED_CODE,
       message: SAFETY_SCAN_REJECTED_MESSAGE,
     });
-    expect(importOrUploadError(err, "file")).toBe(SAFETY_SCAN_REJECTED_MESSAGE);
-    expect(importOrUploadError(err, "url")).toBe(SAFETY_SCAN_REJECTED_MESSAGE);
+    expect(importOrUploadError(err, "file", t)).toBe(SAFETY_SCAN_REJECTED_MESSAGE);
+    expect(importOrUploadError(err, "url", t)).toBe(SAFETY_SCAN_REJECTED_MESSAGE);
   });
 
   it("names neither the scanner nor what it found", () => {
     for (const banned of ["malware", "virus", "clam", "signature", "infected"]) {
       expect(SAFETY_SCAN_REJECTED_MESSAGE.toLowerCase()).not.toContain(banned);
     }
+  });
+
+  it("renders the match key and the catalog sentence identically in English", () => {
+    expect(t("studio.errors.safetyScan")).toBe(SAFETY_SCAN_REJECTED_MESSAGE);
   });
 
   it("matches the backend sentence byte for byte", () => {
@@ -51,8 +61,8 @@ describe("safety-scan rejection copy", () => {
       code: "upload_failed",
       message: SAFETY_SCAN_REJECTED_MESSAGE,
     });
-    expect(importOrUploadError(err, "url")).toBe(SAFETY_SCAN_REJECTED_MESSAGE);
-    expect(importOrUploadError(err, "file")).toBe(SAFETY_SCAN_REJECTED_MESSAGE);
+    expect(importOrUploadError(err, "url", t)).toBe(SAFETY_SCAN_REJECTED_MESSAGE);
+    expect(importOrUploadError(err, "file", t)).toBe(SAFETY_SCAN_REJECTED_MESSAGE);
   });
 
   it("tells an unconfigured-scanner refusal apart from a rejected file", () => {
@@ -61,7 +71,7 @@ describe("safety-scan rejection copy", () => {
       code: SCANNER_NOT_CONFIGURED_CODE,
       message: "this instance has no malware scanner…",
     });
-    const copy = importOrUploadError(err, "file");
+    const copy = importOrUploadError(err, "file", t);
     expect(copy).not.toBe(SAFETY_SCAN_REJECTED_MESSAGE);
     expect(copy).toContain("safety scanner is not available");
     // The operator sentence names CLAMAV_ADDR; a creator must never see it.
