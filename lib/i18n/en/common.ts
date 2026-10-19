@@ -9,4 +9,8 @@ export const common = {
   "common.loading": "Loading",
   "common.dismiss": "Dismiss",
   "common.retry": "Try again",
+  "common.announcement.label": "Announcement",
+  "common.announcement.warning": "Warning",
+  "common.announcement.error": "Important announcement",
+  "common.announcement.dismiss": "Dismiss announcement",
 } as const;
