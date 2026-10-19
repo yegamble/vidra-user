@@ -120,10 +120,12 @@ below is axe-verified against the redesign (see the contrast contract).
 | `danger` | danger **text/icons** (Apple accessible red) | `#d70015` | `#ff453a` |
 | `danger-solid` / `danger-fg` | danger **fills under white text** (buttons, count badges) | `#dc2626` / white | same |
 | `danger-surface` / `danger-border` | danger panels / danger status pill | `#fef2f2` / `#fecaca` | `#450a0a` / `#7f1d1d` |
+| `info` / `info-surface` / `info-border` | informational announcement ink / panel / border | `#155e75` / `#cffafe` / `#67e8f9` | `#67e8f9` / `#083344` / `#0e7490` |
 | `success` | positive text/badges | `#0f5f27` | `#30d158` |
 | `success-solid` | Apple systemGreen **fill** (dots/health/tiles) | `#34c759` | `#30d158` |
 | `warning` | caution text/badges | `#6f4a00` | `#ff9f0a` |
 | `warning-solid` | Apple systemOrange **fill** (dots/tiles) | `#ff9500` | `#ff9f0a` |
+| `warning-surface` / `warning-border` | caution announcement panel / border | `#fef3c7` / `#facc15` | `#422006` / `#a16207` |
 | `live` | the LIVE pulse dot (sits on media) | `#ff453a` | `#ff453a` |
 | `protocol-activitypub` / `-bluesky` / `-ipfs` | tri-protocol identity (badges + ribbon only) | `#6364ff` / `#0085ff` / `#65c2cb` | same |
 | `tile-{blue,gray,red,purple,orange,teal,green,pink,indigo}` | tinted icon chips + status dots (EmptyState, notification kinds, admin stats) | Apple system colors | theme-tuned |

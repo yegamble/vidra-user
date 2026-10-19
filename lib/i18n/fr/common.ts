@@ -11,4 +11,8 @@ export const common = {
   "common.loading": "Chargement",
   "common.dismiss": "Ignorer",
   "common.retry": "Réessayer",
+  "announcement.label": "Annonce",
+  "announcement.warning": "Avertissement",
+  "announcement.error": "Annonce importante",
+  "announcement.dismiss": "Fermer l’annonce",
 } satisfies Messages;

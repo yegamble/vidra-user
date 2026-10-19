@@ -116,7 +116,6 @@ export default async function RootLayout({
             <PlayerSettingsBootstrap />
             <ContentPreferencesBootstrap />
             <ToastProvider>
-              <InstanceBanner instance={instance} nonce={nonce} />
               <Header instance={instance} />
               <div className="flex w-full flex-1">
                 <Sidebar />
@@ -131,6 +130,7 @@ export default async function RootLayout({
                   tabIndex={-1}
                   className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-clip focus:outline-none"
                 >
+                  <InstanceBanner instance={instance} nonce={nonce} />
                   {children}
                 </div>
               </div>

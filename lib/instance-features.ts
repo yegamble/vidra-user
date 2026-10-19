@@ -5,9 +5,11 @@ import { useEffect, useSyncExternalStore } from "react";
 import { getInstanceCached, invalidateInstanceCache, type InstanceResponse } from "@/lib/api";
 
 export type InstanceFeatures = InstanceResponse["features"];
+type InstanceBroadcastSnapshot = { broadcast: InstanceResponse["broadcast"] };
 
 const EVENT = "vidra:instance-features";
 let current: InstanceFeatures | null = null;
+let currentBroadcast: InstanceBroadcastSnapshot | null = null;
 let primed = false;
 let generation = 0;
 
@@ -33,6 +35,7 @@ export function primeInstanceFeatures(): void {
     .then((instance) => {
       if (requestGeneration !== generation) return;
       current = instance.features;
+      currentBroadcast = { broadcast: instance.broadcast };
       window.dispatchEvent(new Event(EVENT));
     })
     .catch(() => {
@@ -45,6 +48,12 @@ export function primeInstanceFeatures(): void {
 export function useInstanceFeatures(): InstanceFeatures | null {
   useEffect(() => primeInstanceFeatures(), []);
   return useSyncExternalStore(subscribe, getInstanceFeaturesSnapshot, serverSnapshot);
+}
+
+/** Live announcements share the capability fetch, retaining content during refresh. */
+export function useInstanceBroadcast(): InstanceBroadcastSnapshot | null {
+  useEffect(() => primeInstanceFeatures(), []);
+  return useSyncExternalStore(subscribe, () => currentBroadcast, () => null);
 }
 
 /**
@@ -65,6 +74,7 @@ export function refreshInstanceFeatures(): void {
 export function setInstanceFeaturesForTests(features: InstanceFeatures | null): void {
   generation += 1;
   current = features;
+  currentBroadcast = null;
   primed = features !== null;
   if (typeof window !== "undefined") window.dispatchEvent(new Event(EVENT));
 }

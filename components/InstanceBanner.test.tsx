@@ -1,7 +1,11 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const navigation = vi.hoisted(() => ({ pathname: "/" }));
+vi.mock("next/navigation", () => ({ usePathname: () => navigation.pathname }));
+vi.mock("@/lib/instance-features", () => ({ useInstanceBroadcast: () => null }));
 
 import {
   BROADCAST_DISMISS_STORAGE_KEY,
@@ -22,8 +26,8 @@ function snapshot(broadcast: InstanceBroadcastBlock) {
 
 const banner = () => screen.queryByRole("region", { name: "Announcement" });
 
-beforeEach(() => localStorage.clear());
-afterEach(cleanup);
+beforeEach(() => { localStorage.clear(); navigation.pathname = "/"; });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 describe("InstanceBanner", () => {
   it("renders nothing without a snapshot (backend unreachable / pre-W1)", () => {
@@ -68,18 +72,19 @@ describe("InstanceBanner", () => {
     expect(region!.querySelector("script")).toBeNull();
   });
 
-  it("styles by level via tokens: info is neutral, error uses the danger surface", () => {
-    const { unmount } = render(
-      <InstanceBanner instance={snapshot({ enabled: true, message: "Hi", level: "info" })} />,
-    );
-    expect(banner()!.className).toContain("bg-surface-muted");
-    expect(banner()!.getAttribute("data-level")).toBe("info");
-    unmount();
+  it.each([
+    ["info", "info"], ["warning", "warning"], ["error", "danger"],
+  ] as const)("gives %s announcements a distinct status panel", (level, tone) => {
+    render(<InstanceBanner instance={snapshot({ enabled: true, message: "Hi", level })} />);
+    expect(banner()!.className).toContain(`bg-${tone}-surface`);
+    expect(banner()!.className).toContain(`border-${tone}-border`);
+    expect(banner()!.getAttribute("data-level")).toBe(level);
+  });
 
-    render(<InstanceBanner instance={snapshot({ enabled: true, message: "Hi", level: "error" })} />);
-    expect(banner()!.className).toContain("bg-danger-surface");
-    expect(banner()!.className).toContain("border-danger-border");
-    expect(banner()!.getAttribute("data-level")).toBe("error");
+  it.each(["/embed", "/embed/video-1"])("keeps %s players free of announcements", pathname => {
+    navigation.pathname = pathname;
+    render(<InstanceBanner instance={snapshot({ enabled: true, message: "Hi" })} />);
+    expect(banner()).toBeNull();
   });
 
   it("treats an unknown level as info", () => {
@@ -125,6 +130,13 @@ describe("InstanceBanner", () => {
     expect(localStorage.getItem(BROADCAST_DISMISS_STORAGE_KEY)).toBe(
       broadcastMessageHash("Read me"),
     );
+  });
+
+  it("still dismisses for this visit when browser storage is unavailable", () => {
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("blocked"); });
+    render(<InstanceBanner instance={snapshot({ enabled: true, message: "Read me", dismissable: true })} />);
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss announcement" }));
+    expect(banner()).toBeNull();
   });
 
   it("stays hidden on the next visit for the same message", async () => {

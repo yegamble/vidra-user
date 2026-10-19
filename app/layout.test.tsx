@@ -68,6 +68,16 @@ describe("RootLayout", () => {
     expect(findElement(html, InstanceCustomization).props.nonce).toBe("n0nce");
     expect(findElement(html, InstanceBanner).props.nonce).toBe("n0nce");
   });
+
+  it("places announcements above page content inside the column beside the sidebar", async () => {
+    const page = <main>Page content</main>;
+    const html = await RootLayout({ children: page });
+    const [, content] = findElement(html, "div").props.children;
+    expect(content.props.id).toBe("main-content");
+    expect(content.props.children).toHaveLength(2);
+    expect(content.props.children[0].type).toBe(InstanceBanner);
+    expect(content.props.children[1]).toBe(page);
+  });
 });
 
 // The white-label seam has exactly ONE wiring point, and everything downstream

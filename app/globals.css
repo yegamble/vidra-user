@@ -148,10 +148,16 @@
   --danger-fg: #ffffff;
   --danger-surface: light-dark(#fef2f2, #450a0a);
   --danger-border: light-dark(#fecaca, #7f1d1d);
+  /* Public announcements: semantic status panels, separate from navigation. */
+  --info: light-dark(#155e75, #67e8f9);
+  --info-surface: light-dark(#cffafe, #083344);
+  --info-border: light-dark(#67e8f9, #0e7490);
   --success: light-dark(#0f5f27, #30d158); /* success text — deep enough to clear its /15 pill over surface-muted (axe: 5.2:1) */
   --success-solid: light-dark(#34c759, #30d158); /* Apple systemGreen fill — dots/health/tiles, never under text */
   --warning: light-dark(#6f4a00, #ff9f0a); /* warning text — deep amber that clears its /15 pill over surface-muted (axe: 5.3:1) */
   --warning-solid: light-dark(#ff9500, #ff9f0a); /* Apple systemOrange fill — dots/tiles, never under text */
+  --warning-surface: light-dark(#fef3c7, #422006);
+  --warning-border: light-dark(#facc15, #a16207);
 
   /* the LIVE pulse dot — Apple systemRed, same in both schemes (sits on media) */
   --live: #ff453a;
@@ -316,10 +322,15 @@
   --color-danger-fg: var(--danger-fg);
   --color-danger-surface: var(--danger-surface);
   --color-danger-border: var(--danger-border);
+  --color-info: var(--info);
+  --color-info-surface: var(--info-surface);
+  --color-info-border: var(--info-border);
   --color-success: var(--success);
   --color-success-solid: var(--success-solid);
   --color-warning: var(--warning);
   --color-warning-solid: var(--warning-solid);
+  --color-warning-surface: var(--warning-surface);
+  --color-warning-border: var(--warning-border);
   --color-live: var(--live);
 
   /* Tri-protocol identity — tint fills + dots inside badges, ribbon gradient. */
