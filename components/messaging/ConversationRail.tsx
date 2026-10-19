@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useSession } from "@/components/auth/AuthProvider";
-import { LockIcon } from "@/components/icons";
+import { CloseIcon, LockIcon, MessageCircleIcon, SearchIcon } from "@/components/icons";
 import { InboxTabs } from "@/components/InboxTabs";
 import { NewMessageButton } from "@/components/NewMessageButton";
 import { Avatar } from "@/components/ui/Avatar";
@@ -20,6 +20,16 @@ import { SignInGate } from "@/components/SignInGate";
 type Status = "loading" | "error" | "ready";
 
 const INBOX_POLL_MS = 30_000;
+const PAGE_LIMIT = 20;
+
+function mergeConversations(previous: ConversationSummary[], incoming: ConversationSummary[]) {
+  const rows = new Map(previous.map(c => [c.id, c]));
+  for (const c of incoming) {
+    const existing = rows.get(c.id);
+    if (!existing || Date.parse(c.updated_at) >= Date.parse(existing.updated_at)) rows.set(c.id, c);
+  }
+  return [...rows.values()].sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at) || b.id.localeCompare(a.id));
+}
 
 // threadHref builds the row's link, carrying the encrypted recipient hint (`to`)
 // and the unread count (`unread`) the thread uses to place its NEW-messages
@@ -39,12 +49,12 @@ function threadHref(c: ConversationSummary): string {
 // the left rail of the desktop split-pane. `titleAsH1` is true only when the rail
 // is the page's primary surface (no thread open) so the page has exactly one h1.
 export function ConversationRail({ titleAsH1 }: { titleAsH1: boolean }) {
-  const { status } = useSession();
+  const { status, user } = useSession();
 
   const heading = titleAsH1 ? (
-    <h1 className="text-title">Messages</h1>
+    <h1 className="text-title text-fg">Messages</h1>
   ) : (
-    <p className="text-headline text-fg">Messages</p>
+    <p className="text-title text-fg">Messages</p>
   );
 
   if (status !== "authed") {
@@ -59,7 +69,7 @@ export function ConversationRail({ titleAsH1 }: { titleAsH1: boolean }) {
     );
   }
 
-  return <Rail heading={heading} showInboxTabs={titleAsH1} />;
+  return <Rail key={user?.id} heading={heading} showInboxTabs={titleAsH1} />;
 }
 
 function Rail({
@@ -72,9 +82,13 @@ function Rail({
   const pathname = usePathname();
   const [status, setStatus] = useState<Status>("loading");
   const [items, setItems] = useState<ConversationSummary[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [moreError, setMoreError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const mountedRef = useRef(true);
+  const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -86,9 +100,11 @@ function Rail({
   useEffect(() => {
     const controller = new AbortController();
     api
-      .getConversations({}, controller.signal)
+      .getConversations({ limit: PAGE_LIMIT, offset: 0 }, controller.signal)
       .then((res) => {
-        setItems(res.conversations);
+        if (controller.signal.aborted) return;
+        setItems(mergeConversations([], res.conversations));
+        setTotal(res.total);
         setStatus("ready");
       })
       .catch((err: unknown) => {
@@ -104,9 +120,11 @@ function Rail({
   useEffect(() => {
     const refresh = () => {
       api
-        .getConversations({})
+        .getConversations({ limit: PAGE_LIMIT, offset: 0 })
         .then((res) => {
-          if (mountedRef.current) setItems(res.conversations);
+          if (!mountedRef.current) return;
+          setItems(previous => mergeConversations(previous, res.conversations));
+          setTotal(res.total);
         })
         .catch(() => {});
     };
@@ -125,6 +143,23 @@ function Rail({
     setReloadKey((k) => k + 1);
   }
 
+  async function loadMore() {
+    if (loadingMore) return;
+    setLoadingMore(true);
+    setMoreError(null);
+    try {
+      const res = await api.getConversations({ limit: PAGE_LIMIT, offset: items.length });
+      if (!mountedRef.current) return;
+      setItems(previous => mergeConversations(previous, res.conversations));
+      setTotal(res.total);
+    } catch {
+      if (mountedRef.current) setMoreError("Could not load more conversations.");
+    } finally {
+      if (mountedRef.current) setLoadingMore(false);
+    }
+  }
+
+  const hasMore = items.length < total;
   const q = query.trim().toLowerCase();
   const filtered = useMemo(() => {
     if (!q) return items;
@@ -143,14 +178,33 @@ function Rail({
           <NewMessageButton />
         </div>
         {status === "ready" && items.length > 0 ? (
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            aria-label="Search conversations"
-            placeholder="Search conversations"
-            className="focus-ring w-full rounded-full bg-surface-muted px-4 py-2 text-sm text-fg placeholder:text-fg-muted"
-          />
+          <div className="relative flex items-center">
+            <SearchIcon size={18} className="pointer-events-none absolute left-3.5 text-fg-muted" />
+            <input
+              ref={searchRef}
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              aria-label="Search conversations"
+              placeholder="Search conversations"
+              className="focus-ring h-11 w-full rounded-full bg-surface-muted pl-10 pr-11 text-base text-fg placeholder:text-fg-muted [&::-webkit-search-cancel-button]:appearance-none"
+            />
+            {query ? (
+              <button
+                type="button"
+                aria-label="Clear search"
+                onClick={() => { setQuery(""); searchRef.current?.focus(); }}
+                className="focus-ring absolute right-0 inline-flex h-11 w-11 items-center justify-center rounded-full text-fg-muted transition-colors hover:text-fg"
+              >
+                <CloseIcon size={18} />
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+        {hasMore ? (
+          <p className="text-footnote text-fg-muted">
+            Searching loaded conversations. Load more to include older chats.
+          </p>
         ) : null}
       </div>
 
@@ -174,8 +228,9 @@ function Rail({
         ) : items.length === 0 ? (
           <div className="px-2 pt-4">
             <EmptyState
+              icon={<MessageCircleIcon size={24} />}
               title="No messages yet"
-              message="Start one with New message above (or from someone's comment), and it'll show up here."
+              message="Choose New message to start a conversation with someone on Vidra."
             />
           </div>
         ) : filtered.length === 0 ? (
@@ -207,7 +262,8 @@ function Rail({
                       <span className="flex items-center gap-1.5">
                         <span
                           className={
-                            "truncate text-headline " +
+                            "truncate text-subhead " +
+                            (unread || active ? "font-semibold " : "font-medium ") +
                             (active ? "text-accent-text" : "text-fg")
                           }
                         >
@@ -239,9 +295,11 @@ function Rail({
                     </div>
                     {unread ? (
                       <span
-                        className="h-2.5 w-2.5 shrink-0 rounded-full bg-accent"
+                        className="inline-flex min-h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-accent px-1.5 text-[11px] font-semibold tabular-nums text-accent-fg"
                         aria-label={`${c.unread_count} unread ${c.unread_count === 1 ? "message" : "messages"}`}
-                      />
+                      >
+                        {(c.unread_count ?? 0) > 99 ? "99+" : c.unread_count}
+                      </span>
                     ) : null}
                   </Link>
                 </li>
@@ -249,6 +307,19 @@ function Rail({
             })}
           </ul>
         )}
+        {status === "ready" && hasMore ? (
+          <div className="flex flex-col items-center gap-2 px-4 pt-4">
+            {moreError ? <p role="alert" className="text-sm text-danger">{moreError}</p> : null}
+            <button
+              type="button"
+              disabled={loadingMore}
+              onClick={() => void loadMore()}
+              className="focus-ring min-h-11 rounded-full border border-border px-4 text-sm font-semibold text-fg transition-colors hover:bg-surface-muted disabled:opacity-60"
+            >
+              {loadingMore ? "Loading conversations…" : "Load more conversations"}
+            </button>
+          </div>
+        ) : null}
       </div>
     </div>
   );
