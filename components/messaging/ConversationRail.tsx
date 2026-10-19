@@ -16,6 +16,7 @@ import { api, userAvatarUrl } from "@/lib/api";
 import type { ConversationSummary } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
 import { SignInGate } from "@/components/SignInGate";
+import { rememberConversations } from "@/lib/messaging/conversation-cache";
 
 type Status = "loading" | "error" | "ready";
 
@@ -79,6 +80,7 @@ function Rail({
   heading: React.ReactNode;
   showInboxTabs: boolean;
 }) {
+  const { user } = useSession();
   const pathname = usePathname();
   const [status, setStatus] = useState<Status>("loading");
   const [items, setItems] = useState<ConversationSummary[]>([]);
@@ -89,6 +91,9 @@ function Rail({
   const [reloadKey, setReloadKey] = useState(0);
   const mountedRef = useRef(true);
   const searchRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (user) rememberConversations(user.id, items);
+  }, [user, items]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -170,7 +175,7 @@ function Rail({
   }, [items, q]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <div className="flex shrink-0 flex-col gap-3 px-4 pb-3 pt-6">
         {showInboxTabs ? <InboxTabs active="messages" /> : null}
         <div className="flex items-center justify-between gap-2">

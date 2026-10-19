@@ -19,6 +19,8 @@ export interface StoredDevice {
   pickleKey: string;
   /** Durable public batch, retried verbatim until the server accepts it. */
   pendingOneTimeKeys?: OneTimeKey[];
+  /** Initial publication completed; background refill never disables this device. */
+  activated?: boolean;
 }
 
 /**

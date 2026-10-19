@@ -238,6 +238,35 @@ describe("E2EEEngine", () => {
       expect(store.record?.deviceId).toBe("dev-1");
     });
 
+    it("keeps an activated device usable after failed refill and retries its saved batch", async () => {
+      await engine.ensureDevice();
+      const previous = fetchMock.getMockImplementation() as (url: string, init: RequestInit) => Promise<Response>;
+      fetchMock.mockImplementation((url: string, init: RequestInit = {}) => {
+        if (url.includes("/users/u-peer/e2ee/devices")) return Promise.resolve(json({ devices: [device("peer", "u-peer", "peer")] }));
+        if (url.includes("/users/u-peer/e2ee/claim")) return Promise.resolve(json({ claims: [{
+          device_id: "peer", identity_key: "idk-peer", signing_key: "sgk-peer",
+          one_time_key: { key_id: "peer-key", key: "peer-otk" },
+        }] }));
+        return previous(url, init);
+      });
+      await engine.encryptMessage("u-peer", "u1", "before refill");
+      failUpload = true;
+      await expect(engine.replenishOneTimeKeys()).rejects.toThrow("could not reach the server");
+      const pending = store.record?.pendingOneTimeKeys;
+      expect(await engine.currentDevice()).not.toBeNull();
+      await expect(engine.encryptMessage("u-peer", "u1", "during refill retry")).resolves.toMatchObject({
+        envelopes: [{ recipient_device_id: "peer" }],
+      });
+      expect(fetchMock.mock.calls.filter(([url]) => url.includes("/e2ee/claim"))).toHaveLength(1);
+      const reloaded = new E2EEEngine(provider, store);
+      expect(await reloaded.currentDevice()).not.toBeNull();
+      failUpload = false;
+      await reloaded.ensureDevice();
+      const uploads = fetchMock.mock.calls.filter(([url]) => url.endsWith("/one-time-keys")).slice(-2);
+      expect(uploads.map(([, init]) => JSON.parse(init.body).one_time_keys)).toEqual([pending, pending]);
+      expect(store.record?.pendingOneTimeKeys).toBeUndefined();
+    });
+
     it("forgets a device while its account is still restoring", async () => {
       store.record = { deviceId: "dev-1", deviceName: "Laptop", pickle: "{pickle}", pickleKey: "pk" };
       const account = new FakeAccount();

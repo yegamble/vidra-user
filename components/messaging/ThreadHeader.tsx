@@ -26,7 +26,7 @@ export function ThreadHeader({
   encrypted: boolean;
 }) {
   return (
-    <header className="sticky top-0 z-10 flex shrink-0 items-center gap-2.5 border-b border-border-subtle bg-canvas/80 px-4 py-2.5 backdrop-blur">
+    <header className="sticky top-0 z-10 flex shrink-0 items-center gap-2.5 border-b border-border-subtle bg-surface/90 px-4 py-2.5 backdrop-blur">
       <Link
         href="/messages"
         aria-label="Back to messages"
@@ -36,10 +36,10 @@ export function ThreadHeader({
       </Link>
 
       <Avatar
-        src={otherUserId && !encrypted ? userAvatarUrl(otherUserId) : null}
+        src={otherUserId ? userAvatarUrl(otherUserId) : null}
         name={name}
         alt=""
-        className="h-8 w-8 text-sm"
+        className="h-10 w-10 text-sm"
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -63,7 +63,7 @@ export function ThreadHeader({
       </div>
 
       {otherUserId ? (
-        <div className="shrink-0">
+        <div className="shrink-0 [&_button]:min-h-11 [&_button]:min-w-11 [&_button]:px-3">
           <ReportButton kind="account" targetId={otherUserId} variant="link" />
         </div>
       ) : null}

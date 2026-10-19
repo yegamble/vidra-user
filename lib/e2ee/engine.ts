@@ -61,6 +61,7 @@ interface Loaded {
   deviceName: string;
   pickleKey: string;
   pendingOneTimeKeys?: OneTimeKey[];
+  activated: boolean;
 }
 
 export class E2EEEngine {
@@ -108,7 +109,7 @@ export class E2EEEngine {
   /** The current device if this browser has one set up, else null. */
   async currentDevice(): Promise<LocalDevice | null> {
     const loaded = await this.checked(() => this.ensureLoaded());
-    if (!loaded?.deviceId || loaded.pendingOneTimeKeys?.length) return null;
+    if (!loaded?.deviceId || !loaded.activated) return null;
     return {
       device_id: loaded.deviceId,
       device_name: loaded.deviceName,
@@ -136,6 +137,7 @@ export class E2EEEngine {
       deviceName: record.deviceName,
       pickleKey: record.pickleKey,
       pendingOneTimeKeys: record.pendingOneTimeKeys,
+      activated: record.activated ?? !record.pendingOneTimeKeys?.length,
     };
     return this.loaded;
   }
@@ -150,6 +152,7 @@ export class E2EEEngine {
         pickle: loaded.account.serialize(loaded.pickleKey),
         pickleKey: loaded.pickleKey,
         pendingOneTimeKeys: loaded.pendingOneTimeKeys,
+        activated: loaded.activated,
       }));
     } catch (err) {
       this.reset(); // A failed write must never leave an apparently ready account.
@@ -174,7 +177,7 @@ export class E2EEEngine {
         const account = await this.checked(() => this.provider.create(), (account) => account.dispose());
         loaded = this.loaded = {
           account, deviceId: "", deviceName: name, pickleKey: randomPickleKey(),
-          pendingOneTimeKeys: account.generateOneTimeKeys(OTK_UPLOAD_BATCH),
+          pendingOneTimeKeys: account.generateOneTimeKeys(OTK_UPLOAD_BATCH), activated: false,
         };
         await this.persist();
       } else {
@@ -202,6 +205,7 @@ export class E2EEEngine {
     if (!loaded.pendingOneTimeKeys?.length) return;
     await this.checked(() => api.uploadE2EEOneTimeKeys(loaded.deviceId, loaded.pendingOneTimeKeys!));
     loaded.pendingOneTimeKeys = undefined;
+    loaded.activated = true;
     await this.persist();
   }
 
@@ -245,7 +249,7 @@ export class E2EEEngine {
     plaintext: string,
   ): Promise<EncryptResult> {
     const loaded = await this.checked(() => this.ensureLoaded());
-    if (!loaded?.deviceId || loaded.pendingOneTimeKeys?.length) throw new Error("no E2EE device is set up");
+    if (!loaded?.deviceId || !loaded.activated) throw new Error("no E2EE device is set up");
 
     // Neither of these consumes a prekey.
     const [peerDir, myDir] = await Promise.all([

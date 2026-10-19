@@ -3,6 +3,7 @@ import type { Messages } from "../index";
 // Machine-drafted, awaiting native-speaker review.
 export const settings = {
   "settings.secure.preparing": "Sécurisation de ce navigateur",
+  "settings.secure.expiryHelp": "Les messages sont masqués après ce délai. Des copies enregistrées ou téléchargées peuvent rester sur les appareils.",
   "settings.secure.peerWaiting": "En attente de la connexion de l’autre personne pour préparer la messagerie sécurisée. Votre brouillon est conservé ici ; réessayez lorsqu’elle sera prête.",
   "settings.secure.preparingHelp": "Le chiffrement est préparé automatiquement. Vos clés privées restent dans ce navigateur. Un nouveau navigateur peut uniquement lire les messages envoyés après sa préparation.",
   "settings.secure.prepareError": "Impossible de préparer la messagerie sécurisée. Veuillez réessayer.",

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ConversationView } from "./ConversationView";
 import { MessageTimeline } from "./messaging/MessageTimeline";
@@ -16,9 +16,36 @@ vi.mock("@/lib/api", async original => ({ ...await original<typeof import("@/lib
 const getMessages = vi.mocked(api.getConversationMessages);
 const message = (n: number) => ({ id: `m${n}`, conversation_id: "conversation", sender_id: "me", body: `message ${n}`, created_at: new Date(Date.UTC(2026, 8, 5, 0, 0, n)).toISOString() });
 const firstPage = Array.from({ length: 100 }, (_, i) => message(100 - i));
-afterEach(() => { cleanup(); vi.clearAllMocks(); session.user.id = "me"; });
+afterEach(() => { cleanup(); vi.clearAllMocks(); vi.unstubAllGlobals(); session.user.id = "me"; });
 
 describe("plaintext history", () => {
+  it.each([true, false])("keeps latest pinned on viewport shrink only when already at latest: %s", pinned => {
+    let resized = () => {};
+    const observe = vi.fn();
+    const disconnect = vi.fn();
+    vi.stubGlobal("ResizeObserver", class {
+      constructor(callback: () => void) { resized = callback; }
+      observe = observe;
+      disconnect = disconnect;
+    });
+    const { unmount } = render(<MessageTimeline messages={[message(1)]} meId="me" otherName="Peer" onDeleted={vi.fn()} onRetry={vi.fn()} onDiscard={vi.fn()} />);
+    const log = screen.getByRole("log");
+    let viewportHeight = 500;
+    let top = pinned ? 1500 : 700;
+    Object.defineProperties(log, {
+      scrollHeight: { value: 2000 },
+      clientHeight: { get: () => viewportHeight },
+      scrollTop: { get: () => top, set: value => { top = Math.min(value, 2000 - viewportHeight); } },
+    });
+    fireEvent.scroll(log);
+    viewportHeight = 400;
+    act(() => resized());
+    expect(log.scrollTop).toBe(pinned ? 1600 : 700);
+    expect(observe).toHaveBeenCalledWith(log);
+    unmount();
+    expect(disconnect).toHaveBeenCalledOnce();
+  });
+
   it("does not keep another account's loaded conversation on an account change", async () => {
     getMessages.mockResolvedValueOnce({ limit: 100, offset: 0, messages: [message(1)] })
       .mockImplementationOnce(() => new Promise(() => {}));

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { EncryptedThreadView } from "./EncryptedThreadView";
@@ -65,6 +65,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   __resetEncryptedDraftsForTest();
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 const view = (envelopes: EncryptedMessage[]) =>
@@ -78,6 +79,14 @@ const view = (envelopes: EncryptedMessage[]) =>
   );
 
 describe("EncryptedThreadView envelope addressing", () => {
+  it("hides an expired encrypted message without waiting for another inbox poll", async () => {
+    vi.useFakeTimers();
+    decryptable.set("expires", "disappearing text");
+    await act(async () => { view([envelope({ id: "expires", expires_at: new Date(Date.now() + 1000).toISOString() })]); });
+    expect(screen.getByText("disappearing text")).toBeTruthy();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1100); });
+    expect(screen.queryByText("disappearing text")).toBeNull();
+  });
   it("supports Enter to send while preserving Shift+Enter and IME composition", async () => {
     engine.encryptMessage.mockRejectedValueOnce(new Error("offline"));
     view([]);
