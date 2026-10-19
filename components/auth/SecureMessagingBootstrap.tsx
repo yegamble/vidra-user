@@ -6,12 +6,13 @@ import { useInstanceFeatures } from "@/lib/instance-features";
 
 export function SecureMessagingBootstrap() {
   const { status, user } = useSession();
+  const userId = user?.id;
   const features = useInstanceFeatures();
   // Older instances retain thread-level setup; only an explicit disclosure
   // enables background registration while browsing other parts of the app.
   const enabled = features?.messaging !== false && features?.messaging_e2ee === true;
   useEffect(() => {
-    if (status !== "authed" || !user || !enabled) return;
+    if (status !== "authed" || !userId || !enabled) return;
     let active = true;
     let busy = false;
     let lastAttempt = 0;
@@ -33,6 +34,6 @@ export function SecureMessagingBootstrap() {
       window.removeEventListener("focus", focus);
       window.removeEventListener("online", online);
     };
-  }, [status, user?.id, enabled]);
+  }, [status, userId, enabled]);
   return null;
 }

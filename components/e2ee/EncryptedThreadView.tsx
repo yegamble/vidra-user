@@ -7,7 +7,6 @@ import { useT } from "@/components/I18nProvider";
 import { useFinePointer } from "@/components/messaging/Composer";
 import { LockIcon } from "@/components/icons";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, api, errorMessage } from "@/lib/api";
 import type { EncryptedMessage } from "@/lib/api";
 import {
