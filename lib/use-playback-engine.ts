@@ -829,6 +829,7 @@ export function useHlsPlayback(
   // progressive paths it is appended to the src as `?pt=`. A secret — never logged.
   playbackToken?: string | null,
   preferIpfs = false,
+  suspended = false,
 ): HlsPlayback {
   // The session is authorized exactly like the media routes, so the unlock
   // token — when the viewer has one — is what opens a password video's session.
@@ -889,7 +890,7 @@ export function useHlsPlayback(
       // URL — the session still decides what plays, it just no longer decides
       // WHEN. When it names the same master, which is the normal case, nothing
       // moves.
-      suspended: (needsToken && sessionState.status === "pending") || (!hlsMasterOverride && preference.waiting),
+      suspended: suspended || (needsToken && sessionState.status === "pending") || (!hlsMasterOverride && preference.waiting),
       session: sessionState.session,
     },
   );

@@ -3,6 +3,7 @@ import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Video } from "@/lib/api";
+import { readLastPosition, writeLastPosition } from "@/lib/last-position";
 
 vi.mock("next/link", () => ({
   default: ({ href, children }: { href: string; children: React.ReactNode }) => (
@@ -22,7 +23,13 @@ vi.mock("@/components/auth/AuthProvider", () => ({
 // The player and the heavier watch-page children are irrelevant to what this
 // file asserts (which requests go out, and when) — stub them so jsdom has no
 // media, HLS or IntersectionObserver work to do.
-vi.mock("@/components/player/VideoPlayer", () => ({ VideoPlayer: () => <div /> }));
+const playerProps = vi.hoisted(() => ({ last: null as null | {
+  videoRef: { current: HTMLVideoElement | null }; onPause?: () => void;
+} }));
+vi.mock("@/components/player/VideoPlayer", () => ({ VideoPlayer: (props: NonNullable<typeof playerProps.last>) => {
+  playerProps.last = props;
+  return <div />;
+} }));
 // The props the comments section was last rendered with (reviewer gating).
 const commentsProps = vi.hoisted(() => ({ last: null as null | { canManageComments?: boolean } }));
 vi.mock("@/components/CommentsSection", () => ({
@@ -137,6 +144,17 @@ afterEach(() => {
 // a channel the viewer already follows, on every hard load, and the effect
 // never re-ran to correct it.
 describe("WatchView session settling", () => {
+  it("preserves saved progress when content has not played during an ad", async () => {
+    writeLastPosition("v1", 75, 120);
+    render(<WatchView id="v1" initialVideo={{ ...video(), duration_seconds: 120 }} />);
+    await act(async () => {});
+    const el = document.createElement("video");
+    playerProps.last!.videoRef.current = el;
+    act(() => playerProps.last!.onPause?.());
+    expect(readLastPosition("v1", 120)).toBe(75);
+    expect(mocks.recordWatchProgress).not.toHaveBeenCalled();
+  });
+
   it("does not read the video while the session is still restoring", async () => {
     sessionStatus = "restoring";
     render(<WatchView id="v1" />);

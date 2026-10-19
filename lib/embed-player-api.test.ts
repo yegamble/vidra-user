@@ -24,6 +24,14 @@ const last = (p: { data: Record<string, unknown> }[]) => p[p.length - 1].data;
 describe("embed player API", () => {
   afterEach(() => vi.restoreAllMocks());
 
+  it("lets preroll handle API play intent before calling native play", () => {
+    const { video, play, send, api } = setup();
+    video.addEventListener("vidra:play-request", event => event.preventDefault());
+    send({ id: 1, method: "peertube::play" });
+    expect(play).not.toHaveBeenCalled();
+    api.stop();
+  });
+
   it("notifies ready with the scoped method name", () => {
     const { posted, api } = setup();
     api.notifyReady();
@@ -34,8 +42,11 @@ describe("embed player API", () => {
     const { video, play, pause, posted, send, api } = setup();
     send({ id: 1, method: "peertube::play" });
     expect(play).toHaveBeenCalled();
+    const cancelAdResume = vi.fn();
+    video.addEventListener("vidra:pause-request", cancelAdResume);
     send({ id: 2, method: "peertube::pause" });
     expect(pause).toHaveBeenCalled();
+    expect(cancelAdResume).toHaveBeenCalledTimes(1);
     send({ id: 3, method: "peertube::seek", params: 42 });
     expect(video.currentTime).toBe(42);
     send({ id: 4, method: "peertube::setVolume", params: 0.5 });

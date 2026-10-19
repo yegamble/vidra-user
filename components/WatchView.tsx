@@ -771,7 +771,7 @@ function Player({
   // Report the current position (whole seconds). No-op unless signed in.
   const record = useCallback(() => {
     const el = videoRef.current;
-    if (!el) return;
+    if (!el || el.played.length === 0) return;
     const pos = Math.floor(el.currentTime || 0);
     if (anon) writeLastPosition(video.id, pos, el.duration);
     if (!authed) return;
