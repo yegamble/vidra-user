@@ -1,5 +1,6 @@
 export const settings = {
   "settings.secure.preparing": "Securing this browser",
+  "settings.secure.expiryHelp": "Messages are hidden after this time. Saved or downloaded copies may remain on devices.",
   "settings.secure.peerWaiting": "Waiting for the other person to sign in and prepare secure messaging. Your draft is saved here; try sending again when they are ready.",
   "settings.secure.preparingHelp": "Encryption is prepared automatically. Your private keys stay on this browser. A new browser can only read messages sent after it was prepared.",
   "settings.secure.prepareError": "Could not prepare secure messaging. Please try again.",

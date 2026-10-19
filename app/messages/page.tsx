@@ -1,4 +1,6 @@
+"use client";
 import { MessageCircleIcon } from "@/components/icons";
+import { useSession } from "@/components/auth/AuthProvider";
 import { NewMessageButton } from "@/components/NewMessageButton";
 import { EmptyState } from "@/components/ui/EmptyState";
 
@@ -7,6 +9,8 @@ import { EmptyState } from "@/components/ui/EmptyState";
 // is the resting "Your messages" placeholder beside the conversation rail, using
 // the shared EmptyState (icon-in-tinted-circle) treatment.
 export default function MessagesPage() {
+  const { status } = useSession();
+  if (status !== "authed") return null;
   return (
     <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6">
       <EmptyState

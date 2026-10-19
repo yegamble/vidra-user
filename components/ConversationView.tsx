@@ -13,6 +13,7 @@ import { ApiError, api } from "@/lib/api";
 import type { EncryptedMessage, Message } from "@/lib/api";
 import type { DisplayMessage } from "@/lib/messaging/grouping";
 import { SignInGate } from "@/components/SignInGate";
+import { useConversationSummary } from "@/lib/messaging/conversation-cache";
 
 const POLL_INTERVAL_MS = 10_000;
 const INITIAL_LIMIT = 100;
@@ -106,6 +107,7 @@ function Thread({
 }) {
   const { user } = useSession();
   const meId = user?.id;
+  const summary = useConversationSummary(conversationId, meId);
   const [status, setStatus] = useState<Status>("loading");
   const [notFound, setNotFound] = useState(false);
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
@@ -343,14 +345,14 @@ function Thread({
 
   const encrypted = status === "ready" && envelopes !== null;
   const other = messages.find((m) => m.sender_id !== meId);
-  const otherName = other?.sender_display_name || other?.sender_username || "Conversation";
-  const otherUsername = other?.sender_username;
-  const otherUserId = other?.sender_id ?? recipientHint;
+  const otherName = summary?.other_display_name || summary?.other_username || other?.sender_display_name || other?.sender_username || "Conversation";
+  const otherUsername = summary?.other_username || other?.sender_username;
+  const otherUserId = summary?.other_user_id || other?.sender_id || recipientHint;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <ThreadHeader
-        name={encrypted ? "Encrypted conversation" : otherName}
+        name={encrypted && !summary ? "Encrypted conversation" : otherName}
         username={otherUsername}
         otherUserId={otherUserId}
         encrypted={encrypted}
@@ -385,7 +387,7 @@ function Thread({
             <EncryptedThreadView
               conversationId={conversationId}
               envelopes={envelopes}
-              recipientId={recipientHint}
+              recipientId={otherUserId}
               myUserId={meId ?? ""}
               onAtBottomChange={setAtBottom}
               hasEarlier={hasEarlier}

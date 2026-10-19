@@ -65,6 +65,19 @@ export function MessageTimeline({
     if (el) el.scrollTop = el.scrollHeight;
   }, []);
 
+  // Composer growth and viewport changes resize this pane without adding a
+  // message. Keep the latest message visible only while the reader is following
+  // the bottom; browsing older messages must retain its existing scroll anchor.
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      if (stickRef.current) el.scrollTop = el.scrollHeight;
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el) return;

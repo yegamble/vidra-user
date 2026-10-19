@@ -47,7 +47,7 @@ export function MessagingShell({ children }: { children: React.ReactNode }) {
       <div className="flex min-h-0 min-w-0 flex-1 lg:overflow-hidden lg:rounded-2xl lg:border lg:border-border-subtle lg:bg-surface lg:shadow-soft">
         <div
           className={cn(
-            "min-h-0 flex-col lg:flex lg:w-[360px] lg:flex-none lg:shrink-0 lg:border-r lg:border-border-subtle",
+            "min-h-0 min-w-0 flex-col lg:flex lg:w-[360px] lg:flex-none lg:shrink-0 lg:border-r lg:border-border-subtle",
             onThread ? "hidden lg:flex" : "flex flex-1",
           )}
         >

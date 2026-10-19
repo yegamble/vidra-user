@@ -85,6 +85,14 @@ export function EncryptedThreadView({
 }) {
   const [device, setDevice] = useState<DeviceState>("needs-setup");
   const [messages, setMessages] = useState<ShownMessage[]>([]);
+  useEffect(() => {
+    const nextExpiry = Math.min(...messages.flatMap((message) => message.expires_at ? [new Date(message.expires_at).getTime()] : []).filter(Number.isFinite));
+    if (!Number.isFinite(nextExpiry)) return;
+    const timer = setTimeout(() => {
+      setMessages(previous => previous.filter(message => !message.expires_at || new Date(message.expires_at).getTime() > Date.now()));
+    }, Math.min(2_147_483_647, Math.max(0, nextExpiry - Date.now()) + 1));
+    return () => clearTimeout(timer);
+  }, [messages]);
   // Recovered from the outbox: who we last sent to in this thread.
   const [lastSentRecipientId, setLastSentRecipientId] = useState<string | undefined>(undefined);
 
@@ -739,6 +747,7 @@ function Composer({
           {busy ? "Sending…" : "Send"}
         </button>
       </div>
+      {timer !== "off" ? <p className="text-xs text-fg-muted">{t("settings.secure.expiryHelp")}</p> : null}
     </form>
   );
 }
