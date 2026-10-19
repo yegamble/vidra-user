@@ -58,6 +58,7 @@ export function syncGoogleAnalytics(id: string | null, pathname: string, nonce: 
   if (active && active.id !== id) syncGoogleAnalytics(null, pathname, nonce);
   window[`ga-disable-${id}`] = false;
   window.dataLayer ??= [];
+  // eslint-disable-next-line prefer-rest-params -- gtag.js consumes IArguments commands.
   window.gtag ??= function () { window.dataLayer!.push(arguments); } as Gtag;
   if (!consentInitialized) {
     send("consent", "default", { analytics_storage: "denied", ad_storage: "denied", ad_user_data: "denied", ad_personalization: "denied" });
