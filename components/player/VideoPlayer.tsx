@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   useSyncExternalStore,
@@ -11,12 +12,18 @@ import {
 } from "react";
 
 import { Spinner } from "@/components/ui";
+import { useInstanceAds } from "@/components/InstanceAdsProvider";
 import { AutoplaySwitch } from "@/components/player/AutoplaySwitch";
 import { ChevronLeftIcon, ChevronRightIcon } from "@/components/icons";
 import { usePlayerSeeking } from "@/components/player/use-player-seeking";
 import { CaptionLayer } from "@/components/player/CaptionLayer";
 import { PlaybackFeedback } from "@/components/player/PlaybackFeedback";
 import { EndCard } from "@/components/player/EndCard";
+import { PrerollAd } from "@/components/player/PrerollAd";
+import { useVastPreroll } from "@/components/player/use-vast-preroll";
+import { useVastBreaks } from "@/components/player/use-vast-breaks";
+import { markVastPlayed } from "@/lib/vast-cooldown";
+import { useT } from "@/components/I18nProvider";
 import {
   CaptionsGlyph,
   FullscreenEnterGlyph,
@@ -148,6 +155,10 @@ export function VideoPlayer({
   onTimeUpdate,
   onPause,
   onDeliveryChange,
+  adBreaks: adBreaksOverride,
+  autoplay = false,
+  initialMuted = false,
+  stopAt = null,
   children,
 }: {
   video: Video;
@@ -188,10 +199,53 @@ export function VideoPlayer({
   onTimeUpdate?: () => void;
   onPause?: () => void;
   onDeliveryChange?: (delivery: PlaybackDelivery) => void;
+  adBreaks?: { before?: string | null; mid?: string | null; after?: string | null;
+    midAt?: number; midPercent?: number; minDuration?: number; cooldown?: number; pending?: boolean } | null;
+  /** Explicit embed autoplay, subject to the browser's normal policy. */
+  autoplay?: boolean;
+  initialMuted?: boolean;
+  stopAt?: number | null;
   /** Rendered inside the media container, over the video (e.g. the embed title link). */
   children?: ReactNode;
 }) {
-  const playback = useHlsPlayback(videoRef, video, startAt, hlsMasterOverride, playbackToken, variant === "watch");
+  const t = useT();
+  const instanceAds = useInstanceAds();
+  const adBreaks = adBreaksOverride !== undefined ? adBreaksOverride : instanceAds === undefined ? { pending: true }
+    : instanceAds ? { before: instanceAds.vast_tag_url || null, mid: instanceAds.midroll_tag_url || null,
+      after: instanceAds.postroll_tag_url || null, midAt: instanceAds.midroll_offset_seconds ?? 300,
+      minDuration: instanceAds.midroll_min_duration_seconds ?? 600, cooldown: instanceAds.cooldown_seconds ?? 300 } : null;
+  const pre = useVastPreroll(videoRef, video.id, adBreaks?.pending ? undefined : adBreaks?.before ?? null, adBreaks?.cooldown ?? 0);
+  const breaks = useVastBreaks(videoRef, video.id, adBreaks?.mid ?? null, adBreaks?.midAt ?? 300,
+    adBreaks?.after ?? null, adBreaks?.minDuration ?? 0, adBreaks?.cooldown ?? 0, adBreaks?.midPercent ?? 0, stopAt);
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el || !pre.blocked || adBreaks?.pending) return;
+    el.dataset.adTransportReady = "true";
+    el.dispatchEvent(new Event("vidra:player-ready"));
+    return () => { delete el.dataset.adTransportReady; };
+  }, [videoRef, pre.blocked, adBreaks?.pending]);
+  const adActive = pre.active || breaks.active;
+  const ad = pre.active ? pre.ad : breaks.ad;
+  const adState = useRef({ blocked: pre.blocked, active: adActive, requestPlay: pre.requestPlay });
+  const adFinish = useRef({ before: pre.active, pre: pre.finish, later: breaks.finish });
+  useLayoutEffect(() => {
+    adState.current = { blocked: pre.blocked, active: adActive, requestPlay: pre.requestPlay };
+    adFinish.current = { before: pre.active, pre: pre.finish, later: breaks.finish };
+  }, [pre.blocked, pre.active, pre.requestPlay, pre.finish, adActive, breaks.finish]);
+  const finishAd = useCallback(() => {
+    const action = adFinish.current;
+    if (action.before) action.pre(); else action.later();
+  }, []);
+  const playback = useHlsPlayback(videoRef, video, startAt, hlsMasterOverride, playbackToken, variant === "watch", pre.blocked);
+  useEffect(() => {
+    const el = videoRef.current as (HTMLVideoElement & { webkitPresentationMode?: string;
+      webkitSetPresentationMode?: (mode: string) => void }) | null;
+    if (!adActive || !el) return;
+    if (document.pictureInPictureElement === el) void document.exitPictureInPicture?.()?.catch(() => {});
+    else if (el.webkitPresentationMode === "picture-in-picture") {
+      try { el.webkitSetPresentationMode?.("inline"); } catch { /* Browser owns presentation availability. */ }
+    }
+  }, [adActive, videoRef]);
   useEffect(() => {
     if (playback.delivery) onDeliveryChange?.(playback.delivery);
   }, [playback.delivery, onDeliveryChange]);
@@ -253,7 +307,8 @@ export function VideoPlayer({
   // preference (see lib/player-autoplay readStartOnOpen). The kick lives in
   // primeInstanceDefaults(), fired from the mount effect below; settlement
   // re-notifies through the same subscription, re-running the effect.
-  const startOnOpen = useSyncExternalStore(subscribeAutoplay, readStartOnOpen, serverStartOnOpen);
+  const watchStartOnOpen = useSyncExternalStore(subscribeAutoplay, readStartOnOpen, serverStartOnOpen);
+  const startOnOpen = variant === "watch" ? watchStartOnOpen : autoplay;
 
   // The signed-in user's effective player defaults (PLAY-07 / W1.6). speed,
   // theater and autoplay flow through the session stores above (whose fallback is
@@ -268,6 +323,11 @@ export function VideoPlayer({
   // explicitly on dismiss — so all writes stay in event handlers (never a bare
   // effect body).
   const [ended, setEnded] = useState(false);
+  const adWasActive = useRef(false);
+  useEffect(() => {
+    if (adWasActive.current && !adActive && !ended) containerRef.current?.focus({ preventScroll: true });
+    adWasActive.current = adActive;
+  }, [adActive, ended]);
   // Flags that focus should return to the player controls once the card hides
   // (set by the dismiss / replay handlers; the countdown navigates away instead).
   const restoreFocus = useRef(false);
@@ -279,7 +339,7 @@ export function VideoPlayer({
   const [decodedHeight, setDecodedHeight] = useState<number | null>(null);
   const [buffered, setBuffered] = useState<Array<[number, number]>>([]);
   const [volume, setVolume] = useState(1);
-  const [muted, setMuted] = useState(false);
+  const [muted, setMuted] = useState(initialMuted);
   const [captionsOn, setCaptionsOn] = useState(false);
   const [captionLanguage, setCaptionLanguage] = useState(0);
   const captionLanguageRef = useRef(0);
@@ -369,6 +429,7 @@ export function VideoPlayer({
     const el = videoRef.current;
     if (!el) return;
     viewerActed.current = true;
+    if (el.paused && adState.current.requestPlay()) return;
     if (el.paused) void el.play().catch(() => { setLoading(false); setPaused(el.paused); });
     else el.pause();
   }, [videoRef]);
@@ -533,7 +594,7 @@ export function VideoPlayer({
   }, [startOnOpen]);
 
   const attemptStartOnOpen = useCallback(() => {
-    if (variant !== "watch" || !startOnOpenRef.current || startAttempted.current) return;
+    if (!startOnOpenRef.current || startAttempted.current) return;
     // The viewer has already answered "should this be playing?" with the
     // transport. Never ask again for this video — not on a re-attach, not on a
     // re-arm. This is the guard that makes "an explicit pause is never fought"
@@ -542,6 +603,7 @@ export function VideoPlayer({
     if (viewerActed.current) return;
     const el = videoRef.current;
     if (!el || !el.paused) return;
+    if (adState.current.requestPlay()) return;
     // HOLD UNTIL A SOURCE EXISTS. On an SPA feed→watch navigation the defaults
     // store and the per-user layer are already settled, so this effect ran on
     // the FIRST render — before the engine attached anything (in hls.js mode the
@@ -576,7 +638,7 @@ export function VideoPlayer({
       if (!current || current.played.length !== 0) return;
       startAttempted.current = false;
     });
-  }, [variant, videoRef]);
+  }, [videoRef]);
 
   // Re-run on attach, not just on the preference landing: playback.src/mode is
   // how the shell learns the engine re-pointed the element (the HLS→original
@@ -593,6 +655,7 @@ export function VideoPlayer({
     const el = videoRef.current;
     if (!el) return;
     const onPlayEv = () => {
+      if (adState.current.blocked) return;
       setLoading(el.readyState < HTMLMediaElement.HAVE_FUTURE_DATA);
       setPaused(false);
       setEnded(false); // any (re)start clears the end card
@@ -600,12 +663,14 @@ export function VideoPlayer({
       cbRef.current.onPlay?.();
     };
     const onPauseEv = () => {
+      if (adState.current.blocked) return;
       setLoading(false);
       setPaused(true);
       window.clearTimeout(idleRef.current); // pause pins the controls visible
       cbRef.current.onPause?.();
     };
     const onEndedEv = () => {
+      if (adState.current.blocked) return;
       setLoading(false);
       setEnded(true);
       window.clearTimeout(idleRef.current); // the end card takes over the surface
@@ -652,6 +717,7 @@ export function VideoPlayer({
     };
     for (const [name, handler] of Object.entries(loadingEvents)) el.addEventListener(name, handler);
     const onTimeEv = () => {
+      if (adState.current.blocked) return;
       setCurrentTime(el.currentTime);
       setBuffered(readBuffered(el.buffered));
       cbRef.current.onTimeUpdate?.();
@@ -673,7 +739,7 @@ export function VideoPlayer({
     // of the control bar already shows the level this device chose.
     const remembered = readStoredVolume();
     if (el.volume !== remembered.volume) el.volume = remembered.volume;
-    if (el.muted !== remembered.muted) el.muted = remembered.muted;
+    if (el.muted !== (initialMuted || remembered.muted)) el.muted = initialMuted || remembered.muted;
     el.addEventListener("play", onPlayEv);
     el.addEventListener("pause", onPauseEv);
     el.addEventListener("ended", onEndedEv);
@@ -712,7 +778,7 @@ export function VideoPlayer({
       el.removeEventListener("durationchange", onDurationEv);
       el.removeEventListener("volumechange", onVolumeEv);
     };
-  }, [videoRef, bump, attemptStartOnOpen, resetFeedback]);
+  }, [videoRef, bump, attemptStartOnOpen, resetFeedback, initialMuted]);
 
   // Track caption visibility from the element itself, so the toggle's
   // aria-pressed reflects changes made either here or via the C shortcut.
@@ -866,6 +932,7 @@ export function VideoPlayer({
   // theater target the container / page layout (the custom chrome survives).
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
+      if (adState.current.active) return;
       if (e.defaultPrevented) return;
       const target = e.target;
       if (target instanceof HTMLElement && target.isContentEditable) return;
@@ -1027,6 +1094,7 @@ export function VideoPlayer({
   return (
     <div
       ref={containerRef}
+      tabIndex={-1}
       data-testid="video-player"
       className={cn(
         // @container/stage: every breakpoint below is a query on the PLAYER's
@@ -1049,7 +1117,7 @@ export function VideoPlayer({
         // Hide the cursor with the chrome: a lone arrow floating over a
         // full-bleed frame is the one piece of UI left when everything else has
         // faded. Any pointer move calls bump() and brings both back.
-        !controlsVisible && "cursor-none",
+        !controlsVisible && !adActive && "cursor-none",
       )}
       onPointerMove={bump}
       onPointerDown={bump}
@@ -1059,19 +1127,23 @@ export function VideoPlayer({
     >
       <video
         ref={videoRef}
+        data-testid="content-video"
+        inert={adActive || undefined}
+        aria-hidden={adActive || undefined}
         playsInline
         className="h-full w-full touch-manipulation bg-black object-contain"
         // Set before src: native IPFS loads must omit cross-origin credentials.
         crossOrigin={playback.delivery?.source === "ipfs" ? "anonymous" : undefined}
         src={playback.src}
         poster={posterUrl}
-        {...surfaceHandlers}
+        {...(adActive ? {} : surfaceHandlers)}
       >
         {tracks.map((t) => (
           <track key={t.language} kind="captions" srcLang={t.language} label={t.label} src={t.url} />
         ))}
         Your browser does not support the video tag.
       </video>
+      <div data-testid="player-content" className="contents" inert={adActive || undefined} aria-hidden={adActive || undefined}>
 
       {/* The cues, drawn by us rather than the browser, so they can sit clear of
           the control bar instead of behind it. A child of the stage, so it
@@ -1098,7 +1170,7 @@ export function VideoPlayer({
           <span>{seekFeedback.seconds} seconds</span>
         </span>
       </div> : null}
-      {loading && !ended && !playback.failed && !overlay ? (
+      {loading && !pre.blocked && !ended && !playback.failed && !overlay ? (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <span className="flex h-[72px] w-[72px] items-center justify-center rounded-full bg-black/55">
             <Spinner label="Loading video" variant="media" />
@@ -1295,6 +1367,12 @@ export function VideoPlayer({
       {/* IPFS fetching/error surface (DR5) — the topmost layer, over the video
           and controls. Content is owned by WatchView (peer-free copy). */}
       {overlay}
+      </div>
+      {adActive ? ad ? <PrerollAd key={`${video.id}-${ad.mediaUrl}`} ad={ad} onDone={finishAd}
+        onStart={markVastPlayed} initialVolume={volume} initialMuted={muted} />
+        : <div className="absolute inset-0 z-40 flex items-center justify-center bg-black">
+          <Spinner label={t("watch.ad.loading")} variant="media" />
+        </div> : null}
     </div>
   );
 }
