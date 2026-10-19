@@ -135,50 +135,52 @@ export function MessageTimeline({
         aria-label={`Conversation with ${otherName}`}
         className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4"
       >
-        {hasEarlier ? (
-          <div className="flex flex-col items-center gap-1.5">
-            {earlierError ? <p role="alert" className="text-xs text-danger">{earlierError}</p> : null}
-            <button
-              type="button"
-              disabled={loadingEarlier}
-              onClick={() => {
-                const el = scrollRef.current;
-                anchorRef.current = el ? el.scrollHeight - el.scrollTop : null;
-                onLoadEarlier?.();
-              }}
-              className="focus-ring min-h-11 rounded-full border border-border px-4 py-1.5 text-xs font-semibold text-fg transition-colors hover:bg-surface-muted disabled:opacity-60"
-            >
-              {loadingEarlier ? "Loading earlier messages…" : "Show earlier messages"}
-            </button>
-          </div>
-        ) : null}
-        {items.length === 0 ? (
-          <p className="py-8 text-center text-sm text-fg-muted">
-            No messages yet. Say hello.
-          </p>
-        ) : (
-          <ol className="flex flex-col">
-            {items.map((item) => {
-              if (item.kind === "separator") {
-                return <TimeSeparator key={item.id} label={item.label} iso={item.iso} />;
-              }
-              if (item.kind === "new-divider") {
-                return <NewMessagesDivider key={item.id} />;
-              }
-              return (
-                <li key={item.id} className="mt-3 first:mt-0">
-                  <MessageGroup
-                    run={item}
-                    otherName={otherName}
-                    onDeleted={onDeleted}
-                    onRetry={onRetry}
-                    onDiscard={onDiscard}
-                  />
-                </li>
-              );
-            })}
-          </ol>
-        )}
+        <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col justify-end">
+          {hasEarlier ? (
+            <div className="flex flex-col items-center gap-1.5">
+              {earlierError ? <p role="alert" className="text-xs text-danger">{earlierError}</p> : null}
+              <button
+                type="button"
+                disabled={loadingEarlier}
+                onClick={() => {
+                  const el = scrollRef.current;
+                  anchorRef.current = el ? el.scrollHeight - el.scrollTop : null;
+                  onLoadEarlier?.();
+                }}
+                className="focus-ring min-h-11 rounded-full border border-border px-4 py-1.5 text-xs font-semibold text-fg transition-colors hover:bg-surface-muted disabled:opacity-60"
+              >
+                {loadingEarlier ? "Loading earlier messages…" : "Show earlier messages"}
+              </button>
+            </div>
+          ) : null}
+          {items.length === 0 ? (
+            <p className="py-8 text-center text-sm text-fg-muted">
+              No messages yet. Say hello.
+            </p>
+          ) : (
+            <ol className="flex flex-col">
+              {items.map((item) => {
+                if (item.kind === "separator") {
+                  return <TimeSeparator key={item.id} label={item.label} iso={item.iso} />;
+                }
+                if (item.kind === "new-divider") {
+                  return <NewMessagesDivider key={item.id} />;
+                }
+                return (
+                  <li key={item.id} className="mt-3 first:mt-0">
+                    <MessageGroup
+                      run={item}
+                      otherName={otherName}
+                      onDeleted={onDeleted}
+                      onRetry={onRetry}
+                      onDiscard={onDiscard}
+                    />
+                  </li>
+                );
+              })}
+            </ol>
+          )}
+        </div>
       </div>
 
       {showPill ? (
@@ -190,7 +192,7 @@ export function MessageTimeline({
               ? `Jump to latest, ${newCount} new ${newCount === 1 ? "message" : "messages"}`
               : "Jump to latest"
           }
-          className="focus-ring absolute bottom-3 right-3 inline-flex items-center gap-1.5 rounded-full border border-border-subtle bg-surface-raised px-3 py-2 text-[12px] font-semibold text-fg shadow-soft-strong transition-colors hover:bg-surface-muted"
+          className="focus-ring absolute bottom-3 right-3 inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-full border border-border-subtle bg-surface-raised px-3 py-2 text-[12px] font-semibold text-fg shadow-soft-strong transition-colors hover:bg-surface-muted"
         >
           <ChevronDownIcon size={16} strokeWidth={2} />
           {newCount > 0 ? <span className="tabular-nums">{newCount} new</span> : null}

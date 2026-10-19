@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { createPortal } from "react-dom";
 
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
@@ -19,36 +20,20 @@ const MAX_MESSAGE_LEN = 5000;
 // conversation rail (/messages). Unlike MessageButton (which already knows a
 // user's id from a comment), here the viewer types the recipient's *username*:
 // the composer resolves it server-side by starting the conversation, sends the
-// first message, then routes to the thread. Rendered only inside the rail's
-// authenticated branch. Styled as a compact compose icon button (template
-// language) with the accessible name "New message".
-export function NewMessageButton() {
+// first message, then routes to the thread. The visible action can also label an
+// empty-state CTA; its dialog is portaled clear of the split pane's clipping.
+export function NewMessageButton({ label = "New message" }: { label?: string }) {
   const [open, setOpen] = useState(false);
 
   return (
     <>
-      <button
-        type="button"
+      <Button
         onClick={() => setOpen(true)}
-        aria-label="New message"
-        title="New message"
-        className="focus-ring inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg"
+        className="shrink-0"
       >
-        <svg
-          aria-hidden
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="h-5 w-5"
-        >
-          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-          <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-        </svg>
-      </button>
-      {open ? <ComposeDialog onClose={() => setOpen(false)} /> : null}
+        {label}
+      </Button>
+      {open ? createPortal(<ComposeDialog onClose={() => setOpen(false)} />, document.body) : null}
     </>
   );
 }

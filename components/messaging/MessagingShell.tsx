@@ -43,22 +43,24 @@ export function MessagingShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <PageShell data-messaging-shell="" gutters="desktop" className="flex min-h-0">
-      <div
-        className={cn(
-          "min-h-0 flex-col lg:flex lg:w-[360px] lg:flex-none lg:shrink-0 lg:border-r lg:border-border-subtle",
-          onThread ? "hidden lg:flex" : "flex flex-1",
-        )}
-      >
-        <ConversationRail titleAsH1={!onThread} />
-      </div>
-      <div
-        className={cn(
-          "min-h-0 min-w-0 flex-col",
-          onThread ? "flex flex-1" : "hidden lg:flex lg:flex-1",
-        )}
-      >
-        {children}
+    <PageShell data-messaging-shell="" gutters="desktop" className="flex min-h-0 lg:py-4">
+      <div className="flex min-h-0 min-w-0 flex-1 lg:overflow-hidden lg:rounded-2xl lg:border lg:border-border-subtle lg:bg-surface lg:shadow-soft">
+        <div
+          className={cn(
+            "min-h-0 flex-col lg:flex lg:w-[360px] lg:flex-none lg:shrink-0 lg:border-r lg:border-border-subtle",
+            onThread ? "hidden lg:flex" : "flex flex-1",
+          )}
+        >
+          <ConversationRail titleAsH1={!onThread} />
+        </div>
+        <div
+          className={cn(
+            "min-h-0 min-w-0 flex-col",
+            onThread ? "flex flex-1" : "hidden lg:flex lg:flex-1",
+          )}
+        >
+          {children}
+        </div>
       </div>
     </PageShell>
   );
