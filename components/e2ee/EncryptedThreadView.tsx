@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { DeviceSetup } from "@/components/e2ee/DeviceSetup";
+import { useT } from "@/components/I18nProvider";
 import { LockIcon } from "@/components/icons";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Spinner } from "@/components/ui/Spinner";
@@ -19,7 +20,7 @@ import {
   expiresInSeconds,
   formatSafetyNumber,
 } from "@/lib/e2ee/envelope";
-import { discardEncryptedDraft, readEncryptedDraft } from "@/lib/e2ee/drafts";
+import { discardEncryptedDraft, readEncryptedDraft, stashEncryptedDraft } from "@/lib/e2ee/drafts";
 import { relativeTime } from "@/lib/format";
 import { logger } from "@/lib/logger";
 
@@ -43,7 +44,7 @@ interface ShownMessage {
   expires_at?: string;
 }
 
-type DeviceState = "loading" | "needs-setup" | LocalDevice;
+type DeviceState = "needs-setup" | LocalDevice;
 
 // EncryptedThreadView renders an end-to-end-encrypted 1:1 thread: a lock header
 // with honest §1 limitation copy, the decrypted messages (undecryptable ones
@@ -80,7 +81,7 @@ export function EncryptedThreadView({
   earlierError?: string | null;
   onLoadEarlier?: () => void;
 }) {
-  const [device, setDevice] = useState<DeviceState>("loading");
+  const [device, setDevice] = useState<DeviceState>("needs-setup");
   const [messages, setMessages] = useState<ShownMessage[]>([]);
   // Recovered from the outbox: who we last sent to in this thread.
   const [lastSentRecipientId, setLastSentRecipientId] = useState<string | undefined>(undefined);
@@ -187,28 +188,12 @@ export function EncryptedThreadView({
     [conversationId, myUserId, hasEarlier, localDeviceId],
   );
 
-  useEffect(() => {
-    let active = true;
-    void (async () => {
-      const engine = await getEngine();
-      const current = await engine.ensureDevice();
-      if (!active) return;
-      setDevice(current ?? "needs-setup");
-      if (!current) return;
-      // Keep prekeys topped up so peers can always start a session with us.
-      void engine.replenishOneTimeKeys().catch(() => {});
-    })();
-    return () => {
-      active = false;
-    };
-  }, [conversationId]);
-
   // Decrypt once the device is ready, and again whenever the parent's poll brings
   // a DIFFERENT set of envelopes. Keyed on the ids rather than the array identity
   // (which churns every poll); re-decrypting a seen envelope is a cache read.
   const envelopeIds = envelopes.map((e) => e.id).join(",");
   useEffect(() => {
-    if (device === "loading" || device === "needs-setup") return;
+    if (device === "needs-setup") return;
     void (async () => {
       await decryptAll(envelopes);
     })();
@@ -219,7 +204,6 @@ export function EncryptedThreadView({
   const onSetupReady = useCallback((d: LocalDevice) => {
     // Setting the device re-runs the decrypt effect above.
     setDevice(d);
-    void getEngine().then((e) => e.replenishOneTimeKeys().catch(() => {}));
   }, []);
 
   const onSent = useCallback((id: string, text: string, expiresAt?: string) => {
@@ -244,17 +228,14 @@ export function EncryptedThreadView({
   }, []);
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+      <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col justify-end gap-4">
       <LockHeader recipientId={effectiveRecipientId} />
 
-      {device === "loading" ? (
-        <div className="flex justify-center py-16">
-          <Spinner label="Opening encrypted conversation" />
-        </div>
-      ) : device === "needs-setup" ? (
+      {device === "needs-setup" ? (
         <DeviceSetup onReady={onSetupReady} />
       ) : (
-        <>
           <MessageList
             messages={messages}
             onAtBottomChange={onAtBottomChange}
@@ -263,14 +244,21 @@ export function EncryptedThreadView({
             earlierError={earlierError}
             onLoadEarlier={onLoadEarlier}
           />
+      )}
+      </div>
+      </div>
+      {device !== "needs-setup" ? (
+        <div className="shrink-0 border-t border-border-subtle bg-surface p-4">
+          <div className="mx-auto w-full max-w-3xl">
           <Composer
             conversationId={conversationId}
             recipientId={effectiveRecipientId}
             myUserId={myUserId}
             onSent={onSent}
           />
-        </>
-      )}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -282,8 +270,8 @@ function LockHeader({ recipientId }: { recipientId?: string }) {
   // instead of repeating that exact label — it stays the detailed trust explainer
   // (what E2EE does and doesn't protect) plus the safety-numbers affordance.
   return (
-    <div className="flex flex-col gap-2 rounded-2xl border border-success/25 bg-success/10 p-4">
-      <div className="flex items-center gap-2 text-success">
+    <div className="flex flex-col gap-2 rounded-2xl border border-border-subtle bg-surface-muted/50 p-4">
+      <div className="flex items-center gap-2 text-fg">
         <LockIcon size={16} />
         <span className="text-sm font-semibold">Only you two can read this</span>
       </div>
@@ -296,7 +284,7 @@ function LockHeader({ recipientId }: { recipientId?: string }) {
           type="button"
           onClick={() => setShowSafety((v) => !v)}
           aria-expanded={showSafety}
-          className="focus-ring rounded text-xs font-semibold text-success underline transition-opacity hover:opacity-80"
+          className="focus-ring min-h-11 rounded-xl px-2 text-sm font-semibold text-accent transition-opacity hover:opacity-80"
         >
           {showSafety ? "Hide safety numbers" : "View safety numbers"}
         </button>
@@ -493,7 +481,7 @@ function MessageList({
         type="button"
         disabled={loadingEarlier}
         onClick={requestEarlier}
-        className="focus-ring rounded-full border border-border px-4 py-1.5 text-xs font-semibold text-fg transition-colors hover:bg-surface-muted disabled:opacity-60"
+        className="focus-ring min-h-11 rounded-full border border-border px-4 py-1.5 text-xs font-semibold text-fg transition-colors hover:bg-surface-muted disabled:opacity-60"
       >
         {loadingEarlier ? "Loading earlier messages…" : "Show earlier messages"}
       </button>
@@ -608,6 +596,7 @@ function Composer({
   myUserId: string;
   onSent: (id: string, text: string, expiresAt?: string) => void;
 }) {
+  const t = useT();
   const [body, setBody] = useState(() => readEncryptedDraft(conversationId) ?? "");
   const [timer, setTimer] = useState<DisappearingOption>("off");
   const [busy, setBusy] = useState(false);
@@ -618,12 +607,11 @@ function Composer({
   // believe a device that got nothing can read the message.
   const [partial, setPartial] = useState<{ reached: number; total: number } | null>(null);
 
-  // This composer mounts only after the local E2EE device is ready. Its state
-  // initializer reads the process-memory draft; discard it only after React has
-  // committed the composer so a render retry cannot lose the handoff.
+  // Drafts stay in this account's memory across navigation; never browser storage.
   useEffect(() => {
-    discardEncryptedDraft(conversationId);
-  }, [conversationId]);
+    if (body) stashEncryptedDraft(conversationId, body);
+    else discardEncryptedDraft(conversationId);
+  }, [body, conversationId]);
 
   if (!recipientId) {
     return (
@@ -681,7 +669,9 @@ function Composer({
         setPartial({ reached: envelopes.length, total: envelopes.length + skipped.length });
       }
     } catch (err) {
-      if (err instanceof ApiError && err.status === 403) {
+      if (err instanceof Error && err.name === "PeerNotReadyError") {
+        setError(t("settings.secure.peerWaiting"));
+      } else if (err instanceof ApiError && err.status === 403) {
         setError("You can't message this user.");
       } else {
         setError(errorMessage(err, "Could not send your encrypted message."));
@@ -713,9 +703,9 @@ function Composer({
         maxLength={MAX_MESSAGE_LEN}
         value={body}
         onChange={(e) => setBody(e.target.value)}
-        className="focus-ring w-full resize-none rounded-[22px] bg-surface-muted px-4 py-2.5 text-[14.5px] text-fg placeholder:text-fg-muted"
+        className="focus-ring w-full resize-none rounded-2xl border border-border bg-surface px-4 py-3 text-base text-fg placeholder:text-fg-muted"
       />
-      {error ? <p className="text-sm text-danger">{error}</p> : null}
+      {error ? <p role="alert" className="text-sm text-danger">{error}</p> : null}
       <div className="flex items-center justify-between gap-2">
         <label className="flex items-center gap-2 text-xs text-fg-muted">
           Disappearing
@@ -723,7 +713,7 @@ function Composer({
             aria-label="Disappearing messages timer"
             value={timer}
             onChange={(e) => setTimer(e.target.value as DisappearingOption)}
-            className="focus-ring rounded-xl border border-border bg-surface px-2.5 py-1.5 text-xs text-fg"
+            className="focus-ring min-h-11 rounded-xl border border-border bg-surface px-2.5 py-1.5 text-xs text-fg"
           >
             {DISAPPEARING_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -735,7 +725,7 @@ function Composer({
         <button
           type="submit"
           disabled={busy || body.trim() === ""}
-          className="focus-ring rounded-full bg-accent px-4 py-2 text-sm font-semibold text-accent-fg transition-colors hover:bg-accent/90 disabled:opacity-60"
+          className="focus-ring min-h-11 rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-accent-fg transition-colors hover:bg-accent/90 disabled:opacity-60"
         >
           {busy ? "Sending…" : "Send"}
         </button>
