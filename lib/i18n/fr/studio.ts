@@ -1,6 +1,20 @@
 import type { Messages } from "../index";
 
 export const studio = {
+  "studio.passwords.title": "Mots de passe",
+  "studio.passwords.description": "Toute personne disposant de l’un de ces mots de passe peut regarder la vidéo. Ajoutez-en au moins un avant d’enregistrer. Les mots de passe sont stockés sous forme de hachage et ne sont jamais réaffichés.",
+  "studio.passwords.loading": "Chargement des mots de passe",
+  "studio.passwords.loadError": "Impossible de charger les mots de passe. Réessayez avant d’en ajouter ou d’en supprimer.",
+  "studio.passwords.empty": "Aucun mot de passe — ajoutez-en un pour que les spectateurs puissent accéder à cette vidéo.",
+  "studio.passwords.item": "Mot de passe {number}",
+  "studio.passwords.added": "ajouté le {date}",
+  "studio.passwords.remove": "Supprimer le mot de passe {number}",
+  "studio.passwords.new": "Nouveau mot de passe",
+  "studio.passwords.add": "Ajouter",
+  "studio.passwords.minLength": "Les mots de passe doivent comporter au moins {min} caractères.",
+  "studio.passwords.addError": "Impossible d’ajouter ce mot de passe.",
+  "studio.passwords.removeError": "Impossible de supprimer ce mot de passe.",
+  "studio.passwords.lastPassword": "Il s’agit du dernier mot de passe. Ajoutez-en un autre avant de le supprimer, ou modifiez la confidentialité de la vidéo.",
   // Machine-drafted, awaiting native-speaker review.
   // Video library, bulk actions, and editing.
   "studio.list.title": "Vos vidéos",

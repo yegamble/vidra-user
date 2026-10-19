@@ -1,4 +1,18 @@
 export const studio = {
+  "studio.passwords.title": "Passwords",
+  "studio.passwords.description": "Anyone with any of these passwords can watch. Add at least one before saving. Passwords are stored hashed and never shown again.",
+  "studio.passwords.loading": "Loading passwords",
+  "studio.passwords.loadError": "Could not load passwords. Try again before adding or removing passwords.",
+  "studio.passwords.empty": "No passwords yet — add one so viewers can unlock this video.",
+  "studio.passwords.item": "Password {number}",
+  "studio.passwords.added": "added {date}",
+  "studio.passwords.remove": "Remove password {number}",
+  "studio.passwords.new": "New password",
+  "studio.passwords.add": "Add",
+  "studio.passwords.minLength": "Passwords must be at least {min} characters.",
+  "studio.passwords.addError": "Could not add that password.",
+  "studio.passwords.removeError": "Could not remove that password.",
+  "studio.passwords.lastPassword": "This is the last password. Add another before removing it, or change the video's privacy.",
   // Studio "Your videos" list (MyVideosManager).
   "studio.list.title": "Your videos",
   "studio.list.refresh": "Refresh",
