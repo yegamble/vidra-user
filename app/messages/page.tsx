@@ -1,4 +1,5 @@
 import { MessageCircleIcon } from "@/components/icons";
+import { NewMessageButton } from "@/components/NewMessageButton";
 import { EmptyState } from "@/components/ui/EmptyState";
 
 // The desktop split-pane's right pane when no thread is open. On phones the
@@ -11,7 +12,12 @@ export default function MessagesPage() {
       <EmptyState
         icon={<MessageCircleIcon size={24} />}
         title="Your messages"
-        message="Pick a conversation, or start a new one."
+        message={
+          <>
+            <span className="block">Pick a conversation, or start a new one.</span>
+            <span className="mt-6 block"><NewMessageButton label="Start a conversation" /></span>
+          </>
+        }
       />
     </div>
   );
