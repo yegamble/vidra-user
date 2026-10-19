@@ -96,6 +96,16 @@ const SERVER_REGISTRY: Array<[string, ConfigPageId, string]> = [
   ["theme_primary_color", "customization", "theme"],
   ["header_hide_instance_name", "customization", "header"],
   ["default_player_autoplay", "customization", "player"],
+  ["player_vast_enabled", "vod", "advertising"],
+  ["player_vast_tag_url", "vod", "advertising"],
+  ["player_vast_midroll_tag_url", "vod", "advertising"],
+  ["player_vast_midroll_offset_seconds", "vod", "advertising"],
+  ["player_vast_postroll_tag_url", "vod", "advertising"],
+  ["player_vast_preroll_enabled", "vod", "advertising"],
+  ["player_vast_midroll_enabled", "vod", "advertising"],
+  ["player_vast_postroll_enabled", "vod", "advertising"],
+  ["player_vast_midroll_min_duration_seconds", "vod", "advertising"],
+  ["player_vast_cooldown_seconds", "vod", "advertising"],
   ["email_subject_prefix", "customization", "email"],
   ["email_body_signature", "customization", "email"],
   ["social_meta_twitter_username", "general", "social"],
@@ -240,6 +250,35 @@ describe("placementFor", () => {
     expect(META.broadcast_dismissable.parent).toBe("broadcast_enabled");
     expect(META.broadcast_message.control).toBe("markdown");
     expect(META.broadcast_level.control).toBe("level-segmented");
+  });
+
+  it("groups the VAST controls under Advertising with independent placements", () => {
+    const keys = SERVER_REGISTRY.filter(([key]) => key.startsWith("player_vast_")).map(([key]) => key);
+    const section = buildPageModel("vod", keys.map((key) => setting(key, { page: "vod", section: "advertising" })))
+      .find(({ section }) => section.id === "advertising");
+    expect(section?.section.title).toBe("Advertising");
+    expect(section?.section.description).toBeTruthy();
+    expect(new Set(section?.keys)).toEqual(new Set(keys));
+    expect(META.player_vast_enabled.control).toBe("toggle");
+    expect(META.player_vast_enabled.parent).toBeUndefined();
+    for (const [placement, url] of [
+      ["preroll", "player_vast_tag_url"],
+      ["midroll", "player_vast_midroll_tag_url"],
+      ["postroll", "player_vast_postroll_tag_url"],
+    ]) {
+      const toggle = `player_vast_${placement}_enabled`;
+      expect(META[toggle].control).toBe("toggle");
+      expect(META[toggle].parent).toBe("player_vast_enabled");
+      expect(META[url].control).toBe("text");
+      expect(META[url].parent).toBe(toggle);
+    }
+    for (const key of ["player_vast_midroll_offset_seconds", "player_vast_midroll_min_duration_seconds"]) {
+      expect(META[key].control).toBe("number");
+      expect(META[key].parent).toBe("player_vast_midroll_enabled");
+      expect(META[key].help).toMatch(/seconds/);
+    }
+    expect(META.player_vast_cooldown_seconds.parent).toBe("player_vast_enabled");
+    expect(META.player_vast_cooldown_seconds.help).toMatch(/0.*cooldown/);
   });
 
   it("server page/section metadata wins over the client map", () => {
