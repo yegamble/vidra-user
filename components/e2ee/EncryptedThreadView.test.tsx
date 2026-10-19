@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { EncryptedThreadView } from "./EncryptedThreadView";
 import type { EncryptedMessage } from "@/lib/api";
@@ -37,6 +37,7 @@ vi.mock("@/lib/e2ee/prepare", () => ({ prepareDevice: async () => engine.current
 
 // jsdom has no layout, so the thread's scroll anchoring has nothing to call.
 Element.prototype.scrollIntoView = () => {};
+beforeEach(() => vi.stubGlobal("matchMedia", () => ({ matches: true, addEventListener() {}, removeEventListener() {} })));
 
 function envelope(over: Partial<EncryptedMessage> & { id: string }): EncryptedMessage {
   return {
@@ -55,8 +56,10 @@ afterEach(() => {
   cleanup();
   decryptable.clear();
   vi.clearAllMocks();
+  engine.encryptMessage.mockReset();
   vi.restoreAllMocks();
   __resetEncryptedDraftsForTest();
+  vi.unstubAllGlobals();
 });
 
 const view = (envelopes: EncryptedMessage[]) =>
@@ -70,6 +73,17 @@ const view = (envelopes: EncryptedMessage[]) =>
   );
 
 describe("EncryptedThreadView envelope addressing", () => {
+  it("supports Enter to send while preserving Shift+Enter and IME composition", async () => {
+    engine.encryptMessage.mockRejectedValueOnce(new Error("offline"));
+    view([]);
+    const input = await screen.findByLabelText("Write an encrypted message");
+    fireEvent.change(input, { target: { value: "keyboard message" } });
+    fireEvent.keyDown(input, { key: "Enter", shiftKey: true });
+    fireEvent.keyDown(input, { key: "Enter", isComposing: true });
+    expect(engine.encryptMessage).not.toHaveBeenCalled();
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(engine.encryptMessage).toHaveBeenCalledWith("peer", "me", "keyboard message"));
+  });
   it("retains an unfinished secure draft when returning to the conversation", async () => {
     const first = view([]);
     fireEvent.change(await screen.findByLabelText("Write an encrypted message"), { target: { value: "unfinished private message" } });

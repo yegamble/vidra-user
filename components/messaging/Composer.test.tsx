@@ -35,6 +35,40 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.resetAllMocks(); vi.unstubAllGlobals(); });
 
 describe("Composer attachment contract", () => {
+  it.each(["retry", "remove"] as const)("keeps text and a failed attachment until the sender chooses to %s", async recovery => {
+    upload.mockRejectedValueOnce(new Error("offline"));
+    const { choose, onSend } = setup();
+    const textarea = screen.getByRole("textbox", { name: "Write a message" });
+    fireEvent.change(textarea, { target: { value: "Keep this message" } });
+    choose([file("review.pdf")]);
+    await screen.findByText("Upload failed.");
+    expect((screen.getByRole("button", { name: "Send message" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.keyDown(textarea, { key: "Enter" });
+    fireEvent.submit(textarea.closest("form")!);
+    expect(onSend).not.toHaveBeenCalled();
+    expect((textarea as HTMLTextAreaElement).value).toBe("Keep this message");
+    expect(screen.getByText("Retry or remove failed attachments before sending.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: recovery === "retry" ? "Retry" : "Remove attachment review.pdf" }));
+    await waitFor(() => expect((screen.getByRole("button", { name: "Send message" }) as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    expect(onSend).toHaveBeenCalledWith("Keep this message", recovery === "retry" ? ["review.pdf"] : []);
+  });
+
+  it("explains desktop keyboard behavior beside the composer", () => {
+    setup();
+    expect(screen.getByText("Enter to send · Shift+Enter for a new line")).toBeTruthy();
+  });
+
+  it("keeps Enter as a newline and omits the desktop hint on touch devices", () => {
+    vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
+    const { onSend } = setup();
+    const textarea = screen.getByRole("textbox", { name: "Write a message" });
+    fireEvent.change(textarea, { target: { value: "A new line" } });
+    fireEvent.keyDown(textarea, { key: "Enter" });
+    expect(onSend).not.toHaveBeenCalled();
+    expect(screen.queryByText("Enter to send · Shift+Enter for a new line")).toBeNull();
+  });
+
   it("sends all 30 attachments, including the exact 100 MiB boundary", async () => {
     const { choose, onSend } = setup();
     const files = Array.from({ length: 30 }, (_, i) => file(`${i}.pdf`, i === 0 ? 100 * 1024 * 1024 : 1));

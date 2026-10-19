@@ -4,6 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 
 import { DeviceSetup } from "@/components/e2ee/DeviceSetup";
 import { useT } from "@/components/I18nProvider";
+import { useFinePointer } from "@/components/messaging/Composer";
 import { LockIcon } from "@/components/icons";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Spinner } from "@/components/ui/Spinner";
@@ -23,6 +24,7 @@ import {
 import { discardEncryptedDraft, readEncryptedDraft, stashEncryptedDraft } from "@/lib/e2ee/drafts";
 import { relativeTime } from "@/lib/format";
 import { logger } from "@/lib/logger";
+import { shouldSendOnEnter } from "@/lib/messaging/composer-keys";
 
 const MAX_MESSAGE_LEN = 5000;
 
@@ -597,6 +599,7 @@ function Composer({
   onSent: (id: string, text: string, expiresAt?: string) => void;
 }) {
   const t = useT();
+  const finePointer = useFinePointer();
   const [body, setBody] = useState(() => readEncryptedDraft(conversationId) ?? "");
   const [timer, setTimer] = useState<DisappearingOption>("off");
   const [busy, setBusy] = useState(false);
@@ -624,7 +627,7 @@ function Composer({
 
   async function submit() {
     const trimmed = body.trim();
-    if (trimmed === "") return;
+    if (busy || trimmed === "") return;
     setBusy(true);
     setError(null);
     setPartial(null);
@@ -703,6 +706,12 @@ function Composer({
         maxLength={MAX_MESSAGE_LEN}
         value={body}
         onChange={(e) => setBody(e.target.value)}
+        onKeyDown={(e) => {
+          if (shouldSendOnEnter({ key: e.key, shiftKey: e.shiftKey, isComposing: e.nativeEvent.isComposing, enterSends: finePointer })) {
+            e.preventDefault();
+            void submit();
+          }
+        }}
         className="focus-ring w-full resize-none rounded-2xl border border-border bg-surface px-4 py-3 text-base text-fg placeholder:text-fg-muted"
       />
       {error ? <p role="alert" className="text-sm text-danger">{error}</p> : null}
