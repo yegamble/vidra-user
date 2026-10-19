@@ -7,14 +7,14 @@ import { useVastBreaks } from "./use-vast-breaks";
 vi.mock("@/lib/vast-client", () => ({ loadVast: vi.fn() }));
 afterEach(() => vi.restoreAllMocks());
 
-function setup() {
+function setup(offsetPercent = 0, stopAt: number | null = null) {
   const el = document.createElement("video");
   Object.defineProperty(el, "paused", { configurable: true, value: false });
   Object.defineProperty(el, "duration", { configurable: true, value: 120 });
   vi.spyOn(el, "pause").mockImplementation(() => {});
   vi.spyOn(el, "play").mockResolvedValue();
   const ref = { current: el };
-  const hook = renderHook(() => useVastBreaks(ref, "v1", "https://ads.test/mid", 30, "https://ads.test/post"));
+  const hook = renderHook(() => useVastBreaks(ref, "v1", "https://ads.test/mid", 30, "https://ads.test/post", 0, 0, offsetPercent, stopAt));
   return { el, ...hook };
 }
 
@@ -104,4 +104,51 @@ it("preserves embed looping after a post-roll without emitting content-ended", a
   expect(el.play).toHaveBeenCalledTimes(1);
   act(() => el.dispatchEvent(new Event("timeupdate")));
   expect(el.loop).toBe(true);
+});
+
+it("uses the actual media duration for a percentage rather than metadata-derived seconds", () => {
+  vi.mocked(loadVast).mockClear().mockImplementation(() => new Promise(() => {}));
+  const { el, result } = setup(50);
+  act(() => { el.currentTime = 30; el.dispatchEvent(new Event("timeupdate")); });
+  expect(loadVast).not.toHaveBeenCalled();
+  Object.defineProperty(el, "duration", { value: 240 });
+  act(() => { el.currentTime = 60; el.dispatchEvent(new Event("timeupdate")); });
+  expect(loadVast).not.toHaveBeenCalled();
+  act(() => { el.currentTime = 120; el.dispatchEvent(new Event("timeupdate")); });
+  expect(result.current.active).toBe(true);
+  expect(loadVast).toHaveBeenCalledExactlyOnceWith("https://ads.test/mid", expect.any(AbortSignal));
+});
+
+it("leaves 100 percent to the post-roll without requesting a duplicate mid-roll", async () => {
+  vi.mocked(loadVast).mockClear().mockResolvedValue({ mediaUrl: "https://ads.test/ad.mp4" } as never);
+  const { el, result } = setup(100);
+  act(() => { el.currentTime = 120; el.dispatchEvent(new Event("timeupdate")); });
+  expect(loadVast).not.toHaveBeenCalled();
+  const ended = vi.fn();
+  el.addEventListener("ended", ended);
+  act(() => el.dispatchEvent(new Event("ended")));
+  await waitFor(() => expect(result.current.ad).not.toBeNull());
+  expect(loadVast).toHaveBeenCalledExactlyOnceWith("https://ads.test/post", expect.any(AbortSignal));
+  expect(ended).not.toHaveBeenCalled();
+  act(() => result.current.finish());
+  expect(ended).toHaveBeenCalledOnce();
+});
+
+it.each([[20, 30], [30, 30], [40, 45]])("leaves clip stop %s visible to the embed at content time %s", (stopAt, at) => {
+  vi.mocked(loadVast).mockClear().mockImplementation(() => new Promise(() => {}));
+  const { el, result } = setup(0, stopAt);
+  const onTime = vi.fn();
+  el.addEventListener("timeupdate", onTime);
+  act(() => { el.currentTime = at; el.dispatchEvent(new Event("timeupdate")); });
+  expect(loadVast).not.toHaveBeenCalled();
+  expect(result.current.active).toBe(false);
+  expect(onTime).toHaveBeenCalledOnce();
+});
+
+it("still requests a mid-roll before the clip stop", () => {
+  vi.mocked(loadVast).mockClear().mockImplementation(() => new Promise(() => {}));
+  const { el, result } = setup(0, 40);
+  act(() => { el.currentTime = 30; el.dispatchEvent(new Event("timeupdate")); });
+  expect(result.current.active).toBe(true);
+  expect(loadVast).toHaveBeenCalledExactlyOnceWith("https://ads.test/mid", expect.any(AbortSignal));
 });
