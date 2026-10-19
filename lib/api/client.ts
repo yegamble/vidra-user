@@ -3,7 +3,7 @@ import { absoluteApiBaseUrl } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import { activeTraceFields, injectTraceContext } from "@/lib/observability/trace";
 
-import { getAccessToken, notifySessionExpired, setAccessToken } from "./auth-store";
+import { captureAuthSession, getAccessToken, notifySessionExpired } from "./auth-store";
 import type {
   ApiErrorEnvelope,
   AuthResponse,
@@ -272,7 +272,7 @@ async function doRequest<T>(
 // The single in-flight silent refresh. Concurrent 401s (or a 401 racing the
 // boot restore) share one rotation — the backend treats reuse of an
 // already-rotated refresh token as compromise, so exactly-once matters.
-let refreshInFlight: Promise<AuthResponse | null> | null = null;
+let refreshInFlight: { epoch: number; promise: Promise<AuthResponse | null> } | null = null;
 
 /**
  * restoreSession attempts one silent cookie-mode refresh: POST /auth/refresh
@@ -283,18 +283,19 @@ let refreshInFlight: Promise<AuthResponse | null> | null = null;
  * never an error. Used by AuthProvider on boot and by the 401 retry below.
  */
 export function restoreSession(): Promise<AuthResponse | null> {
-  if (!refreshInFlight) {
-    refreshInFlight = (async () => {
+  const session = captureAuthSession();
+  if (refreshInFlight?.epoch !== session.epoch) {
+    const promise = (async () => {
       try {
         const rotate = async () => {
+          if (!session.isCurrent()) return null;
           const body: RefreshRequest = { cookie_mode: true };
           const res = await doRequest<AuthResponse>(
             REFRESH_PATH,
-            { method: "POST", body, credentials: "include" },
+            { method: "POST", body, credentials: "include", signal: session.signal },
             null,
           );
-          setAccessToken(res.token);
-          return res;
+          return session.rotateToken(res.token) ? res : null;
         };
         // The cookie is shared across tabs, unlike refreshInFlight. Wait for
         // another tab's Set-Cookie before sending ours: replaying its previous
@@ -303,12 +304,13 @@ export function restoreSession(): Promise<AuthResponse | null> {
         return locks ? await locks.request("vidra-refresh-cookie", rotate) : await rotate();
       } catch {
         return null;
-      } finally {
-        refreshInFlight = null;
       }
     })();
+    const flight = { epoch: session.epoch, promise };
+    refreshInFlight = flight;
+    void promise.finally(() => { if (refreshInFlight === flight) refreshInFlight = null; });
   }
-  return refreshInFlight;
+  return refreshInFlight.promise;
 }
 
 /**
@@ -324,6 +326,7 @@ export function restoreSession(): Promise<AuthResponse | null> {
  * and the session-management endpoints (retryOn401: false) are never retried.
  */
 export async function apiRequest<T>(path: string, opts: RequestOptions = {}): Promise<T> {
+  const session = captureAuthSession();
   const usedStoredToken = opts.token === undefined && getAccessToken() !== null;
   try {
     return await doRequest<T>(path, opts, opts.token ?? getAccessToken());
@@ -333,9 +336,10 @@ export async function apiRequest<T>(path: string, opts: RequestOptions = {}): Pr
       err.status === 401 &&
       usedStoredToken &&
       opts.retryOn401 !== false;
-    if (!retriable) throw err;
+    if (!retriable || !session.isCurrent()) throw err;
 
     const restored = await restoreSession();
+    if (!session.isCurrent()) throw err;
     if (!restored) {
       // The refresh cookie is gone/dead too — the session is over.
       notifySessionExpired();
@@ -344,7 +348,7 @@ export async function apiRequest<T>(path: string, opts: RequestOptions = {}): Pr
     try {
       return await doRequest<T>(path, opts, restored.token);
     } catch (retryErr) {
-      if (retryErr instanceof ApiError && retryErr.status === 401) {
+      if (retryErr instanceof ApiError && retryErr.status === 401 && session.isCurrent()) {
         // Still unauthorized with a freshly rotated token: sign out for real.
         notifySessionExpired();
       }
