@@ -1,15 +1,18 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import type { ComponentProps } from "react";
+import { I18nProvider } from "@/components/I18nProvider";
+import { watch as french } from "@/lib/i18n/fr/watch";
 import type { VastDocument } from "@/lib/vast";
 import { trackVast } from "@/lib/vast-client";
 import { PrerollAd } from "./PrerollAd";
 vi.mock("@/lib/vast-client", () => ({ trackVast: vi.fn() }));
 const ad: VastDocument = { mediaUrl: "https://ads.test/clip.mp4", duration: 40, skipAfter: 5, clickThrough: "https://advertiser.test/", impressions: ["impression"], errors: ["error"], clickTracking: ["click"], tracking: Object.fromEntries(["start", "firstQuartile", "midpoint", "thirdQuartile", "complete", "skip"].map(event => [event, [event]])) };
-function setup(override = {}) {
+function setup(override = {}, props: Partial<ComponentProps<typeof PrerollAd>> = {}) {
   const onDone = vi.fn();
   const onStart = vi.fn();
-  const view = render(<PrerollAd ad={{ ...ad, ...override }} onDone={onDone} onStart={onStart} />);
+  const view = render(<PrerollAd ad={{ ...ad, ...override }} onDone={onDone} onStart={onStart} {...props} />);
   const video = view.container.querySelector("video")!;
   const time = (seconds: number) => { video.currentTime = seconds; fireEvent.timeUpdate(video); };
   return { ...view, video, time, onDone, onStart };
@@ -50,7 +53,7 @@ it("inherits content volume and embed mute without affecting the content element
 it("offers Skip only after the declared offset and never records complete for it", () => {
   const { time, onDone } = setup(); time(4);
   expect(screen.queryByRole("button", { name: "Skip ad" })).toBeNull();
-  expect(screen.getByText("Skip in 1s")).toBeTruthy(); time(5);
+  expect(screen.getByText("Skip in 1…")).toBeTruthy(); time(5);
   fireEvent.click(screen.getByRole("button", { name: "Skip ad" }));
   expect(onDone).toHaveBeenCalledOnce(); expect(trackVast).toHaveBeenCalledWith(["skip"]);
   expect(trackVast).not.toHaveBeenCalledWith(["complete"]);
@@ -65,7 +68,7 @@ it("keeps an unskippable ad unskippable and tracks only explicit advertiser clic
 });
 it("leaves a Play control after autoplay refusal without retrying muted or timing out", async () => {
   vi.mocked(HTMLMediaElement.prototype.play).mockRejectedValueOnce(new DOMException("User gesture required", "NotAllowedError"));
-  const { video, onDone } = setup(); await act(async () => { await Promise.resolve(); });
+  const { video, onDone } = setup({}, { showControls: false }); await act(async () => { await Promise.resolve(); });
   expect(screen.getByRole("button", { name: "Play advertisement" })).toBeTruthy();
   fireEvent.loadStart(video);
   act(() => vi.advanceTimersByTime(12001)); expect(onDone).not.toHaveBeenCalled();
@@ -91,4 +94,43 @@ it("does not finish or track a stale play rejection after unmount", async () => 
   const { unmount, onDone } = setup(); unmount();
   await act(async () => { reject(new Error("late failure")); await Promise.resolve(); });
   expect(onDone).not.toHaveBeenCalled(); expect(trackVast).not.toHaveBeenCalled();
+});
+it.each([[0, 5, null], [8, 5, 8], [3, 5, 5], [4, null, 4]] as const)("applies admin skip %s over creative offset %s", (configured, creative, threshold) => {
+  const { time } = setup({ skipAfter: creative }, { skipAfterSeconds: configured });
+  time(threshold === null ? 40 : threshold - 0.1);
+  expect(screen.queryByRole("button", { name: "Skip ad" })).toBeNull();
+  if (threshold !== null) { time(threshold); expect(screen.getByRole("button", { name: "Skip ad" })).toBeTruthy(); }
+  else expect(screen.queryByText(/Skip in/)).toBeNull();
+});
+it("renders custom labels as plain text and replaces every seconds placeholder", () => {
+  const { time } = setup({}, { skipAfterSeconds: 8, skipCountdown: "Wait {seconds}/{seconds} <b>now</b>", skipLabel: "", remainingMessage: "Ends in {seconds}/{seconds}" });
+  time(1.1);
+  expect(screen.getByText("Wait 7/7 <b>now</b>")).toBeTruthy();
+  expect(screen.getByText("Ends in 39/39")).toBeTruthy();
+  time(8); expect(screen.getByRole("button", { name: "Skip ad" })).toBeTruthy();
+});
+it("hides an explicitly empty remaining message and falls back from empty countdown", () => {
+  setup({}, { remainingMessage: "", skipCountdown: "" });
+  expect(screen.queryByText(/This ad will end/)).toBeNull();
+  expect(screen.getByText("Skip in 5…")).toBeTruthy();
+});
+it("replaces every seconds placeholder in the custom skip label", () => {
+  const { time } = setup({}, { skipLabel: "Continue {seconds}/{seconds}" }); time(5);
+  expect(screen.getByRole("button", { name: "Continue 0/0" })).toBeTruthy();
+});
+it("keeps video tap and focused keyboard transport available with hidden controls", () => {
+  const { video } = setup({}, { showControls: false });
+  fireEvent.playing(video);
+  const region = screen.getByRole("region", { name: "Advertisement" });
+  expect(region.tabIndex).toBe(0); expect(document.activeElement).toBe(region);
+  expect(screen.queryByRole("button", { name: /Pause|Mute advertisement/ })).toBeNull();
+  fireEvent.click(video); expect(video.pause).toHaveBeenCalledOnce(); fireEvent.pause(video);
+  expect(screen.getByRole("button", { name: "Play advertisement" })).toBeTruthy();
+  fireEvent.keyDown(region, { key: "k" }); expect(video.play).toHaveBeenCalledTimes(2);
+  fireEvent.playing(video); fireEvent.keyDown(region, { key: " " }); expect(video.pause).toHaveBeenCalledTimes(2);
+});
+it("translates the backend's default English templates", () => {
+  render(<I18nProvider locale="fr" messages={french}><PrerollAd ad={ad} onDone={vi.fn()} skipCountdown="Skip in {seconds}…" remainingMessage="This ad will end in {seconds}" /></I18nProvider>);
+  expect(screen.getByText("Passer dans 5 s…")).toBeTruthy();
+  expect(screen.getByText("Cette publicité se termine dans 40 s")).toBeTruthy();
 });
