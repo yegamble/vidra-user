@@ -72,7 +72,7 @@ export function ConversationView({
   recipientHint?: string;
   unreadCount?: number;
 }) {
-  const { status } = useSession();
+  const { status, user } = useSession();
 
   if (status !== "authed") {
     return (
@@ -87,7 +87,7 @@ export function ConversationView({
   // Key by id so navigating between threads remounts with fresh loading state.
   return (
     <Thread
-      key={conversationId}
+      key={`${user?.id}:${conversationId}`}
       conversationId={conversationId}
       recipientHint={recipientHint}
       unreadCount={unreadCount}

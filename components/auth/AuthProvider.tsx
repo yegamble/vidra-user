@@ -25,6 +25,7 @@ import type {
   UpdateProfileRequest,
   User,
 } from "@/lib/api";
+import { setE2EEUser } from "@/lib/e2ee/session";
 
 /**
  * "restoring" — the boot-time silent refresh is still in flight (views should
@@ -163,6 +164,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [scheduleRefresh]);
 
   const clearLocalSession = useCallback(() => {
+    setE2EEUser(null);
     sessionGenerationRef.current += 1;
     sessionActiveRef.current = false;
     clearRefreshTimer();
@@ -188,9 +190,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // user so a transient /me failure doesn't drop a valid session.
         try {
           const me = await authApi.me();
-          if (!cancelled) setUser(me);
+          if (!cancelled) { setE2EEUser(me.id); setUser(me); }
         } catch {
-          if (!cancelled) setUser(res.user);
+          if (!cancelled) { setE2EEUser(res.user.id); setUser(res.user); }
         }
       }
       if (!cancelled) setRestored(true);
@@ -198,6 +200,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => {
       cancelled = true;
+      setE2EEUser(null);
       sessionGenerationRef.current += 1;
       sessionActiveRef.current = false;
       clearRefreshTimer();
@@ -209,6 +212,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Cookie mode: the response body has no refresh_token — the httpOnly
     // cookie set by the backend is the sole carrier. Only the short-lived
     // access token is kept, in memory.
+    setE2EEUser(res.user.id);
     sessionGenerationRef.current += 1;
     sessionActiveRef.current = true;
     setAccessToken(res.token);

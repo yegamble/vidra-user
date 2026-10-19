@@ -1,7 +1,9 @@
 // Encrypted-message drafts are a one-navigation handoff between the inbox's
 // New-message dialog and the encrypted thread composer. Keep them only in this
 // JavaScript realm: plaintext must never be placed in a URL or browser storage.
+import { onE2EESessionChange } from "./session";
 const drafts = new Map<string, string>();
+onE2EESessionChange(() => drafts.clear());
 
 /** Hold a draft until the matching encrypted composer mounts. */
 export function stashEncryptedDraft(conversationId: string, body: string): void {

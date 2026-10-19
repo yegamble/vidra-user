@@ -5,7 +5,8 @@ import { ConversationView } from "./ConversationView";
 import { MessageTimeline } from "./messaging/MessageTimeline";
 import { api } from "@/lib/api";
 
-vi.mock("@/components/auth/AuthProvider", () => ({ useSession: () => ({ status: "authed", user: { id: "me" } }) }));
+const session = vi.hoisted(() => ({ status: "authed", user: { id: "me" } }));
+vi.mock("@/components/auth/AuthProvider", () => ({ useSession: () => session }));
 vi.mock("@/components/e2ee/EncryptedThreadView", () => ({ EncryptedThreadView: () => null }));
 vi.mock("@/components/messaging/Composer", () => ({ Composer: () => null }));
 vi.mock("@/components/messaging/ThreadHeader", () => ({ ThreadHeader: () => null }));
@@ -15,9 +16,19 @@ vi.mock("@/lib/api", async original => ({ ...await original<typeof import("@/lib
 const getMessages = vi.mocked(api.getConversationMessages);
 const message = (n: number) => ({ id: `m${n}`, conversation_id: "conversation", sender_id: "me", body: `message ${n}`, created_at: new Date(Date.UTC(2026, 8, 5, 0, 0, n)).toISOString() });
 const firstPage = Array.from({ length: 100 }, (_, i) => message(100 - i));
-afterEach(() => { cleanup(); vi.clearAllMocks(); });
+afterEach(() => { cleanup(); vi.clearAllMocks(); session.user.id = "me"; });
 
 describe("plaintext history", () => {
+  it("does not keep another account's loaded conversation on an account change", async () => {
+    getMessages.mockResolvedValueOnce({ limit: 100, offset: 0, messages: [message(1)] })
+      .mockImplementationOnce(() => new Promise(() => {}));
+    const { rerender } = render(<ConversationView conversationId="conversation" />);
+    await screen.findByText("message 1");
+    session.user.id = "other";
+    rerender(<ConversationView conversationId="conversation" />);
+    expect(screen.queryByText("message 1")).toBeNull();
+    session.user.id = "me";
+  });
   it("pages from the oldest loaded ID, merges overlap once and stops on a short page", async () => {
     getMessages.mockResolvedValueOnce({ limit: 100, offset: 0, messages: firstPage }).mockResolvedValueOnce({ limit: 100, offset: 0, messages: [message(1), message(0)] });
     render(<ConversationView conversationId="conversation" />);
