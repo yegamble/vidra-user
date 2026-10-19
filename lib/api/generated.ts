@@ -5842,7 +5842,7 @@ export interface paths {
         };
         /**
          * Get effective instance settings (admin)
-         * @description Returns every runtime-mutable instance setting's EFFECTIVE value together with its config default and whether the database currently overrides it. This is the DB-backed overlay (fix_plan P10) on top of the static config: the instance name/description and legal-contact metadata, the PeerTube platform-information fields (links, markdown bodies, default language, categories, moderator languages, sensitive-content policy), the registration gates (registration_enabled, registration_require_approval), the upload quarantine gate (quarantine_new_uploads), and the feature toggles (uploads_enabled, imports_enabled, live_enabled, comments_enabled, downloads_enabled). Downloads default to enabled and are controlled only by this runtime setting (there is no env/config counterpart). Boot-time-only secrets and infrastructure (database DSN, KEKs, JWT secret, storage backend) are NOT represented here — they stay in config. Restricted to admins.
+         * @description Returns every runtime-mutable instance setting's EFFECTIVE value together with its config default and whether the database currently overrides it. This is the DB-backed overlay (fix_plan P10) on top of the static config: the instance name/description and legal-contact metadata, the PeerTube platform-information fields (links, markdown bodies, default language, categories, moderator languages, sensitive-content policy), the registration gates (registration_enabled, registration_require_approval), the upload quarantine gate (quarantine_new_uploads), and the feature toggles (uploads_enabled, imports_enabled, live_enabled, comments_enabled, downloads_enabled). Downloads default to enabled and are controlled only by this runtime setting (there is no env/config counterpart). Boot-time-only secrets and infrastructure (database DSN, KEKs, JWT secret, storage backend) are NOT represented here — they stay in config. Player advertising is opt-in: player_vast_enabled defaults false and player_vast_tag_url defaults empty. The public tag URL is fetched only by browsers; it must be absolute HTTP(S), at most 2000 bytes, without whitespace, credentials, or fragments. An empty string clears the tag. player_vast_midroll_tag_url and player_vast_postroll_tag_url follow the same URL rules and default empty. player_vast_midroll_offset_seconds is an integer from 1 to 86400, default 300 (five minutes into content). Independent player_vast_preroll_enabled, player_vast_midroll_enabled, and player_vast_postroll_enabled switches default true beneath the disabled master toggle. Disabled placements expose empty public tag URLs. player_vast_midroll_min_duration_seconds (default 600) and player_vast_cooldown_seconds (default 300) range from 0 to 86400; zero removes the respective minimum. Cooldown covers all video ad breaks across video changes and is enforced by clients. Restricted to admins.
          */
         get: operations["getInstanceSettings"];
         put?: never;
@@ -7082,6 +7082,35 @@ export interface components {
                     comment_policy: "enabled" | "disabled" | "requires_approval";
                     download_enabled: boolean;
                 };
+            };
+            /** @description Optional browser VAST placement configuration. Absent on older servers; clients treat absence as disabled. Tag URLs are public configuration, never server-fetched or secret. Ad failures must resume normal content. */
+            ads?: {
+                /** @description True only when the master admin toggle is on and at least one enabled placement has a valid tag URL. */
+                enabled: boolean;
+                /** @description Absolute HTTP(S) tag URL, at most 2000 bytes, without whitespace, credentials or fragments; empty when unconfigured or the preroll placement is disabled. */
+                vast_tag_url: string;
+                /** @description Midroll tag URL with the same validation as vast_tag_url; empty or absent means no midroll, including when that placement is disabled. */
+                midroll_tag_url?: string;
+                /**
+                 * Format: int64
+                 * @description Content playback position for the midroll; defaults to 300 when absent on older servers.
+                 * @default 300
+                 */
+                midroll_offset_seconds: number;
+                /** @description Postroll tag URL with the same validation as vast_tag_url; empty or absent means no postroll, including when that placement is disabled. */
+                postroll_tag_url?: string;
+                /**
+                 * Format: int64
+                 * @description Minimum content duration for a midroll; zero removes the minimum. Clients use 600 when absent on older servers.
+                 * @default 600
+                 */
+                midroll_min_duration_seconds: number;
+                /**
+                 * Format: int64
+                 * @description Minimum interval between all video ad breaks across video changes, enforced by clients; zero disables cooldown. Clients use 300 when absent on older servers.
+                 * @default 300
+                 */
+                cooldown_seconds: number;
             };
             /** @description Operator broadcast banner (W3 renders it). */
             broadcast: {
