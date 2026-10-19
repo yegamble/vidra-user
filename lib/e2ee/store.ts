@@ -10,11 +10,15 @@
 // (messages THIS device sent, which the server can never hand back). Both are
 // wiped when the device is forgotten.
 
+import type { OneTimeKey } from "./envelope";
+
 export interface StoredDevice {
   deviceId: string;
   deviceName: string;
   pickle: string;
   pickleKey: string;
+  /** Durable public batch, retried verbatim until the server accepts it. */
+  pendingOneTimeKeys?: OneTimeKey[];
 }
 
 /**
@@ -83,9 +87,9 @@ function outboxRange(conversationId: string): IDBKeyRange {
   return IDBKeyRange.bound(prefix, `${prefix}\uffff`);
 }
 
-function openDb(): Promise<IDBDatabase> {
+function openDb(name: string): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    const req = indexedDB.open(name, DB_VERSION);
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE_NAME)) {
@@ -105,8 +109,10 @@ function openDb(): Promise<IDBDatabase> {
 
 /** The real IndexedDB-backed device store (browser only). */
 export class IndexedDBStore implements E2EEStore {
+  constructor(private readonly databaseName = DB_NAME) {}
+
   async load(): Promise<StoredDevice | null> {
-    const db = await openDb();
+    const db = await openDb(this.databaseName);
     try {
       return await new Promise<StoredDevice | null>((resolve, reject) => {
         const tx = db.transaction(STORE_NAME, "readonly");
@@ -120,7 +126,7 @@ export class IndexedDBStore implements E2EEStore {
   }
 
   async save(device: StoredDevice): Promise<void> {
-    const db = await openDb();
+    const db = await openDb(this.databaseName);
     try {
       await new Promise<void>((resolve, reject) => {
         const tx = db.transaction(STORE_NAME, "readwrite");
@@ -134,7 +140,7 @@ export class IndexedDBStore implements E2EEStore {
   }
 
   async clear(): Promise<void> {
-    const db = await openDb();
+    const db = await openDb(this.databaseName);
     try {
       await new Promise<void>((resolve, reject) => {
         // Forgetting this device also drops the decrypted-message cache AND the
@@ -153,7 +159,7 @@ export class IndexedDBStore implements E2EEStore {
   }
 
   async loadPlaintext(envelopeId: string): Promise<string | null> {
-    const db = await openDb();
+    const db = await openDb(this.databaseName);
     try {
       return await new Promise<string | null>((resolve, reject) => {
         const tx = db.transaction(PLAINTEXT_STORE, "readonly");
@@ -167,7 +173,7 @@ export class IndexedDBStore implements E2EEStore {
   }
 
   async savePlaintext(envelopeId: string, plaintext: string): Promise<void> {
-    const db = await openDb();
+    const db = await openDb(this.databaseName);
     try {
       await new Promise<void>((resolve, reject) => {
         const tx = db.transaction(PLAINTEXT_STORE, "readwrite");
@@ -181,7 +187,7 @@ export class IndexedDBStore implements E2EEStore {
   }
 
   async saveOwnMessage(rec: OwnMessageRecord): Promise<void> {
-    const db = await openDb();
+    const db = await openDb(this.databaseName);
     try {
       await new Promise<void>((resolve, reject) => {
         const tx = db.transaction(OUTBOX_STORE, "readwrite");
@@ -195,7 +201,7 @@ export class IndexedDBStore implements E2EEStore {
   }
 
   async listOwnMessages(conversationId: string): Promise<OwnMessageRecord[]> {
-    const db = await openDb();
+    const db = await openDb(this.databaseName);
     try {
       return await new Promise<OwnMessageRecord[]>((resolve, reject) => {
         const tx = db.transaction(OUTBOX_STORE, "readonly");

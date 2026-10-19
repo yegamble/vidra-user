@@ -160,6 +160,97 @@ describe("E2EEEngine", () => {
     expect(store.record?.pickleKey).toBeTruthy();
   });
 
+  describe("automatic device preparation", () => {
+    let registered: boolean;
+    let failRegistration: boolean;
+    let failUpload: boolean;
+    beforeEach(() => {
+      registered = false;
+      failRegistration = false;
+      failUpload = false;
+      route((url, init) => {
+        if (url.endsWith("/e2ee/devices")) {
+          if (init.method !== "POST") return json({ devices: registered ? [device("dev-1", "u1", "self")] : [] });
+          expect(store.record?.pickle).toBeTruthy(); // Private state is durable first.
+          registered = true;
+          if (failRegistration) throw new Error("registration response lost");
+          return json(device("dev-1", "u1", "self"));
+        }
+        if (url.endsWith("/one-time-keys/count")) return json({ count: 5 });
+        if (url.endsWith("/one-time-keys")) {
+          expect(store.record?.pendingOneTimeKeys).toEqual(JSON.parse(init.body as string).one_time_keys);
+          if (failUpload) throw new Error("upload response lost");
+          return json({ unclaimed: 30 });
+        }
+        throw new Error(`unexpected ${url}`);
+      });
+    });
+
+    it("registers once when callers prepare concurrently", async () => {
+      const prepared = await Promise.all([engine.ensureDevice(), engine.ensureDevice()]);
+      expect(prepared[0]).toEqual(prepared[1]);
+      expect(fetchMock.mock.calls.filter(([, init]) => init.method === "POST")).toHaveLength(2);
+    });
+
+    it("publishes nothing and remains unready when initial persistence fails", async () => {
+      vi.spyOn(store, "save").mockRejectedValueOnce(new Error("disk full"));
+      await expect(engine.setupDevice("Laptop")).rejects.toThrow("disk full");
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(await engine.currentDevice()).toBeNull();
+    });
+
+    it("recovers an uncertain registration using the persisted identity", async () => {
+      failRegistration = true;
+      await expect(engine.ensureDevice()).rejects.toThrow("could not reach the server");
+      expect(store.record?.deviceId).toBe("");
+      const reloaded = new E2EEEngine(provider, store);
+      expect((await reloaded.ensureDevice()).device_id).toBe("dev-1");
+      expect(fetchMock.mock.calls.filter(([url, init]) => url.endsWith("/e2ee/devices") && init.method === "POST")).toHaveLength(1);
+    });
+
+    it("retries a durable prekey batch after reload without registering again", async () => {
+      failUpload = true;
+      await expect(engine.ensureDevice()).rejects.toThrow("could not reach the server");
+      const pending = store.record?.pendingOneTimeKeys;
+      expect(pending).toHaveLength(OTK_UPLOAD_BATCH);
+      expect(await engine.currentDevice()).toBeNull();
+      failUpload = false;
+      await new E2EEEngine(provider, store).ensureDevice();
+      const uploads = fetchMock.mock.calls.filter(([url]) => url.endsWith("/one-time-keys"));
+      expect(uploads.map(([, init]) => JSON.parse(init.body).one_time_keys)).toEqual([pending, pending]);
+      expect(store.record?.pendingOneTimeKeys).toBeUndefined();
+    });
+
+    it("replenishes from the saved batch after an interrupted upload", async () => {
+      await engine.ensureDevice();
+      failUpload = true;
+      await expect(engine.replenishOneTimeKeys()).rejects.toThrow("could not reach the server");
+      expect(store.record?.pendingOneTimeKeys).toHaveLength(OTK_UPLOAD_BATCH - 5);
+      failUpload = false;
+      await new E2EEEngine(provider, store).ensureDevice();
+      expect(store.record?.pendingOneTimeKeys).toBeUndefined();
+    });
+
+    it("does not rotate a device missing from the account directory", async () => {
+      await engine.ensureDevice();
+      registered = false;
+      await expect(new E2EEEngine(provider, store).ensureDevice()).rejects.toThrow(/removed|registered/i);
+      expect(store.record?.deviceId).toBe("dev-1");
+    });
+
+    it("stops after session invalidation during registration", async () => {
+      let valid = true;
+      const guarded = new E2EEEngine(provider, store, () => { if (!valid) throw new Error("session changed"); });
+      fetchMock.mockImplementationOnce(async () => {
+        valid = false;
+        return json(device("dev-1", "u1", "self"));
+      });
+      await expect(guarded.ensureDevice()).rejects.toThrow("session changed");
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(store.record?.deviceId).toBe("");
+    });
+  });
+
   it("replenishOneTimeKeys tops up only when below the floor", async () => {
     store.record = {
       deviceId: "dev-1",
@@ -196,7 +287,7 @@ describe("E2EEEngine", () => {
     // Counts every destructive claim so a test can assert one was NOT made.
     let claims: string[];
 
-    function routeDirectoryAndClaims(opts: { peer?: unknown[]; mine?: unknown[] } = {}) {
+    function routeDirectoryAndClaims(opts: { peer?: unknown[]; mine?: unknown[]; exhausted?: boolean } = {}) {
       const peers = opts.peer ?? [peerDevice];
       const mine = opts.mine ?? [myOtherDevice, myCurrentDevice];
       route((url, init) => {
@@ -217,7 +308,7 @@ describe("E2EEEngine", () => {
                 device_id: d.id,
                 identity_key: d.identity_key,
                 signing_key: d.signing_key,
-                one_time_key: { key_id: "k", key: "otk" },
+                one_time_key: userId === "u-peer" && opts.exhausted ? null : { key_id: "k", key: "otk" },
               }),
             ),
           });
@@ -246,6 +337,11 @@ describe("E2EEEngine", () => {
         "peer-1",
       ]);
       expect(result.skipped).toEqual([]);
+    });
+
+    it.each([false, true])("rejects self-only delivery when peer keys are absent (exhausted: %s)", async (exhausted) => {
+      routeDirectoryAndClaims({ peer: exhausted ? [peerDevice] : [], exhausted });
+      await expect(engine.encryptMessage("u-peer", "u-me", "hello")).rejects.toThrow(/not ready/i);
     });
 
     // Claiming is destructive and unfilterable: the backend hands out one
@@ -285,7 +381,7 @@ describe("E2EEEngine", () => {
       ]);
     });
 
-    it("reports a device it cannot reach as skipped rather than dropping it", async () => {
+    it("rejects delivery when every peer device is unreachable", async () => {
       // The peer's pool is empty: the claim comes back with a null key and there
       // is no session to fall back on.
       route((url) => {
@@ -307,9 +403,9 @@ describe("E2EEEngine", () => {
         throw new Error(`unexpected ${url}`);
       });
 
-      const result = await engine.encryptMessage("u-peer", "u-me", "hello");
-      expect(result.envelopes).toEqual([]);
-      expect(result.skipped).toEqual(["peer-1"]);
+      await expect(engine.encryptMessage("u-peer", "u-me", "hello")).rejects.toMatchObject({
+        name: "PeerNotReadyError", skipped: ["peer-1"],
+      });
     });
   });
 
