@@ -14,7 +14,7 @@ import {
 // backend-backed profile against a live vidra-core + PostgreSQL and the real
 // @matrix-org/olm WASM served from /olm). Two browser contexts (A and B) each
 // with their own Olm account + IndexedDB exchange a genuinely encrypted DM:
-//   1. A and B each set up a device (first encrypted use) — real key upload.
+//   1. A and B automatically prepare their devices — real key upload.
 //   2. A sends an encrypted message; B reads the PLAINTEXT after a reload.
 //   3. The server holds ONLY ciphertext: B's own envelope fetch shows the blob is
 //      not the plaintext, and a THIRD account's list-messages is 404.
@@ -51,7 +51,7 @@ test("two real Olm devices exchange an encrypted DM; the server holds only ciphe
   const pageB = await ctxB.newPage();
 
   // --- A: sign in, start an ENCRYPTED conversation with B by username from the
-  // inbox composer, and set up A's device (first encrypted use).
+  // inbox composer; A's device is prepared automatically.
   await login(pageA, a.email);
   await pageA.getByRole("link", { name: "Messages" }).first().click();
   await pageA.getByRole("button", { name: "New message" }).click();
@@ -75,20 +75,19 @@ test("two real Olm devices exchange an encrypted DM; the server holds only ciphe
   const conversationId = pageA.url().match(/\/messages\/([0-9a-f-]+)/)![1];
 
   await expect(pageA.getByText("End-to-end encrypted")).toBeVisible();
-  await pageA.getByLabel("Device name").fill("Ada laptop");
-  await pageA.getByRole("button", { name: "Set up this device" }).click();
   await expect(pageA.getByLabel("Write an encrypted message")).toHaveValue(plaintext);
+  await expect(pageA.getByRole("button", { name: "Set up this device" })).toHaveCount(0);
 
-  // --- B: sign in, open the conversation from the inbox, set up B's device so A
-  // can claim one of B's one-time keys.
+  // --- B: sign in and open the conversation. Automatic preparation publishes B's
+  // keys so A can claim one without asking B to configure encryption.
   await login(pageB, b.email);
   await pageB.getByRole("link", { name: "Messages" }).first().click();
   await pageB.getByRole("link", { name: /Encrypted conversation/ }).first().click();
   await expect(pageB).toHaveURL(/\/messages\//);
   await expect(pageB.getByText("End-to-end encrypted")).toBeVisible();
-  await pageB.getByLabel("Device name").fill("Bob phone");
-  await pageB.getByRole("button", { name: "Set up this device" }).click();
   await expect(pageB.getByLabel("Write an encrypted message")).toBeVisible();
+  await expect.poll(async () => (await myE2EEDevices(request, a.token)).length).toBe(1);
+  await expect.poll(async () => (await myE2EEDevices(request, b.token)).length).toBe(1);
 
   // --- A: send an encrypted message (claims B's OTK, fans out).
   const sent = pageA.waitForResponse(

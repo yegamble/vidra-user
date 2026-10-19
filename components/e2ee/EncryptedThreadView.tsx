@@ -191,7 +191,7 @@ export function EncryptedThreadView({
     let active = true;
     void (async () => {
       const engine = await getEngine();
-      const current = await engine.currentDevice();
+      const current = await engine.ensureDevice();
       if (!active) return;
       setDevice(current ?? "needs-setup");
       if (!current) return;
