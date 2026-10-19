@@ -12,6 +12,7 @@ import { type ClaimedDevice, type OneTimeKey, fanOutEncrypt } from "./envelope";
 import { type E2EEStore, type OwnMessageRecord } from "./store";
 import { accountStore } from "./account-store";
 import { captureE2EESession, onE2EESessionChange } from "./session";
+import { coordinateEngine } from "./coordination";
 
 export type { OwnMessageRecord } from "./store";
 
@@ -64,6 +65,7 @@ interface Loaded {
 
 export class E2EEEngine {
   private loaded: Loaded | null = null;
+  private generation = 0;
   private loading: Promise<Loaded | null> | null = null;
   private deviceWork: Promise<unknown> = Promise.resolve();
   // sender_device_id -> Curve25519 identity_key, for inbound decryption.
@@ -75,15 +77,30 @@ export class E2EEEngine {
     private readonly assertSession: () => void = () => {},
   ) {}
 
-  private async checked<T>(work: () => Promise<T>): Promise<T> {
+  private assertGeneration(generation: number): void {
     this.assertSession();
+    if (generation !== this.generation) throw new Error("Encryption device changed; please try again.");
+  }
+
+  private async checked<T>(work: () => Promise<T>, release?: (value: T) => void): Promise<T> {
+    const generation = this.generation;
+    this.assertGeneration(generation);
     const result = await work();
-    this.assertSession();
+    try {
+      this.assertGeneration(generation);
+    } catch (err) {
+      release?.(result);
+      throw err;
+    }
     return result;
   }
 
   private queueDeviceWork<T>(work: () => Promise<T>): Promise<T> {
-    const pending = this.deviceWork.then(() => this.checked(work));
+    const generation = this.generation;
+    const pending = this.deviceWork.then(() => {
+      this.assertGeneration(generation);
+      return this.checked(work);
+    });
     this.deviceWork = pending.catch(() => {});
     return pending;
   }
@@ -102,13 +119,17 @@ export class E2EEEngine {
   private async ensureLoaded(): Promise<Loaded | null> {
     this.assertSession();
     if (this.loaded) return this.loaded;
-    return this.loading ??= this.restore().finally(() => { this.loading = null; });
+    if (!this.loading) {
+      const loading = this.restore().finally(() => { if (this.loading === loading) this.loading = null; });
+      this.loading = loading;
+    }
+    return this.loading;
   }
 
   private async restore(): Promise<Loaded | null> {
     const record = await this.checked(() => this.store.load());
     if (!record) return null;
-    const account = await this.checked(() => this.provider.restore(record.pickle, record.pickleKey));
+    const account = await this.checked(() => this.provider.restore(record.pickle, record.pickleKey), (account) => account.dispose());
     this.loaded = {
       account,
       deviceId: record.deviceId,
@@ -150,7 +171,7 @@ export class E2EEEngine {
     return this.queueDeviceWork(async () => {
       let loaded = await this.checked(() => this.ensureLoaded());
       if (!loaded) {
-        const account = await this.checked(() => this.provider.create());
+        const account = await this.checked(() => this.provider.create(), (account) => account.dispose());
         loaded = this.loaded = {
           account, deviceId: "", deviceName: name, pickleKey: randomPickleKey(),
           pendingOneTimeKeys: account.generateOneTimeKeys(OTK_UPLOAD_BATCH),
@@ -362,8 +383,10 @@ export class E2EEEngine {
 
   /** Forget the current in-memory account (e.g. after deleting this device). */
   reset(): void {
+    this.generation += 1;
     this.loaded?.account.dispose();
     this.loaded = null;
+    this.loading = null;
     this.deviceIdentity.clear();
   }
 
@@ -374,7 +397,13 @@ export class E2EEEngine {
    */
   async forgetDevice(): Promise<void> {
     this.reset();
-    await this.checked(() => this.store.clear());
+    // Do not wrap this entire task in checked: its final reset is intentional.
+    const forgotten = this.deviceWork.then(async () => {
+      await this.checked(() => this.store.clear());
+      this.reset();
+    });
+    this.deviceWork = forgotten.catch(() => {});
+    await forgotten;
   }
 }
 
@@ -394,7 +423,7 @@ export async function getEngine(): Promise<E2EEEngine> {
       session.assertCurrent();
       const store = await accountStore(session.userId, provider, session.assertCurrent);
       session.assertCurrent();
-      return new E2EEEngine(provider, store, session.assertCurrent);
+      return coordinateEngine(new E2EEEngine(provider, store, session.assertCurrent), session.userId, session.assertCurrent);
     })();
     engineSingleton = loading;
     void loading.catch(() => {

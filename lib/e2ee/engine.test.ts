@@ -238,6 +238,37 @@ describe("E2EEEngine", () => {
       expect(store.record?.deviceId).toBe("dev-1");
     });
 
+    it("forgets a device while its account is still restoring", async () => {
+      store.record = { deviceId: "dev-1", deviceName: "Laptop", pickle: "{pickle}", pickleKey: "pk" };
+      const account = new FakeAccount();
+      const dispose = vi.spyOn(account, "dispose");
+      let finish!: (account: CryptoAccount) => void;
+      const restore = vi.fn(() => new Promise<CryptoAccount>((resolve) => { finish = resolve; }));
+      const interrupted = new E2EEEngine({ ...provider, restore }, store);
+      const opening = expect(interrupted.currentDevice()).rejects.toThrow(/changed|reset/i);
+      await vi.waitFor(() => expect(restore).toHaveBeenCalledOnce());
+      await interrupted.forgetDevice();
+      finish(account);
+      await opening;
+      expect(dispose).toHaveBeenCalledOnce();
+      expect(await interrupted.currentDevice()).toBeNull();
+      expect(store.record).toBeNull();
+    });
+
+    it("forgets after an interrupted registration and cancels already queued preparation", async () => {
+      let finish!: (response: Response) => void;
+      fetchMock.mockImplementationOnce(() => new Promise<Response>((resolve) => { finish = resolve; }));
+      const preparing = expect(engine.ensureDevice()).rejects.toThrow(/changed|reset/i);
+      const queued = expect(engine.ensureDevice()).rejects.toThrow(/changed|reset/i);
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+      const forgetting = engine.forgetDevice();
+      finish(json(device("dev-1", "u1", "self")));
+      await Promise.all([preparing, queued, forgetting]);
+      expect(await engine.currentDevice()).toBeNull();
+      expect(store.record).toBeNull();
+      expect(fetchMock).toHaveBeenCalledOnce();
+    });
+
     it("stops after session invalidation during registration", async () => {
       let valid = true;
       const guarded = new E2EEEngine(provider, store, () => { if (!valid) throw new Error("session changed"); });
