@@ -105,3 +105,39 @@ it.each(["refresh", "me", "me-failure"])("keeps account B when boot-time account
   fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
   await waitFor(() => expect(screen.getByTestId("status").textContent).toBe("anon"));
 });
+
+
+it.each(["initial", "credentialed", "retry"])("rejects a stale successful %s response", async (stage) => {
+  let finish!: (response: Response) => void;
+  if (stage === "retry") fetchMock.mockResolvedValueOnce(json({ error: { code: "unauthorized" } }, 401))
+    .mockResolvedValueOnce(json(session(userA, "synthetic-a-refreshed")));
+  fetchMock.mockImplementationOnce(() => new Promise<Response>((resolve) => { finish = resolve; }));
+  setAccessToken(stage === "credentialed" ? null : "synthetic-a-before");
+  const pending = apiRequest("/api/v1/test-read", stage === "credentialed" ? { credentials: "include" } : {});
+  const rejected = expect(pending).rejects.toThrow(/account changed/i);
+  await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(stage === "retry" ? 3 : 1));
+  setAccessToken("synthetic-b-current");
+  finish(json({ id: userA.id }));
+  await rejected;
+  expect(getAccessToken()).toBe("synthetic-b-current");
+});
+
+it("preserves a new login when an earlier logout finishes", async () => {
+  let finish!: (response: Response) => void;
+  const pendingLogout = new Promise<Response>((resolve) => { finish = resolve; });
+  fetchMock.mockImplementation((url: string) => {
+    if (url.endsWith("/auth/refresh")) return Promise.resolve(json(session(userA, "synthetic-a-boot")));
+    if (url.endsWith("/auth/me")) return Promise.resolve(json(userA));
+    if (url.endsWith("/auth/logout")) return pendingLogout;
+    if (url.endsWith("/auth/login")) return Promise.resolve(json(session(userB, "synthetic-b-current")));
+    throw new Error(`unexpected request ${url}`);
+  });
+  render(<AuthProvider><Probe /></AuthProvider>);
+  await waitFor(() => expect(screen.getByTestId("user").textContent).toBe(userA.id));
+  fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+  await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => url.endsWith("/auth/logout"))).toBe(true));
+  fireEvent.click(screen.getByRole("button", { name: "Sign in B" }));
+  await waitFor(() => expect(screen.getByTestId("user").textContent).toBe(userB.id));
+  await act(async () => { finish(new Response(null, { status: 204 })); await pendingLogout; });
+  expect(getAccessToken()).toBe("synthetic-b-current");
+});

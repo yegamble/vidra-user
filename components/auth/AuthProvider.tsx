@@ -313,8 +313,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await authApi.logout();
     } catch {
       // Best-effort revoke; logout is idempotent server-side.
-    } finally {
-      setAccessToken(null);
     }
   }, [clearLocalSession]);
 

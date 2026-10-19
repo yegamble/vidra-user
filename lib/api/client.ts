@@ -328,8 +328,13 @@ export function restoreSession(): Promise<AuthResponse | null> {
 export async function apiRequest<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   const session = captureAuthSession();
   const usedStoredToken = opts.token === undefined && getAccessToken() !== null;
+  const boundToSession = usedStoredToken || opts.credentials === "include";
+  const accept = (response: T): T => {
+    if (boundToSession && !session.isCurrent()) throw new Error("The signed-in account changed.");
+    return response;
+  };
   try {
-    return await doRequest<T>(path, opts, opts.token ?? getAccessToken());
+    return accept(await doRequest<T>(path, opts, opts.token ?? getAccessToken()));
   } catch (err) {
     const retriable =
       err instanceof ApiError &&
@@ -346,7 +351,7 @@ export async function apiRequest<T>(path: string, opts: RequestOptions = {}): Pr
       throw err;
     }
     try {
-      return await doRequest<T>(path, opts, restored.token);
+      return accept(await doRequest<T>(path, opts, restored.token));
     } catch (retryErr) {
       if (retryErr instanceof ApiError && retryErr.status === 401 && session.isCurrent()) {
         // Still unauthorized with a freshly rotated token: sign out for real.
