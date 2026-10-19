@@ -62,6 +62,7 @@ export function InstanceBanner({ instance, nonce }: Props) {
   if (broadcast?.enabled !== true || message === "") return null;
   return (
     <BroadcastBanner
+      key={`${broadcastMessageHash(message)}:${broadcast.dismissable === true}`}
       message={message}
       level={normalizeBroadcastLevel(broadcast.level)}
       dismissable={broadcast.dismissable === true}

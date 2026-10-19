@@ -163,6 +163,19 @@ describe("InstanceBanner", () => {
     expect(banner()).toBeTruthy();
   });
 
+  it.each([
+    { message: "Updated announcement", dismissable: true },
+    { message: "Read me", dismissable: false },
+  ])("clears pre-paint hiding after a content or dismissal-policy update: %j", next => {
+    const { rerender } = render(<InstanceBanner instance={snapshot({ enabled: true, message: "Read me", dismissable: true })} />);
+    // The nonce-bearing pre-paint script changes the DOM outside React.
+    localStorage.setItem(BROADCAST_DISMISS_STORAGE_KEY, broadcastMessageHash("Read me"));
+    banner()!.hidden = true;
+    rerender(<InstanceBanner instance={snapshot({ enabled: true, ...next })} />);
+    expect(banner()).not.toBeNull();
+    expect(banner()!.hidden).toBe(false);
+  });
+
   it("embeds the pre-paint dismiss script keyed to this message's hash", () => {
     render(
       <InstanceBanner
