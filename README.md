@@ -211,3 +211,25 @@ generic GHCR image via `publish-container`.
 ## License
 
 vidra-user is free software licensed under the [GNU Affero General Public License v3.0](LICENSE).
+# Google Analytics 4
+
+Google Analytics is optional and disabled by default. In **Admin → Configuration
+→ General → Analytics**, enter your GA4 web stream's `G-…` Measurement ID and
+enable Google Analytics. No API secret is needed. Visitors must accept the
+analytics preference before the Google tag loads; they can change their choice
+using **Analytics preferences** on supported browsing pages. This browser-local
+choice is separate from account history and creator statistics.
+
+**Turn off Enhanced Measurement in the GA4 web stream before enabling this
+integration.** The application sends manual pageviews; automatic page/history,
+search, form and video events can duplicate counts or collect URL/content data.
+Do not add a second GA tag through custom JavaScript or Tag Manager.
+
+Pageviews use fixed categories (for example `/videos`), static titles and an
+empty referrer. Queries, hashes, video IDs, handles and actual page titles are
+omitted. Account, authentication, messaging, admin, studio, moderation, embeds
+and unknown routes are excluded. Category counts include video pages regardless
+of video visibility. GA can still collect normal session/device information
+after consent. Google code runs in the page; these controls are not isolation
+from third-party JavaScript. Ad personalization and Google signals are disabled.
+
