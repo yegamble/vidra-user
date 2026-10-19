@@ -10,6 +10,7 @@ import { SecureMessagingBootstrap } from "@/components/auth/SecureMessagingBoots
 import { BottomTabBar } from "@/components/BottomTabBar";
 import { Header } from "@/components/Header";
 import { I18nProvider } from "@/components/I18nProvider";
+import { InstanceAdsProvider } from "@/components/InstanceAdsProvider";
 import { InstanceBanner } from "@/components/InstanceBanner";
 import { InstanceCustomization } from "@/components/InstanceCustomization";
 import { Sidebar } from "@/components/Sidebar";
@@ -109,8 +110,8 @@ export default async function RootLayout({
         <a href="#main-content" className="skip-link">
           {t("a11y.skipToContent")}
         </a>
-        {/* Two providers, one indent: both are pure context with no markup. */}
-        <I18nProvider locale={locale} messages={messages}><SoftwareBrandProvider hidden={hideSoftwareName(instance)}>
+        {/* Three providers, one indent: all are context with no markup. */}
+        <I18nProvider locale={locale} messages={messages}><SoftwareBrandProvider hidden={hideSoftwareName(instance)}><InstanceAdsProvider ads={instance ? instance.ads ?? null : undefined}>
           <AuthProvider>
             <SecureMessagingBootstrap />
             <PlayerSettingsBootstrap />
@@ -137,7 +138,7 @@ export default async function RootLayout({
               <BottomTabBar />
             </ToastProvider>
           </AuthProvider>
-        </SoftwareBrandProvider></I18nProvider>
+        </InstanceAdsProvider></SoftwareBrandProvider></I18nProvider>
       </body>
     </html>
   );
