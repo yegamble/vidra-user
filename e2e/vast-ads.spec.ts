@@ -111,6 +111,9 @@ test("an API-only embed becomes ready and opens preroll without a UI click", asy
   await expect(adPlay).toBeVisible(); // ad transport stays reachable with embed controls=0
   expect(requests.tags).toEqual(["pre"]);
   expect(requests.privateHeaders).toEqual([]);
+  await adPlay.click();
+  await expect.poll(() => requests.beacons.includes("pre/complete"), { timeout: 10_000 }).toBe(true);
+  await expect.poll(() => requests.content).toBeGreaterThan(0); // native media end releases content
 });
 
 test("an ad that actually plays starts cooldown for every break and the next video", async ({ page, baseURL }) => {
