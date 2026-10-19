@@ -19,6 +19,8 @@ describe("analytics page privacy", () => {
     expect(analyticsPage("/channels/private-handle")).toBe("/channels");
     expect(analyticsPage("/search")).toBe("/search");
     expect(analyticsPage("/")).toBe("/");
+    expect(analyticsPage("/about/instance/home")).toBe("/about");
+    expect(analyticsPage("/about/vidra")).toBe("/about");
   });
   it.each(["/messages/secret", "/admin", "/settings", "/login", "/embed/video", "/studio", "/unknown", "/videos/id/edit", "/search?token=secret"])("excludes %s", (path) => {
     expect(analyticsPage(path)).toBeNull();

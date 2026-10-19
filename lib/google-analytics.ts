@@ -9,6 +9,7 @@ declare global {
 
 export function analyticsPage(pathname: string): string | null {
   if (["/", "/trending", "/search", "/about"].includes(pathname)) return pathname;
+  if (/^\/about\/(vidra|network|instance(?:\/(home|team|tech|moderation))?)$/.test(pathname)) return "/about";
   const category = /^\/(videos|channels|users|playlists|live|remote)\/[^/?#]+$/.exec(pathname);
   return category ? `/${category[1]}` : null;
 }
