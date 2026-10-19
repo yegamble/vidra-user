@@ -21,6 +21,7 @@ import RootLayout, { dynamic } from "./layout";
 import Script from "next/script";
 
 import { I18nProvider } from "@/components/I18nProvider";
+import { InstanceAdsProvider } from "@/components/InstanceAdsProvider";
 import { InstanceBanner } from "@/components/InstanceBanner";
 import { InstanceCustomization } from "@/components/InstanceCustomization";
 import { SoftwareBrandProvider } from "@/components/SoftwareBrandProvider";
@@ -51,6 +52,15 @@ async function renderWith(instance: InstanceConfigSnapshot | null, localeCookie?
 }
 
 describe("RootLayout", () => {
+  it("seeds ads before descendants render, distinguishing failure from an older backend", async () => {
+    const ads = { enabled: true, vast_tag_url: "https://ads.example/pre.xml" };
+    const known = findElement(await renderWith({ ads } as InstanceConfigSnapshot), InstanceAdsProvider);
+    expect(known, "all watch and embed routes must receive the SSR ad snapshot").not.toBeNull();
+    expect(known.props.ads).toBe(ads);
+    expect(findElement(await renderWith(null), InstanceAdsProvider).props.ads).toBeUndefined();
+    expect(findElement(await renderWith({} as InstanceConfigSnapshot), InstanceAdsProvider).props.ads).toBeNull();
+  });
+
   it("suppresses intentional hydration differences on both document elements", async () => {
     const html = await renderWith(null);
     const body = html.props.children;
