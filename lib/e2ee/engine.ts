@@ -18,6 +18,13 @@ export const MIN_ONE_TIME_KEYS = 20;
 /** Refill target when replenishing (sits comfortably above the floor). */
 export const OTK_UPLOAD_BATCH = 30;
 
+export class PeerNotReadyError extends Error {
+  readonly name = "PeerNotReadyError";
+  constructor(readonly skipped: string[] = []) {
+    super("The other person is not ready to receive encrypted messages yet.");
+  }
+}
+
 /** The caller's own registered device, as surfaced to the UI. */
 export interface LocalDevice {
   device_id: string;
@@ -45,22 +52,39 @@ interface Loaded {
   deviceId: string;
   deviceName: string;
   pickleKey: string;
+  pendingOneTimeKeys?: OneTimeKey[];
 }
 
 export class E2EEEngine {
   private loaded: Loaded | null = null;
+  private loading: Promise<Loaded | null> | null = null;
+  private deviceWork: Promise<unknown> = Promise.resolve();
   // sender_device_id -> Curve25519 identity_key, for inbound decryption.
   private deviceIdentity = new Map<string, string>();
 
   constructor(
     private readonly provider: CryptoProvider,
     private readonly store: E2EEStore,
+    private readonly assertSession: () => void = () => {},
   ) {}
+
+  private async checked<T>(work: () => Promise<T>): Promise<T> {
+    this.assertSession();
+    const result = await work();
+    this.assertSession();
+    return result;
+  }
+
+  private queueDeviceWork<T>(work: () => Promise<T>): Promise<T> {
+    const pending = this.deviceWork.then(() => this.checked(work));
+    this.deviceWork = pending.catch(() => {});
+    return pending;
+  }
 
   /** The current device if this browser has one set up, else null. */
   async currentDevice(): Promise<LocalDevice | null> {
-    const loaded = await this.ensureLoaded();
-    if (!loaded) return null;
+    const loaded = await this.checked(() => this.ensureLoaded());
+    if (!loaded?.deviceId || loaded.pendingOneTimeKeys?.length) return null;
     return {
       device_id: loaded.deviceId,
       device_name: loaded.deviceName,
@@ -69,27 +93,40 @@ export class E2EEEngine {
   }
 
   private async ensureLoaded(): Promise<Loaded | null> {
+    this.assertSession();
     if (this.loaded) return this.loaded;
-    const record = await this.store.load();
+    return this.loading ??= this.restore().finally(() => { this.loading = null; });
+  }
+
+  private async restore(): Promise<Loaded | null> {
+    const record = await this.checked(() => this.store.load());
     if (!record) return null;
-    const account = await this.provider.restore(record.pickle, record.pickleKey);
+    const account = await this.checked(() => this.provider.restore(record.pickle, record.pickleKey));
     this.loaded = {
       account,
       deviceId: record.deviceId,
       deviceName: record.deviceName,
       pickleKey: record.pickleKey,
+      pendingOneTimeKeys: record.pendingOneTimeKeys,
     };
     return this.loaded;
   }
 
   private async persist(): Promise<void> {
-    if (!this.loaded) return;
-    await this.store.save({
-      deviceId: this.loaded.deviceId,
-      deviceName: this.loaded.deviceName,
-      pickle: this.loaded.account.serialize(this.loaded.pickleKey),
-      pickleKey: this.loaded.pickleKey,
-    });
+    const loaded = this.loaded;
+    if (!loaded) return;
+    try {
+      await this.checked(() => this.store.save({
+        deviceId: loaded.deviceId,
+        deviceName: loaded.deviceName,
+        pickle: loaded.account.serialize(loaded.pickleKey),
+        pickleKey: loaded.pickleKey,
+        pendingOneTimeKeys: loaded.pendingOneTimeKeys,
+      }));
+    } catch (err) {
+      this.reset(); // A failed write must never leave an apparently ready account.
+      throw err;
+    }
   }
 
   /**
@@ -97,19 +134,47 @@ export class E2EEEngine {
    * account, publish its public identity/signing keys, upload a batch of one-time
    * prekeys, and persist the pickled account under a random pickle key.
    */
-  async setupDevice(name: string): Promise<LocalDevice> {
-    const account = await this.provider.create();
-    const device = await api.registerE2EEDevice({
-      device_name: name,
-      identity_key: account.identityKey,
-      signing_key: account.signingKey,
+  setupDevice(name: string): Promise<LocalDevice> {
+    return this.ensureDevice(name);
+  }
+
+  /** Serialized, retryable preparation; private state is durable before publication. */
+  ensureDevice(name = "This browser"): Promise<LocalDevice> {
+    return this.queueDeviceWork(async () => {
+      let loaded = await this.checked(() => this.ensureLoaded());
+      if (!loaded) {
+        const account = await this.checked(() => this.provider.create());
+        loaded = this.loaded = {
+          account, deviceId: "", deviceName: name, pickleKey: randomPickleKey(),
+          pendingOneTimeKeys: account.generateOneTimeKeys(OTK_UPLOAD_BATCH),
+        };
+        await this.persist();
+      } else {
+        const { devices } = await this.checked(() => api.listMyE2EEDevices());
+        const current = loaded;
+        const existing = devices.find((d) => (!current.deviceId || d.id === current.deviceId) &&
+          d.identity_key === current.account.identityKey && d.signing_key === current.account.signingKey);
+        if (loaded.deviceId && !existing) throw new Error("This encryption device was removed or its registered keys changed. Remove it locally in Settings → Devices before preparing a new device.");
+        if (existing) loaded.deviceId = existing.id;
+      }
+      if (!loaded.deviceId) {
+        const device = await this.checked(() => api.registerE2EEDevice({
+          device_name: loaded.deviceName, identity_key: loaded.account.identityKey,
+          signing_key: loaded.account.signingKey,
+        }));
+        loaded.deviceId = device.id;
+      }
+      await this.persist();
+      await this.publishPendingKeys(loaded);
+      return { device_id: loaded.deviceId, device_name: loaded.deviceName, fingerprint: loaded.account.fingerprint() };
     });
-    const keys = account.generateOneTimeKeys(OTK_UPLOAD_BATCH);
-    await api.uploadE2EEOneTimeKeys(device.id, keys);
-    const pickleKey = randomPickleKey();
-    this.loaded = { account, deviceId: device.id, deviceName: name, pickleKey };
+  }
+
+  private async publishPendingKeys(loaded: Loaded): Promise<void> {
+    if (!loaded.pendingOneTimeKeys?.length) return;
+    await this.checked(() => api.uploadE2EEOneTimeKeys(loaded.deviceId, loaded.pendingOneTimeKeys!));
+    loaded.pendingOneTimeKeys = undefined;
     await this.persist();
-    return { device_id: device.id, device_name: name, fingerprint: account.fingerprint() };
   }
 
   /**
@@ -117,14 +182,17 @@ export class E2EEEngine {
    * batch size whenever they dip below MIN_ONE_TIME_KEYS (each conversation a
    * peer starts consumes one). A no-op when the floor is already met.
    */
-  async replenishOneTimeKeys(): Promise<void> {
-    const loaded = await this.ensureLoaded();
-    if (!loaded) return;
-    const { count } = await api.countE2EEOneTimeKeys(loaded.deviceId);
-    if (count >= MIN_ONE_TIME_KEYS) return;
-    const keys = loaded.account.generateOneTimeKeys(OTK_UPLOAD_BATCH - count);
-    await api.uploadE2EEOneTimeKeys(loaded.deviceId, keys);
-    await this.persist();
+  replenishOneTimeKeys(): Promise<void> {
+    return this.queueDeviceWork(async () => {
+      const loaded = await this.checked(() => this.ensureLoaded());
+      if (!loaded?.deviceId) return;
+      await this.publishPendingKeys(loaded);
+      const { count } = await this.checked(() => api.countE2EEOneTimeKeys(loaded.deviceId));
+      if (count >= MIN_ONE_TIME_KEYS) return;
+      loaded.pendingOneTimeKeys = loaded.account.generateOneTimeKeys(OTK_UPLOAD_BATCH - count);
+      await this.persist();
+      await this.publishPendingKeys(loaded);
+    });
   }
 
   /**
@@ -148,15 +216,17 @@ export class E2EEEngine {
     myUserId: string,
     plaintext: string,
   ): Promise<EncryptResult> {
-    const loaded = await this.ensureLoaded();
-    if (!loaded) throw new Error("no E2EE device is set up");
+    const loaded = await this.checked(() => this.ensureLoaded());
+    if (!loaded?.deviceId || loaded.pendingOneTimeKeys?.length) throw new Error("no E2EE device is set up");
 
     // Neither of these consumes a prekey.
     const [peerDir, myDir] = await Promise.all([
-      api.listUserE2EEDevices(recipientUserId),
-      api.listMyE2EEDevices(),
+      this.checked(() => api.listUserE2EEDevices(recipientUserId)),
+      this.checked(() => api.listMyE2EEDevices()),
     ]);
+    this.assertSession();
     const peerDevices = peerDir.devices;
+    if (peerDevices.length === 0) throw new PeerNotReadyError();
     const myDevices = myDir.devices.filter((d) => d.id !== loaded.deviceId);
     // Remember every device's identity key so we can decrypt their replies.
     for (const d of [...peerDevices, ...myDevices]) {
@@ -169,9 +239,10 @@ export class E2EEEngine {
     const unreachable = (d: { identity_key: string }) =>
       !loaded.account.hasOutboundSession(d.identity_key);
     const [peerClaims, myClaims] = await Promise.all([
-      peerDevices.some(unreachable) ? api.claimE2EEOneTimeKeys(recipientUserId) : null,
-      myDevices.some(unreachable) ? api.claimE2EEOneTimeKeys(myUserId) : null,
+      peerDevices.some(unreachable) ? this.checked(() => api.claimE2EEOneTimeKeys(recipientUserId)) : null,
+      myDevices.some(unreachable) ? this.checked(() => api.claimE2EEOneTimeKeys(myUserId)) : null,
     ]);
+    this.assertSession();
     const claimedKey = new Map<string, OneTimeKey | null>();
     for (const c of [...(peerClaims?.claims ?? []), ...(myClaims?.claims ?? [])]) {
       claimedKey.set(c.device_id, c.one_time_key);
@@ -193,6 +264,9 @@ export class E2EEEngine {
       plaintext,
     });
     await this.persist();
+    if (!envelopes.some((env) => peerDevices.some((d) => d.id === env.recipient_device_id))) {
+      throw new PeerNotReadyError(skipped);
+    }
     return { sender_device_id: loaded.deviceId, envelopes, skipped };
   }
 
@@ -202,21 +276,21 @@ export class E2EEEngine {
    * read history) — the caller renders a per-message "undecryptable" state.
    */
   async decryptEnvelope(env: EncryptedMessage): Promise<string> {
-    const loaded = await this.ensureLoaded();
+    const loaded = await this.checked(() => this.ensureLoaded());
     if (!loaded) throw new Error("no E2EE device is set up");
     // Olm messages are one-shot decryptable: a pre-key/ratchet message consumes
     // its one-time key and ratchets the session past it, so it can only be
     // decrypted ONCE. Thread reloads re-fetch every envelope, so return the
     // cached plaintext for an envelope we've already decrypted instead of trying
     // (and failing) to decrypt it again.
-    const cached = await this.store.loadPlaintext(env.id);
+    const cached = await this.checked(() => this.store.loadPlaintext(env.id));
     if (cached !== null) return cached;
-    const identityKey = await this.identityKeyFor(env.sender_user_id, env.sender_device_id);
+    const identityKey = await this.checked(() => this.identityKeyFor(env.sender_user_id, env.sender_device_id));
     const plaintext = loaded.account.decryptFrom(identityKey, env.message_type, env.ciphertext);
     // Persist the ratcheted session BEFORE caching the plaintext, so a crash
     // between the two never loses the session that produced it.
     await this.persist();
-    await this.store.savePlaintext(env.id, plaintext);
+    await this.checked(() => this.store.savePlaintext(env.id, plaintext));
     return plaintext;
   }
 
@@ -228,7 +302,7 @@ export class E2EEEngine {
    * without it, every remount of the thread drops our half of the conversation.
    */
   async recordOwnMessage(rec: OwnMessageRecord): Promise<void> {
-    await this.store.saveOwnMessage(rec);
+    await this.checked(() => this.store.saveOwnMessage(rec));
   }
 
   /**
@@ -238,7 +312,7 @@ export class E2EEEngine {
    */
   async ownMessages(conversationId: string): Promise<OwnMessageRecord[]> {
     const now = Date.now();
-    const records = await this.store.listOwnMessages(conversationId);
+    const records = await this.checked(() => this.store.listOwnMessages(conversationId));
     return records
       .filter((r) => r.expires_at === undefined || new Date(r.expires_at).getTime() > now)
       .sort((a, b) => {
@@ -251,7 +325,7 @@ export class E2EEEngine {
   private async identityKeyFor(userId: string, deviceId: string): Promise<string> {
     const cached = this.deviceIdentity.get(deviceId);
     if (cached) return cached;
-    const { devices } = await api.listUserE2EEDevices(userId);
+    const { devices } = await this.checked(() => api.listUserE2EEDevices(userId));
     for (const d of devices) this.deviceIdentity.set(d.id, d.identity_key);
     const found = this.deviceIdentity.get(deviceId);
     if (!found) throw new Error("unknown sender device");
@@ -260,7 +334,7 @@ export class E2EEEngine {
 
   /** The caller's own device fingerprint (safety number source), if set up. */
   async localFingerprint(): Promise<DeviceFingerprint | null> {
-    const device = await this.currentDevice();
+    const device = await this.checked(() => this.currentDevice());
     if (!device) return null;
     return {
       device_id: device.device_id,
@@ -271,7 +345,7 @@ export class E2EEEngine {
 
   /** A peer's device fingerprints (from their published signing keys). */
   async peerFingerprints(userId: string): Promise<DeviceFingerprint[]> {
-    const { devices } = await api.listUserE2EEDevices(userId);
+    const { devices } = await this.checked(() => api.listUserE2EEDevices(userId));
     return devices.map((d) => ({
       device_id: d.id,
       device_name: d.device_name,
@@ -293,7 +367,7 @@ export class E2EEEngine {
    */
   async forgetDevice(): Promise<void> {
     this.reset();
-    await this.store.clear();
+    await this.checked(() => this.store.clear());
   }
 }
 
