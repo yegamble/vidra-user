@@ -4,6 +4,8 @@
 // rehydrated via the httpOnly `vidra_refresh` cookie (see restoreSession in
 // client.ts). The value never appears in any log line.
 let accessToken: string | null = null;
+let sessionEpoch = 0;
+let sessionController = new AbortController();
 
 // The app-level reaction to an unrecoverable 401 (refresh failed or the retried
 // request was still unauthorized). AuthProvider registers a handler that clears
@@ -11,7 +13,26 @@ let accessToken: string | null = null;
 let sessionExpiredHandler: (() => void) | null = null;
 
 export function setAccessToken(token: string | null): void {
+  const previous = sessionController;
+  sessionEpoch += 1;
   accessToken = token;
+  sessionController = new AbortController();
+  previous.abort();
+}
+
+/** A login/logout boundary invalidates old work; token rotation keeps the epoch. */
+export function captureAuthSession() {
+  const epoch = sessionEpoch;
+  return {
+    epoch,
+    signal: sessionController.signal,
+    isCurrent: () => epoch === sessionEpoch,
+    rotateToken(token: string): boolean {
+      if (epoch !== sessionEpoch) return false;
+      accessToken = token;
+      return true;
+    },
+  };
 }
 
 export function getAccessToken(): string | null {
@@ -25,6 +46,6 @@ export function setSessionExpiredHandler(handler: (() => void) | null): void {
 
 /** Drop the in-memory token and tell the app the session is gone. */
 export function notifySessionExpired(): void {
-  accessToken = null;
+  setAccessToken(null);
   sessionExpiredHandler?.();
 }

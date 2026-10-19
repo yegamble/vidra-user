@@ -174,6 +174,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
+    const bootGeneration = sessionGenerationRef.current;
     // An unrecoverable 401 mid-session (refresh failed, or a retried request
     // was still unauthorized) drops the UI to signed-out everywhere.
     setSessionExpiredHandler(clearLocalSession);
@@ -181,8 +182,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void (async () => {
       const res = await restoreSession();
       if (cancelled) return;
+      if (bootGeneration !== sessionGenerationRef.current) {
+        setRestored(true);
+        return;
+      }
       if (res) {
         sessionGenerationRef.current += 1;
+        const restoredGeneration = sessionGenerationRef.current;
         sessionActiveRef.current = true;
         scheduleRefresh(res.expires_in, sessionGenerationRef.current);
         // Prefer a fresh /auth/me read (role/verification may have changed
@@ -190,9 +196,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // user so a transient /me failure doesn't drop a valid session.
         try {
           const me = await authApi.me();
-          if (!cancelled) { setE2EEUser(me.id); setUser(me); }
+          if (!cancelled && restoredGeneration === sessionGenerationRef.current) { setE2EEUser(me.id); setUser(me); }
         } catch {
-          if (!cancelled) { setE2EEUser(res.user.id); setUser(res.user); }
+          if (!cancelled && restoredGeneration === sessionGenerationRef.current) { setE2EEUser(res.user.id); setUser(res.user); }
         }
       }
       if (!cancelled) setRestored(true);
@@ -307,8 +313,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await authApi.logout();
     } catch {
       // Best-effort revoke; logout is idempotent server-side.
-    } finally {
-      setAccessToken(null);
     }
   }, [clearLocalSession]);
 
