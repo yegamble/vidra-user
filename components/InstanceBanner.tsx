@@ -123,7 +123,7 @@ function BroadcastBanner({
   // reappear for everyone.
   if ((dismissed || locallyDismissed === hash) && dismissable) return null;
   const Icon = level === "info" ? InfoIcon : WarningIcon;
-  const label = t(level === "info" ? "announcement.label" : level === "warning" ? "announcement.warning" : "announcement.error");
+  const label = t(level === "info" ? "common.announcement.label" : level === "warning" ? "common.announcement.warning" : "common.announcement.error");
   return (
     // suppressHydrationWarning: the pre-paint script may have set `hidden` on
     // the SSR element before React hydrates (same contract as data-theme on
@@ -131,7 +131,7 @@ function BroadcastBanner({
     <aside
       id={BROADCAST_BANNER_ID}
       role="region"
-      aria-label={t("announcement.label")}
+      aria-label={t("common.announcement.label")}
       data-level={level}
       suppressHydrationWarning
       className={cn("mx-4 mt-4 min-w-0 shrink-0 rounded-xl border border-s-4 px-4 py-4 sm:mx-6 sm:mt-6 sm:px-5", LEVEL_STYLES[level])}
@@ -146,7 +146,7 @@ function BroadcastBanner({
           <button
             type="button"
             onClick={dismiss}
-            aria-label={t("announcement.dismiss")}
+            aria-label={t("common.announcement.dismiss")}
             className="focus-ring -me-2 -mt-2 inline-flex size-11 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-current/10"
           >
             <CloseIcon size={20} strokeWidth={2} />
