@@ -2185,7 +2185,9 @@ export const api = {
    * keys under a user-visible name (auth). At most 20 devices per user (422 beyond).
    */
   registerE2EEDevice: (body: RegisterE2EEDeviceRequest) =>
-    apiRequest<E2EEDevice>("/api/v1/e2ee/devices", { method: "POST", body }),
+    // Registration binds keys to the caller. Never replay it under a session
+    // restored while another account was signing in; preparation can retry.
+    apiRequest<E2EEDevice>("/api/v1/e2ee/devices", { method: "POST", body, retryOn401: false }),
 
   /**
    * GET /api/v1/e2ee/devices — the caller's registered devices, oldest first

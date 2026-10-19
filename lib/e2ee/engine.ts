@@ -9,7 +9,9 @@ import type { EncryptedMessage } from "@/lib/api";
 
 import { type CryptoAccount, type CryptoProvider, getCryptoProvider, randomPickleKey } from "./crypto";
 import { type ClaimedDevice, type OneTimeKey, fanOutEncrypt } from "./envelope";
-import { type E2EEStore, IndexedDBStore, type OwnMessageRecord } from "./store";
+import { type E2EEStore, type OwnMessageRecord } from "./store";
+import { accountStore } from "./account-store";
+import { captureE2EESession, onE2EESessionChange } from "./session";
 
 export type { OwnMessageRecord } from "./store";
 
@@ -371,15 +373,32 @@ export class E2EEEngine {
   }
 }
 
-let engineSingleton: E2EEEngine | null = null;
+let engineSingleton: Promise<E2EEEngine> | null = null;
+onE2EESessionChange(() => {
+  const previous = engineSingleton;
+  engineSingleton = null;
+  void previous?.then((engine) => engine.reset(), () => {});
+});
 
-/** getEngine returns the process-wide engine (real crypto provider + store). */
+/** One in-flight engine per authenticated session, including its local history. */
 export async function getEngine(): Promise<E2EEEngine> {
+  const session = captureE2EESession();
   if (!engineSingleton) {
-    const provider = await getCryptoProvider();
-    engineSingleton = new E2EEEngine(provider, new IndexedDBStore());
+    const loading = (async () => {
+      const provider = await getCryptoProvider();
+      session.assertCurrent();
+      const store = await accountStore(session.userId, provider, session.assertCurrent);
+      session.assertCurrent();
+      return new E2EEEngine(provider, store, session.assertCurrent);
+    })();
+    engineSingleton = loading;
+    void loading.catch(() => {
+      if (engineSingleton === loading) engineSingleton = null;
+    });
   }
-  return engineSingleton;
+  const engine = await engineSingleton;
+  session.assertCurrent();
+  return engine;
 }
 
 /** Test seam: drop the cached singleton so a new provider/store can be wired. */
