@@ -382,8 +382,6 @@ function Thread({
           />
         </div>
       ) : envelopes !== null ? (
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-          <div className="mx-auto w-full max-w-3xl">
             <EncryptedThreadView
               conversationId={conversationId}
               envelopes={envelopes}
@@ -395,8 +393,6 @@ function Thread({
               earlierError={earlierError}
               onLoadEarlier={loadEarlier}
             />
-          </div>
-        </div>
       ) : (
         <>
           <MessageTimeline

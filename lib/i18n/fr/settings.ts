@@ -2,6 +2,14 @@ import type { Messages } from "../index";
 
 // Machine-drafted, awaiting native-speaker review.
 export const settings = {
+  "settings.secure.preparing": "Sécurisation de ce navigateur",
+  "settings.secure.peerWaiting": "En attente de la connexion de l’autre personne pour préparer la messagerie sécurisée. Votre brouillon est conservé ici ; réessayez lorsqu’elle sera prête.",
+  "settings.secure.preparingHelp": "Le chiffrement est préparé automatiquement. Vos clés privées restent dans ce navigateur. Un nouveau navigateur peut uniquement lire les messages envoyés après sa préparation.",
+  "settings.secure.prepareError": "Impossible de préparer la messagerie sécurisée. Veuillez réessayer.",
+  "settings.secure.deviceLimit": "Vous avez atteint la limite d’appareils. Supprimez un ancien appareil dans Réglages → Appareils, puis réessayez.",
+  "settings.secure.reset": "Réinitialiser le chiffrement dans ce navigateur",
+  "settings.secure.resetWarning": "Cette action supprime l’historique chiffré enregistré dans ce navigateur. Les anciens messages ne pourront pas y être récupérés. Vos autres appareils ne sont pas affectés.",
+  "settings.secure.resetConfirm": "Supprimer l’historique local et réinitialiser",
   "settings.nav.playback.action": "Gérer les réglages de lecture",
   "settings.nav.playback.title": "Lecture",
   "settings.nav.playback.short": "Lecture",

@@ -1,4 +1,12 @@
 export const settings = {
+  "settings.secure.preparing": "Securing this browser",
+  "settings.secure.peerWaiting": "Waiting for the other person to sign in and prepare secure messaging. Your draft is saved here; try sending again when they are ready.",
+  "settings.secure.preparingHelp": "Encryption is prepared automatically. Your private keys stay on this browser. A new browser can only read messages sent after it was prepared.",
+  "settings.secure.prepareError": "Could not prepare secure messaging. Please try again.",
+  "settings.secure.deviceLimit": "You've reached the device limit. Remove an old device in Settings → Devices, then try again.",
+  "settings.secure.reset": "Reset encryption on this browser",
+  "settings.secure.resetWarning": "This removes encrypted message history saved on this browser. Earlier messages cannot be recovered here. Your other devices are unaffected.",
+  "settings.secure.resetConfirm": "Remove local history and reset",
   "settings.nav.playback.action": "Manage playback settings",
   "settings.nav.playback.title": "Playback",
   "settings.nav.playback.short": "Playback",

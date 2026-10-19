@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { EncryptedThreadView } from "./EncryptedThreadView";
 import type { EncryptedMessage } from "@/lib/api";
+import { api } from "@/lib/api";
+import { __resetEncryptedDraftsForTest } from "@/lib/e2ee/drafts";
 
 // The list endpoint returns every envelope addressed to ANY of the caller's
 // devices (see vidra-core ListE2EEMessagesForRecipient), so a two-device account
@@ -15,6 +17,7 @@ const OTHER = "device-mine-other";
 
 const decryptable = new Map<string, string>();
 const engine = {
+  encryptMessage: vi.fn(),
   currentDevice: vi.fn(async () => ({
     device_id: MINE,
     device_name: "this browser",
@@ -30,6 +33,7 @@ const engine = {
 };
 
 vi.mock("@/lib/e2ee/engine", () => ({ getEngine: async () => engine }));
+vi.mock("@/lib/e2ee/prepare", () => ({ prepareDevice: async () => engine.currentDevice() }));
 
 // jsdom has no layout, so the thread's scroll anchoring has nothing to call.
 Element.prototype.scrollIntoView = () => {};
@@ -51,6 +55,8 @@ afterEach(() => {
   cleanup();
   decryptable.clear();
   vi.clearAllMocks();
+  vi.restoreAllMocks();
+  __resetEncryptedDraftsForTest();
 });
 
 const view = (envelopes: EncryptedMessage[]) =>
@@ -64,6 +70,25 @@ const view = (envelopes: EncryptedMessage[]) =>
   );
 
 describe("EncryptedThreadView envelope addressing", () => {
+  it("retains an unfinished secure draft when returning to the conversation", async () => {
+    const first = view([]);
+    fireEvent.change(await screen.findByLabelText("Write an encrypted message"), { target: { value: "unfinished private message" } });
+    first.unmount();
+    view([]);
+    expect(await screen.findByLabelText("Write an encrypted message")).toHaveProperty("value", "unfinished private message");
+  });
+
+  it("keeps a draft and explains recipient readiness without posting a message", async () => {
+    const error = new Error("not ready"); error.name = "PeerNotReadyError";
+    engine.encryptMessage.mockRejectedValueOnce(error);
+    const send = vi.spyOn(api, "sendEncryptedMessage");
+    view([]);
+    fireEvent.change(await screen.findByLabelText("Write an encrypted message"), { target: { value: "keep me" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    expect(await screen.findByRole("alert")).toHaveProperty("textContent", "Waiting for the other person to sign in and prepare secure messaging. Your draft is saved here; try sending again when they are ready.");
+    expect(send).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Write an encrypted message")).toHaveProperty("value", "keep me");
+  });
   it("renders one bubble per message, not one per device the message was fanned out to", async () => {
     decryptable.set("to-me", "hello from the peer");
     // Newest first, as the API returns them: the same message addressed to this
