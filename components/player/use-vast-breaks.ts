@@ -9,15 +9,15 @@ import { canPlayVast } from "@/lib/vast-cooldown";
 export function useVastBreaks(
   videoRef: RefObject<HTMLVideoElement | null>, id: string,
   midrollUrl: string | null, midrollAt: number, postrollUrl: string | null,
-  minimumDuration = 0, cooldown = 0,
+  minimumDuration = 0, cooldown = 0, offsetPercent = 0, stopAt: number | null = null,
 ) {
   const [state, setState] = useState<{ id: string; active: boolean; ad: VastDocument | null }>({ id, active: false, ad: null });
   const finishRef = useRef<() => void>(() => {});
   const finish = useCallback(() => finishRef.current(), []);
-  const config = useRef({ midrollUrl, midrollAt, postrollUrl, minimumDuration, cooldown });
+  const config = useRef({ midrollUrl, midrollAt, postrollUrl, minimumDuration, cooldown, offsetPercent, stopAt });
   useEffect(() => {
-    config.current = { midrollUrl, midrollAt, postrollUrl, minimumDuration, cooldown };
-  }, [midrollUrl, midrollAt, postrollUrl, minimumDuration, cooldown]);
+    config.current = { midrollUrl, midrollAt, postrollUrl, minimumDuration, cooldown, offsetPercent, stopAt };
+  }, [midrollUrl, midrollAt, postrollUrl, minimumDuration, cooldown, offsetPercent, stopAt]);
   useEffect(() => {
     const el = videoRef.current;
     if (!el) return;
@@ -69,8 +69,12 @@ export function useVastBreaks(
     };
     const time = (event: Event) => {
       if (active) { hold(event); return; }
-      const { midrollUrl, midrollAt, minimumDuration, cooldown } = config.current;
-      if (midrollUrl && !midPlayed && !el.paused && el.duration >= minimumDuration && el.currentTime >= midrollAt) {
+      const { midrollUrl, midrollAt, minimumDuration, cooldown, offsetPercent, stopAt } = config.current;
+      const offset = offsetPercent > 0 ? el.duration * offsetPercent / 100 : midrollAt;
+      // Leave clip boundaries to the embed's ordinary timeupdate listener.
+      if (stopAt !== null && (offset >= stopAt || el.currentTime >= stopAt)) return;
+      if (midrollUrl && !midPlayed && !el.paused && el.duration >= minimumDuration
+        && offset < el.duration && el.currentTime >= offset) {
         midPlayed = true;
         if (canPlayVast(cooldown)) start("mid", midrollUrl);
       }
