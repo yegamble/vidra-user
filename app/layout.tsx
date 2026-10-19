@@ -6,6 +6,7 @@ import "./globals.css";
 import { AuthProvider } from "@/components/auth/AuthProvider";
 import { ContentPreferencesBootstrap } from "@/components/auth/ContentPreferencesBootstrap";
 import { PlayerSettingsBootstrap } from "@/components/auth/PlayerSettingsBootstrap";
+import { SecureMessagingBootstrap } from "@/components/auth/SecureMessagingBootstrap";
 import { BottomTabBar } from "@/components/BottomTabBar";
 import { Header } from "@/components/Header";
 import { I18nProvider } from "@/components/I18nProvider";
@@ -111,6 +112,7 @@ export default async function RootLayout({
         {/* Two providers, one indent: both are pure context with no markup. */}
         <I18nProvider locale={locale} messages={messages}><SoftwareBrandProvider hidden={hideSoftwareName(instance)}>
           <AuthProvider>
+            <SecureMessagingBootstrap />
             <PlayerSettingsBootstrap />
             <ContentPreferencesBootstrap />
             <ToastProvider>

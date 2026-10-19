@@ -27,6 +27,11 @@ const engine = {
     if (text === undefined) throw new Error("no session for this envelope");
     return text;
   }),
+  ensureDevice: vi.fn(async () => ({
+    device_id: MINE,
+    device_name: "this browser",
+    fingerprint: "fp",
+  })),
 };
 
 vi.mock("@/lib/e2ee/engine", () => ({ getEngine: async () => engine }));

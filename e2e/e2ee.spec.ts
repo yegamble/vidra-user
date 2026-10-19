@@ -162,26 +162,36 @@ async function bootSignedIn(page: Page) {
   await page.route(UNREAD, (route) => route.fulfill({ json: { unread_count: 0 } }));
 }
 
-// Route the device-directory endpoints for a set-up-and-send flow.
+// Reflect registration in the directory so automatic setup can validate and
+// reuse the same device after navigation/reload.
 async function routeDeviceEndpoints(page: Page) {
+  const calls = { reads: 0, registrations: 0 };
+  let registered = false;
+  const device = {
+    id: "dev-1",
+    user_id: "u1",
+    device_name: "This browser",
+    identity_key: "idk-self",
+    signing_key: "SGKSELFAAAABBBBCCCCDDDDEEEEFFFF00",
+    created_at: new Date().toISOString(),
+    last_seen_at: new Date().toISOString(),
+  };
   await page.route(DEVICES, (route) => {
     if (route.request().method() === "POST") {
-      return route.fulfill({
-        json: {
-          id: "dev-1",
-          user_id: "u1",
-          device_name: "This browser",
-          identity_key: "idk-self",
-          signing_key: "SGKSELFAAAABBBBCCCCDDDDEEEEFFFF00",
-          created_at: new Date().toISOString(),
-          last_seen_at: new Date().toISOString(),
-        },
-      });
+      calls.registrations += 1;
+      registered = true;
+      return route.fulfill({ json: device });
     }
-    return route.fulfill({ json: { devices: [] } });
+    calls.reads += 1;
+    return route.fulfill({ json: { devices: registered ? [device] : [] } });
+  });
+  await page.route(DEVICE_DELETE, (route) => {
+    registered = false;
+    return route.fulfill({ status: 204, body: "" });
   });
   await page.route(OTK_UPLOAD, (route) => route.fulfill({ json: { unclaimed: 30 } }));
   await page.route(OTK_COUNT, (route) => route.fulfill({ json: { count: 30 } }));
+  return calls;
 }
 
 // One row of the peer's PUBLIC device directory (GET /users/{id}/e2ee/devices).
@@ -265,13 +275,8 @@ async function signInToWatch(page: Page, e2ee: "available" | "unavailable") {
   await page.route(SAVED, (route) =>
     route.fulfill({ json: { videos: [], sort: "recent", limit: 20, offset: 0 } }),
   );
-  // The device directory stays routed for the flows that genuinely use it, and
-  // is counted here: deciding availability must cost NO request of its own.
-  let deviceProbes = 0;
-  await page.route(DEVICES, (route) => {
-    if (route.request().method() === "GET") deviceProbes += 1;
-    return route.fulfill({ json: { devices: [] } });
-  });
+  // The instance disclosure gates automatic preparation as well as the menu.
+  const deviceCalls = await routeDeviceEndpoints(page);
 
   const disclosure = page.waitForResponse(
     (res) => INSTANCE.test(res.url()) && res.request().method() === "GET",
@@ -280,34 +285,34 @@ async function signInToWatch(page: Page, e2ee: "available" | "unavailable") {
   await disclosure;
   await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
   await expect(page.getByText("nice video")).toBeVisible();
-  return () => deviceProbes;
+  return deviceCalls;
 }
 
 test("the encrypted affordance appears on a comment only when the instance discloses E2EE", async ({
   page,
 }) => {
-  const deviceProbes = await signInToWatch(page, "available");
+  const deviceCalls = await signInToWatch(page, "available");
   // The comment's contact actions now live behind a "Comment actions" menu
   // (portaled to <body>, so menuitems are looked up at page level).
   const commentRow = page.locator("li", { hasText: "nice video" });
   await commentRow.getByRole("button", { name: "Comment actions" }).click();
   await expect(page.getByRole("menuitem", { name: "Message", exact: true })).toBeVisible();
   await expect(page.getByRole("menuitem", { name: "Encrypted message" })).toBeVisible();
-  // The answer came off the document the app already fetches, not off a probe.
-  expect(deviceProbes()).toBe(0);
+  // Explicit availability also prepares this browser without a setup form.
+  await expect.poll(() => deviceCalls.registrations).toBe(1);
 });
 
 test("the encrypted affordance is hidden when the instance discloses E2EE unavailable", async ({
   page,
 }) => {
-  const deviceProbes = await signInToWatch(page, "unavailable");
+  const deviceCalls = await signInToWatch(page, "unavailable");
   // Open the comment's overflow menu: Message stays (messaging itself is on),
   // but with E2EE disclosed unavailable the encrypted option is absent.
   const commentRow = page.locator("li", { hasText: "nice video" });
   await commentRow.getByRole("button", { name: "Comment actions" }).click();
   await expect(page.getByRole("menuitem", { name: "Message", exact: true })).toBeVisible();
   await expect(page.getByRole("menuitem", { name: "Encrypted message" })).toHaveCount(0);
-  expect(deviceProbes()).toBe(0);
+  expect(deviceCalls).toEqual({ reads: 0, registrations: 0 });
 
   // The same gate applies to the inbox composer: an instance that cannot honor
   // encrypted mode must not be offered the option.
@@ -318,6 +323,7 @@ test("the encrypted affordance is hidden when the instance discloses E2EE unavai
   await page.getByRole("button", { name: "New message" }).click();
   const dialog = page.getByRole("dialog", { name: "New message" });
   await expect(dialog.getByLabel("End-to-end encrypted", { exact: true })).toHaveCount(0);
+  expect(deviceCalls).toEqual({ reads: 0, registrations: 0 });
 });
 
 test("New message can start an encrypted thread without posting the draft as plaintext", async ({
@@ -377,11 +383,8 @@ test("New message can start an encrypted thread without posting the draft as pla
   expect(startBody).toEqual({ recipient_username: "bob", encrypted: true });
   expect(messagePosts).toBe(0);
 
-  // First encrypted use still performs device setup. The modal draft remains
-  // client-side throughout and is handed to the encrypted composer afterward.
-  await expect(page.getByRole("heading", { name: "Set up encryption on this device" })).toBeVisible();
-  await page.getByLabel("Device name").fill("This browser");
-  await page.getByRole("button", { name: "Set up this device" }).click();
+  // Automatic preparation keeps the modal draft client-side and hands it to the
+  // encrypted composer without sending it.
   await expect(page.getByLabel("Write an encrypted message")).toHaveValue(
     "meet at the west gate",
   );
@@ -390,6 +393,7 @@ test("New message can start an encrypted thread without posting the draft as pla
 
 test("the inbox flags an encrypted conversation with a lock and no preview", async ({ page }) => {
   await bootSignedIn(page);
+  await routeDeviceEndpoints(page);
   await page.route(CONVERSATIONS, (route) =>
     route.fulfill({ json: { conversations: [encryptedSummary()], limit: 20, offset: 0 } }),
   );
@@ -399,32 +403,33 @@ test("the inbox flags an encrypted conversation with a lock and no preview", asy
   await expect(page.getByLabel("Encrypted conversation")).toBeVisible();
 });
 
-test("first encrypted use runs the device setup flow, then reveals the composer", async ({
+test("first encrypted use prepares the device automatically and reveals the composer", async ({
   page,
 }) => {
   await bootSignedIn(page);
-  await routeDeviceEndpoints(page);
+  const deviceCalls = await routeDeviceEndpoints(page);
   await page.route(ENC_MESSAGES, (route) =>
     route.fulfill({ json: { envelopes: [], limit: 20, offset: 0 } }),
   );
 
-  await gotoEncryptedThread(page);
-
-  // Lock header + honest limitation copy are shown up front.
-  await expect(page.getByText("End-to-end encrypted")).toBeVisible();
-  // No device yet → the setup flow appears (not the composer).
-  await expect(page.getByRole("heading", { name: "Set up encryption on this device" })).toBeVisible();
-
   const register = page.waitForRequest(
     (req) => /\/e2ee\/devices$/.test(req.url()) && req.method() === "POST",
   );
-  await page.getByLabel("Device name").fill("This browser");
-  await page.getByRole("button", { name: "Set up this device" }).click();
-  await register;
+  await gotoEncryptedThread(page);
+  expect((await register).postDataJSON()).toEqual({
+    device_name: "This browser",
+    identity_key: "idk-self",
+    signing_key: "SGKSELFAAAABBBBCCCCDDDDEEEEFFFF00",
+  });
 
-  // After setup the encrypted composer is available.
+  // No manual setup or duplicate registration is needed.
   await expect(page.getByLabel("Write an encrypted message")).toBeVisible();
   await expect(page.getByLabel("Disappearing messages timer")).toBeVisible();
+  expect(deviceCalls.registrations).toBe(1);
+  await expect(page.getByRole("button", { name: "Set up this device" })).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByLabel("Write an encrypted message")).toBeVisible();
+  expect(deviceCalls.registrations).toBe(1);
 });
 
 test("an inbound encrypted message decrypts, and an unreadable one shows the undecryptable state", async ({
@@ -482,9 +487,7 @@ test("an inbound encrypted message decrypts, and an unreadable one shows the und
   );
 
   await gotoEncryptedThread(page);
-  // Complete device setup so the envelopes can be decrypted on this device.
-  await page.getByLabel("Device name").fill("This browser");
-  await page.getByRole("button", { name: "Set up this device" }).click();
+  await expect(page.getByLabel("Write an encrypted message")).toBeVisible();
 
   await expect(page.getByText("hello from bob")).toBeVisible();
   await expect(page.getByText("Message can’t be decrypted on this device")).toBeVisible();
@@ -507,8 +510,6 @@ test("sending an encrypted message with a disappearing timer fans out with expir
   });
 
   await gotoEncryptedThread(page);
-  await page.getByLabel("Device name").fill("This browser");
-  await page.getByRole("button", { name: "Set up this device" }).click();
   await expect(page.getByLabel("Write an encrypted message")).toBeVisible();
 
   await page.getByLabel("Disappearing messages timer").selectOption("1d");
@@ -570,8 +571,6 @@ test("a send that cannot reach every device says so instead of looking clean", a
   });
 
   await gotoEncryptedThread(page);
-  await page.getByLabel("Device name").fill("This browser");
-  await page.getByRole("button", { name: "Set up this device" }).click();
   await expect(page.getByLabel("Write an encrypted message")).toBeVisible();
 
   await page.getByLabel("Write an encrypted message").fill("half delivered");
@@ -609,8 +608,6 @@ test("a sender with no inbound messages keeps a working composer without the ?to
   });
 
   await gotoEncryptedThread(page);
-  await page.getByLabel("Device name").fill("This browser");
-  await page.getByRole("button", { name: "Set up this device" }).click();
   await expect(page.getByLabel("Write an encrypted message")).toBeVisible();
 
   await page.getByLabel("Write an encrypted message").fill("west gate at six");
@@ -684,8 +681,7 @@ test("the encrypted thread pages back through history beyond the first 100", asy
   });
 
   await gotoEncryptedThread(page);
-  await page.getByLabel("Device name").fill("This browser");
-  await page.getByRole("button", { name: "Set up this device" }).click();
+  await expect(page.getByLabel("Write an encrypted message")).toBeVisible();
 
   // The first page is present; the page before it is not yet.
   await expect(page.getByText("message 200", { exact: true })).toBeVisible();
@@ -740,39 +736,33 @@ test("the encrypted thread pages back through history beyond the first 100", asy
 
 test("the devices settings page lists a device and removes it", async ({ page }) => {
   await bootSignedIn(page);
-  await page.route(DEVICES, (route) =>
-    route.fulfill({
-      json: {
-        devices: [
-          {
-            id: "dev-1",
-            user_id: "u1",
-            device_name: "Ada laptop",
-            identity_key: "idk-self",
-            signing_key: "SGKSELFAAAABBBBCCCCDDDD",
-            created_at: new Date().toISOString(),
-            last_seen_at: new Date().toISOString(),
-          },
-        ],
-      },
-    }),
+  await routeDeviceEndpoints(page);
+  await page.route(ENC_MESSAGES, (route) =>
+    route.fulfill({ json: { envelopes: [], limit: 20, offset: 0 } }),
   );
   let deleted = false;
   await page.route(DEVICE_DELETE, (route) => {
     if (route.request().method() === "DELETE") {
       deleted = true;
-      return route.fulfill({ status: 204, body: "" });
     }
     return route.fallback();
   });
 
+  await gotoEncryptedThread(page);
+  await expect(page.getByLabel("Write an encrypted message")).toBeVisible();
   await page.goto("/settings/devices");
-  await expect(page.getByText("Ada laptop")).toBeVisible();
+  const currentDeviceRow = page
+    .getByRole("listitem")
+    .filter({ hasText: "This browser" });
+  await expect(currentDeviceRow).toBeVisible();
+  await expect(
+    currentDeviceRow.getByText("This device", { exact: true }),
+  ).toBeVisible();
   // Safety number is rendered (grouped signing key).
   await expect(page.getByText("SGKS ELFA AAAB", { exact: false })).toBeVisible();
 
-  await page.getByRole("button", { name: "Remove device Ada laptop" }).click();
+  await page.getByRole("button", { name: "Remove device This browser" }).click();
   await page.getByRole("button", { name: "Confirm remove" }).click();
-  await expect(page.getByText("Ada laptop")).toBeHidden();
+  await expect(currentDeviceRow).toHaveCount(0);
   expect(deleted).toBe(true);
 });

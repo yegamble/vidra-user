@@ -20,6 +20,11 @@ export const MIN_ONE_TIME_KEYS = 20;
 /** Refill target when replenishing (sits comfortably above the floor). */
 export const OTK_UPLOAD_BATCH = 30;
 
+export class DeviceRemovedError extends Error {
+  readonly name = "DeviceRemovedError";
+  constructor() { super("This browser's encryption device was removed. Reset encryption here to prepare a new device."); }
+}
+
 export class PeerNotReadyError extends Error {
   readonly name = "PeerNotReadyError";
   constructor(readonly skipped: string[] = []) {
@@ -156,7 +161,7 @@ export class E2EEEngine {
         const current = loaded;
         const existing = devices.find((d) => (!current.deviceId || d.id === current.deviceId) &&
           d.identity_key === current.account.identityKey && d.signing_key === current.account.signingKey);
-        if (loaded.deviceId && !existing) throw new Error("This encryption device was removed or its registered keys changed. Remove it locally in Settings → Devices before preparing a new device.");
+        if (loaded.deviceId && !existing) throw new DeviceRemovedError();
         if (existing) loaded.deviceId = existing.id;
       }
       if (!loaded.deviceId) {
