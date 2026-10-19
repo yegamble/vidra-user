@@ -23,6 +23,7 @@ import Script from "next/script";
 import { I18nProvider } from "@/components/I18nProvider";
 import { InstanceAdsProvider } from "@/components/InstanceAdsProvider";
 import { InstanceBanner } from "@/components/InstanceBanner";
+import { InstanceAnalytics } from "@/components/InstanceAnalytics";
 import { InstanceCustomization } from "@/components/InstanceCustomization";
 import { SoftwareBrandProvider } from "@/components/SoftwareBrandProvider";
 
@@ -52,6 +53,12 @@ async function renderWith(instance: InstanceConfigSnapshot | null, localeCookie?
 }
 
 describe("RootLayout", () => {
+  it("seeds analytics and its nonce, distinguishing unavailable and older servers", async () => {
+    const analytics = { google_enabled: true, google_measurement_id: "G-TEST1234" };
+    expect(findElement(await renderWith({ analytics } as InstanceConfigSnapshot), InstanceAnalytics).props).toMatchObject({ analytics, nonce: "n0nce" });
+    expect(findElement(await renderWith(null), InstanceAnalytics).props.analytics).toBeUndefined();
+    expect(findElement(await renderWith({} as InstanceConfigSnapshot), InstanceAnalytics).props.analytics).toBeNull();
+  });
   it("seeds ads before descendants render, distinguishing failure from an older backend", async () => {
     const ads = { enabled: true, vast_tag_url: "https://ads.example/pre.xml" };
     const known = findElement(await renderWith({ ads } as InstanceConfigSnapshot), InstanceAdsProvider);
@@ -84,9 +91,10 @@ describe("RootLayout", () => {
     const html = await RootLayout({ children: page });
     const [, content] = findElement(html, "div").props.children;
     expect(content.props.id).toBe("main-content");
-    expect(content.props.children).toHaveLength(2);
+    expect(content.props.children).toHaveLength(3);
     expect(content.props.children[0].type).toBe(InstanceBanner);
-    expect(content.props.children[1]).toBe(page);
+    expect(content.props.children[1].type).toBe(InstanceAnalytics);
+    expect(content.props.children[2]).toBe(page);
   });
 });
 
