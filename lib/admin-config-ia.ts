@@ -244,6 +244,11 @@ export const PAGE_SECTIONS: Record<ConfigPageId, SectionDef[]> = {
       description: "A site-wide announcement banner shown to every visitor.",
     },
     {
+      id: "analytics",
+      title: "Analytics",
+      description: "Optional Google Analytics 4 with visitor-controlled analytics cookies. Creator statistics remain available independently.",
+    },
+    {
       id: "browse",
       title: "Landing & browse defaults",
       description:
@@ -659,6 +664,22 @@ const URL_IMPORTS_WARN: NonNullable<SettingMeta["warn"]> = {
 // backend does not return it yet — the row is simply disabled until the
 // server supports the setting.
 export const META: Record<string, SettingMeta> = {
+  analytics_google_enabled: {
+    label: "Enable Google Analytics",
+    help: "Load GA4 only after visitors accept optional analytics. Off by default; a valid Measurement ID is required.",
+    control: "toggle",
+    page: "general",
+    section: "analytics",
+  },
+  analytics_google_measurement_id: {
+    label: "GA4 Measurement ID",
+    help: "Enter the G-… ID from Admin → Data streams → Web. Turn off Enhanced Measurement in that stream to avoid automatic events and duplicate pageviews. The app sends fixed page categories with no URL identifiers or search terms.",
+    placeholder: "G-XXXXXXXXXX",
+    control: "text",
+    page: "general",
+    section: "analytics",
+    parent: "analytics_google_enabled",
+  },
   // GENERAL / Administrators & contact (server section "contact")
   contact_email: {
     label: "Admin email",

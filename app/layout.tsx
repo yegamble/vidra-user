@@ -12,6 +12,7 @@ import { Header } from "@/components/Header";
 import { I18nProvider } from "@/components/I18nProvider";
 import { InstanceAdsProvider } from "@/components/InstanceAdsProvider";
 import { InstanceBanner } from "@/components/InstanceBanner";
+import { InstanceAnalytics } from "@/components/InstanceAnalytics";
 import { InstanceCustomization } from "@/components/InstanceCustomization";
 import { Sidebar } from "@/components/Sidebar";
 import { SoftwareBrandProvider } from "@/components/SoftwareBrandProvider";
@@ -132,6 +133,7 @@ export default async function RootLayout({
                   className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-clip focus:outline-none"
                 >
                   <InstanceBanner instance={instance} nonce={nonce} />
+                  <InstanceAnalytics analytics={instance ? instance.analytics ?? null : undefined} nonce={nonce ?? ""} />
                   {children}
                 </div>
               </div>

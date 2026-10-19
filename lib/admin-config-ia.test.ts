@@ -96,6 +96,8 @@ const SERVER_REGISTRY: Array<[string, ConfigPageId, string]> = [
   ["theme_primary_color", "customization", "theme"],
   ["header_hide_instance_name", "customization", "header"],
   ["default_player_autoplay", "customization", "player"],
+  ["analytics_google_enabled", "general", "analytics"],
+  ["analytics_google_measurement_id", "general", "analytics"],
   ["player_vast_enabled", "vod", "advertising"],
   ["player_vast_tag_url", "vod", "advertising"],
   ["player_vast_midroll_tag_url", "vod", "advertising"],
@@ -250,6 +252,15 @@ describe("placementFor", () => {
     expect(META.broadcast_dismissable.parent).toBe("broadcast_enabled");
     expect(META.broadcast_message.control).toBe("markdown");
     expect(META.broadcast_level.control).toBe("level-segmented");
+  });
+
+  it("groups Google Analytics setup under General with measurement guidance", () => {
+    const keys = ["analytics_google_enabled", "analytics_google_measurement_id"];
+    const section = buildPageModel("general", keys.map(key => setting(key, { page: "general", section: "analytics" }))).find(({ section }) => section.id === "analytics");
+    expect(section?.section.title).toBe("Analytics");
+    expect(META.analytics_google_enabled.control).toBe("toggle");
+    expect(META.analytics_google_measurement_id.parent).toBe("analytics_google_enabled");
+    expect(META.analytics_google_measurement_id.help).toContain("Enhanced Measurement");
   });
 
   it("groups the VAST controls under Advertising with independent placements", () => {
