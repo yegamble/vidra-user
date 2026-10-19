@@ -1,6 +1,7 @@
 import type { Messages } from "../index";
 
 import { a11y } from "./a11y";
+import { analytics } from "./analytics";
 import { account } from "./account";
 import { admin } from "./admin";
 import { auth } from "./auth";
@@ -35,6 +36,7 @@ import { watch } from "./watch";
  */
 export const FR_NAMESPACES = {
   a11y,
+  analytics,
   account,
   admin,
   auth,
@@ -60,6 +62,7 @@ export const FR_NAMESPACES = {
 
 export const fr = {
   ...a11y,
+  ...analytics,
   ...account,
   ...admin,
   ...auth,
