@@ -3,10 +3,13 @@
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { Spinner } from "@/components/ui/Spinner";
+import { useFormat, useT } from "@/components/I18nProvider";
 import { TrashIcon } from "@/components/icons";
 import { ApiError, api, errorMessage } from "@/lib/api";
 import type { VideoPassword } from "@/lib/api";
-import { formatDateTime } from "@/lib/format";
+import { useApiResource } from "@/lib/use-api-resource";
 
 // Contract bounds (openapi SetVideoPasswordRequest): each password is 6–100 chars.
 const MIN_LENGTH = 6;
@@ -31,10 +34,24 @@ export function PasswordManager({
   onCountChange,
 }: {
   videoId: string;
-  onCountChange?: (count: number) => void;
+  onCountChange?: (count: number | null) => void;
 }) {
-  const [passwords, setPasswords] = useState<VideoPassword[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  // Discard pending mutations and drafts when switching videos, too.
+  return <PasswordList key={videoId} videoId={videoId} onCountChange={onCountChange} />;
+}
+
+function PasswordList({ videoId, onCountChange }: {
+  videoId: string;
+  onCountChange?: (count: number | null) => void;
+}) {
+  const t = useT();
+  const format = useFormat();
+  const { status, data, retry, setData: setPasswords } = useApiResource<VideoPassword[]>(
+    async (signal) => (await api.listVideoPasswords(videoId, signal)).passwords,
+    [videoId],
+  );
+  const loaded = status === "ready";
+  const passwords = data ?? [];
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,56 +59,41 @@ export function PasswordManager({
   // Push the current count up whenever the set (or load state) changes; null
   // until the first fetch resolves so the parent can tell "unknown" from "zero".
   useEffect(() => {
-    if (loaded) onCountChange?.(passwords.length);
+    onCountChange?.(loaded ? passwords.length : null);
   }, [passwords.length, loaded, onCountChange]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    api
-      .listVideoPasswords(videoId, controller.signal)
-      .then((res) => {
-        setPasswords(res.passwords);
-        setLoaded(true);
-      })
-      .catch(() => {
-        // Start from an empty, still-editable list rather than blocking the surface.
-        if (!controller.signal.aborted) setLoaded(true);
-      });
-    return () => controller.abort();
-  }, [videoId]);
 
   const tooShort = draft.length > 0 && draft.length < MIN_LENGTH;
 
   async function add() {
     const value = draft;
-    if (busy || value.length < MIN_LENGTH || value.length > MAX_LENGTH) return;
+    if (!loaded || busy || value.length < MIN_LENGTH || value.length > MAX_LENGTH) return;
     setBusy(true);
     setError(null);
     try {
       const created = await api.addVideoPassword(videoId, value);
-      setPasswords((prev) => [...prev, created]);
+      setPasswords((prev) => prev ? [...prev, created] : prev);
       setDraft("");
     } catch (err) {
-      setError(errorMessage(err, "Could not add that password."));
+      setError(errorMessage(err, t("studio.passwords.addError")));
     } finally {
       setBusy(false);
     }
   }
 
   async function remove(passwordId: string) {
-    if (busy) return;
+    if (!loaded || busy) return;
     setBusy(true);
     setError(null);
     try {
       await api.deleteVideoPassword(videoId, passwordId);
-      setPasswords((prev) => prev.filter((p) => p.id !== passwordId));
+      setPasswords((prev) => prev?.filter((p) => p.id !== passwordId) ?? null);
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
         setError(
-          "This is the last password. Add another before removing it, or change the video's privacy.",
+          t("studio.passwords.lastPassword"),
         );
       } else {
-        setError(errorMessage(err, "Could not remove that password."));
+        setError(errorMessage(err, t("studio.passwords.removeError")));
       }
     } finally {
       setBusy(false);
@@ -101,29 +103,31 @@ export function PasswordManager({
   return (
     <div className="flex flex-col gap-3 rounded-2xl border border-border-subtle bg-surface p-4">
       <div className="flex flex-col gap-1">
-        <p className="text-sm font-semibold">Passwords</p>
+        <p className="text-sm font-semibold">{t("studio.passwords.title")}</p>
         <p className="text-xs text-fg-muted">
-          Anyone with any of these passwords can watch. Add at least one before saving. Passwords
-          are stored hashed and never shown again.
+          {t("studio.passwords.description")}
         </p>
       </div>
+
+      {status === "loading" ? <Spinner label={t("studio.passwords.loading")} /> : null}
+      {status === "error" ? <ErrorState message={t("studio.passwords.loadError")} onRetry={retry} /> : null}
 
       {passwords.length > 0 ? (
         <ul className="flex flex-col divide-y divide-border-subtle">
           {passwords.map((p, i) => (
             <li key={p.id} className="flex items-center justify-between gap-3 py-2">
               <span className="text-sm text-fg">
-                Password {i + 1}
+                {t("studio.passwords.item", { number: i + 1 })}
                 <span className="ml-2 text-xs tabular-nums text-fg-muted">
-                  added {formatDateTime(p.created_at)}
+                  {t("studio.passwords.added", { date: format.formatDateTime(p.created_at) })}
                 </span>
               </span>
               <button
                 type="button"
-                aria-label={`Remove password ${i + 1}`}
+                aria-label={t("studio.passwords.remove", { number: i + 1 })}
                 onClick={() => void remove(p.id)}
                 disabled={busy}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-fg-muted transition-colors hover:bg-danger-surface hover:text-danger focus-ring disabled:opacity-60"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-fg-muted transition-colors hover:bg-danger-surface hover:text-danger focus-ring disabled:opacity-60"
               >
                 <TrashIcon size={16} />
               </button>
@@ -131,35 +135,36 @@ export function PasswordManager({
           ))}
         </ul>
       ) : loaded ? (
-        <p className="text-xs text-warning">No passwords yet — add one so viewers can unlock this video.</p>
+        <p className="text-xs text-warning">{t("studio.passwords.empty")}</p>
       ) : null}
 
       <div className="flex flex-col gap-1">
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2">
           <input
             type="password"
             autoComplete="off"
-            aria-label="New password"
-            placeholder="New password"
+            aria-label={t("studio.passwords.new")}
+            placeholder={t("studio.passwords.new")}
+            disabled={!loaded || busy}
             value={draft}
             maxLength={MAX_LENGTH}
             onChange={(e) => setDraft(e.target.value)}
             aria-invalid={tooShort ? true : undefined}
             aria-describedby={tooShort ? "new-password-hint" : undefined}
-            className={`flex-1 ${FIELD}`}
+            className={`min-w-0 flex-1 ${FIELD}`}
           />
           <Button
             type="button"
             size="sm"
             onClick={() => void add()}
-            disabled={busy || draft.length < MIN_LENGTH || draft.length > MAX_LENGTH}
+            disabled={!loaded || busy || draft.length < MIN_LENGTH || draft.length > MAX_LENGTH}
           >
-            Add
+            {t("studio.passwords.add")}
           </Button>
         </div>
         {tooShort ? (
           <p id="new-password-hint" className="text-xs text-danger">
-            Passwords must be at least {MIN_LENGTH} characters.
+            {t("studio.passwords.minLength", { min: MIN_LENGTH })}
           </p>
         ) : null}
       </div>

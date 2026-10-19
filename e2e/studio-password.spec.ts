@@ -138,3 +138,38 @@ test("password-protecting a video reveals the manager, blocks an empty-set save,
   await expect.poll(() => patchCount).toBe(1);
   expect(patchBody).toMatchObject({ privacy: "password" });
 });
+
+test("password list failure offers retry without inventing an empty set", async ({ page }) => {
+  await signIn(page);
+  await page.route(MY_CHANNELS, (route) => route.fulfill({ json: { channels: [channel()] } }));
+  await page.route(CHANNEL_VIDEOS, (route) => route.fulfill({ json: { videos: [video({ privacy: "password" })] } }));
+  await page.route(VIDEO_CONFIG, (route) => route.fulfill({ json: videoConfig() }));
+  await page.route(CAPTIONS, (route) => route.fulfill({ json: { captions: [] } }));
+  await page.route(CHAPTERS, (route) => route.fulfill({ json: { chapters: [] } }));
+  await page.route(EMBED_PRIVACY, (route) => route.fulfill({ json: { status: "enabled" } }));
+  let reads = 0;
+  await page.route(PASSWORDS, (route) => {
+    expect(route.request().method()).toBe("GET");
+    reads += 1;
+    return reads === 1
+      ? route.fulfill({ status: 503, json: { error: { code: "unavailable", message: "Unavailable" } } })
+      : route.fulfill({ json: { passwords: [{ id: "pw1", created_at: new Date().toISOString() }] } });
+  });
+  let saves = 0;
+  await page.route(VIDEO, (route) => {
+    if (route.request().method() === "PATCH") saves += 1;
+    return route.fulfill({ json: video({ privacy: "password" }) });
+  });
+  await page.getByRole("link", { name: "Studio" }).click();
+  await page.getByRole("link", { name: "Content", exact: true }).click();
+  await page.getByRole("listitem").filter({ hasText: "My clip" }).getByRole("button", { name: "Edit" }).click();
+  await expect(page.getByText(/Could not load passwords/)).toBeVisible();
+  await expect(page.getByText(/No passwords yet/)).toHaveCount(0);
+  await expect(page.getByLabel("New password")).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Add", exact: true })).toBeDisabled();
+  await page.getByRole("button", { name: "Try again" }).click();
+  await expect(page.getByText("Password 1", { exact: true })).toBeVisible();
+  expect(reads).toBe(2);
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect.poll(() => saves).toBe(1);
+});
