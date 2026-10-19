@@ -50,8 +50,10 @@ export function startEmbedApi(opts: {
       .map((t) => ({ id: t.id || t.language, label: t.label, src: "", mode: t.mode }));
 
   const handlers: Record<string, Handler> = {
-    play: () => { void video.play().catch(() => {}); },
-    pause: () => video.pause(),
+    play: () => {
+      if (video.dispatchEvent(new Event("vidra:play-request", { cancelable: true }))) void video.play().catch(() => {});
+    },
+    pause: () => { video.dispatchEvent(new Event("vidra:pause-request")); video.pause(); },
     isPlaying: () => !video.paused,
     seek: (p) => { video.currentTime = num(p, 0, Number.MAX_SAFE_INTEGER); },
     getCurrentTime: () => video.currentTime,

@@ -154,6 +154,22 @@ afterEach(() => {
 });
 
 describe("hls.js playback tuning", () => {
+  it("holds content sources and QoE until a preroll releases playback", async () => {
+    const ref = { current: document.createElement("video") };
+    const { result, rerender } = renderHook(({ suspended }) =>
+      useHlsPlayback(ref, { id: "video-1", hls_url: "/master.m3u8" }, 42, null, null, false, suspended),
+    { initialProps: { suspended: true } });
+    await act(async () => {});
+    expect(result.current.src).toBeUndefined();
+    expect(hlsMock.instances).toHaveLength(0);
+    act(() => ref.current.dispatchEvent(new Event("loadeddata")));
+    await flushPlaybackEvents();
+    expect(beaconed).toHaveLength(0);
+    rerender({ suspended: false });
+    await waitFor(() => expect(hlsMock.instances).toHaveLength(1));
+    expect(hlsMock.instances[0].config.startPosition).toBe(42);
+  });
+
   it("bounds the VOD back-buffer and caps ABR to player/decode capacity", async () => {
     // The SESSION advertises the generation-versioned master now; the detail's
     // copy is stale the moment a re-transcode bumps the generation. A public
