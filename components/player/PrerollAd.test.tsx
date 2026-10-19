@@ -50,7 +50,7 @@ it("inherits content volume and embed mute without affecting the content element
 it("offers Skip only after the declared offset and never records complete for it", () => {
   const { time, onDone } = setup(); time(4);
   expect(screen.queryByRole("button", { name: "Skip ad" })).toBeNull();
-  expect(screen.getByText("Skip in 1s")).toBeTruthy(); time(5);
+  expect(screen.getByText("Skip in 1…")).toBeTruthy(); time(5);
   fireEvent.click(screen.getByRole("button", { name: "Skip ad" }));
   expect(onDone).toHaveBeenCalledOnce(); expect(trackVast).toHaveBeenCalledWith(["skip"]);
   expect(trackVast).not.toHaveBeenCalledWith(["complete"]);
