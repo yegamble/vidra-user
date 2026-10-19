@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 
 import { ArrowUpIcon, CloseIcon, FileIcon, PlusIcon } from "@/components/icons";
 import { cn } from "@/lib/cn";
@@ -49,7 +49,7 @@ function uploadErrorMessage(err: unknown): string {
 // useFinePointer reports whether the primary pointer is fine (mouse/trackpad),
 // via useSyncExternalStore so it is SSR-safe (server snapshot = false, no
 // hydration mismatch) and stays correct if the pointer capability changes.
-function useFinePointer(): boolean {
+export function useFinePointer(): boolean {
   return useSyncExternalStore(
     (onChange) => {
       const mq = window.matchMedia("(pointer: fine)");
@@ -96,6 +96,7 @@ export function Composer({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const thumbUrlsRef = useRef<Set<string>>(new Set());
+  const helperId = useId();
 
   // Only fine pointers (desktop mouse/trackpad) get Enter-to-send; touch/coarse
   // devices keep Enter as a newline and send via the button.
@@ -118,10 +119,11 @@ export function Composer({
   }, [body]);
 
   const uploading = pending.some((p) => p.status === "uploading");
+  const failed = pending.some((p) => p.status === "error");
   const readyIds = pending
     .filter((p) => p.status === "ready" && p.attachmentId)
     .map((p) => p.attachmentId as string);
-  const canSend = !uploading && (body.trim() !== "" || readyIds.length > 0);
+  const canSend = !uploading && !failed && (body.trim() !== "" || readyIds.length > 0);
 
   function updatePending(localId: string, patch: Partial<PendingAttachment>) {
     setPending((prev) => prev.map((p) => (p.localId === localId ? { ...p, ...patch } : p)));
@@ -203,7 +205,7 @@ export function Composer({
 
   function submit() {
     const trimmed = body.trim();
-    if (uploading) return;
+    if (uploading || failed) return;
     if (trimmed === "" && readyIds.length === 0) return;
     onSend(trimmed, readyIds);
     for (const u of thumbUrlsRef.current) URL.revokeObjectURL(u);
@@ -231,7 +233,7 @@ export function Composer({
 
   return (
     <form
-      className="flex shrink-0 flex-col gap-2 border-t border-border-subtle px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+      className="mx-auto flex w-full max-w-3xl shrink-0 flex-col gap-2 bg-surface px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
       onSubmit={(e) => {
         e.preventDefault();
         submit();
@@ -243,7 +245,7 @@ export function Composer({
             <li
               key={p.localId}
               className={cn(
-                "flex w-full max-w-[16rem] items-center gap-2.5 rounded-xl border px-2.5 py-2 text-xs",
+                "flex w-full max-w-xs items-center gap-2.5 rounded-xl border px-2.5 py-2 text-xs",
                 p.status === "error"
                   ? "border-danger-border bg-danger-surface"
                   : "border-border-subtle bg-surface-muted",
@@ -284,7 +286,7 @@ export function Composer({
                     <button
                       type="button"
                       onClick={() => retryUpload(p.localId)}
-                      className="focus-ring shrink-0 rounded font-semibold underline transition-colors hover:text-fg"
+                      className="focus-ring inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg px-2 font-semibold underline transition-colors hover:text-fg"
                     >
                       Retry
                     </button>
@@ -297,7 +299,7 @@ export function Composer({
                 type="button"
                 onClick={() => removePending(p.localId)}
                 aria-label={`Remove attachment ${p.filename}`}
-                className="focus-ring inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-fg-muted transition-colors hover:bg-surface-strong hover:text-fg"
+                className="focus-ring inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-fg-muted transition-colors hover:bg-surface-strong hover:text-fg"
               >
                 <CloseIcon size={16} strokeWidth={2} />
               </button>
@@ -310,7 +312,7 @@ export function Composer({
           {error}
         </p>
       ) : null}
-      <div className="flex items-end gap-2">
+      <div className="flex items-end gap-2 rounded-2xl border border-border bg-surface p-2">
         <input
           ref={fileInputRef}
           type="file"
@@ -331,13 +333,14 @@ export function Composer({
         <textarea
           ref={textareaRef}
           aria-label="Write a message"
+          aria-describedby={failed || uploading || enterSends ? helperId : undefined}
           placeholder="Write a message…"
           rows={1}
           maxLength={MAX_MESSAGE_LEN}
           value={body}
           onChange={(e) => setBody(e.target.value)}
           onKeyDown={onKeyDown}
-          className="focus-ring max-h-36 w-full min-w-0 flex-1 resize-none overflow-y-auto rounded-[22px] bg-surface-muted px-4 py-2.5 text-[14.5px] leading-normal text-fg placeholder:text-fg-muted"
+          className="focus-ring min-h-11 max-h-36 w-full min-w-0 flex-1 resize-none overflow-y-auto rounded-xl bg-surface px-2.5 py-2.5 text-base leading-normal text-fg placeholder:text-fg-muted"
         />
         <button
           type="submit"
@@ -349,6 +352,15 @@ export function Composer({
           <ArrowUpIcon size={20} strokeWidth={2.2} />
         </button>
       </div>
+      {failed || uploading || enterSends ? (
+        <p id={helperId} role={failed ? "alert" : uploading ? "status" : undefined} className={cn("text-caption", failed ? "text-danger" : "text-fg-muted")}>
+          {failed
+            ? "Retry or remove failed attachments before sending."
+            : uploading
+              ? "Uploading attachments. You can send when they’re ready."
+              : "Enter to send · Shift+Enter for a new line"}
+        </p>
+      ) : null}
       {overCounter ? (
         <p aria-live="polite" className="pr-14 text-right text-[11px] tabular-nums text-fg-muted">
           {body.length} / {MAX_MESSAGE_LEN}
