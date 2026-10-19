@@ -2,6 +2,16 @@ import type { Messages } from "../index";
 
 // Machine-drafted, awaiting native-speaker review.
 export const watch = {
+  "watch.ad.label": "Publicité",
+  "watch.ad.loading": "Chargement de la publicité",
+  "watch.ad.play": "Lire la publicité",
+  "watch.ad.pause": "Mettre la publicité en pause",
+  "watch.ad.mute": "Couper le son de la publicité",
+  "watch.ad.unmute": "Rétablir le son de la publicité",
+  "watch.ad.remaining": "Cette publicité se termine dans {seconds} s",
+  "watch.ad.visit": "Voir l’annonceur",
+  "watch.ad.skip": "Passer la publicité",
+  "watch.ad.skipIn": "Passer dans {seconds} s…",
   "watch.loading": "Chargement de la vidéo…",
   "watch.notFound.title": "Vidéo introuvable",
   "watch.notFound.message": "Cette vidéo n’existe pas ou elle est privée.",

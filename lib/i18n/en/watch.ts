@@ -1,4 +1,14 @@
 export const watch = {
+  "watch.ad.label": "Advertisement",
+  "watch.ad.loading": "Loading advertisement",
+  "watch.ad.play": "Play advertisement",
+  "watch.ad.pause": "Pause advertisement",
+  "watch.ad.mute": "Mute advertisement",
+  "watch.ad.unmute": "Unmute advertisement",
+  "watch.ad.remaining": "This ad will end in {seconds}",
+  "watch.ad.visit": "Visit advertiser",
+  "watch.ad.skip": "Skip ad",
+  "watch.ad.skipIn": "Skip in {seconds}…",
   // Watch page (WatchView and its direct children).
   "watch.loading": "Loading video…",
   "watch.notFound.title": "Video not found",
