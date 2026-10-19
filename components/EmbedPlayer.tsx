@@ -219,7 +219,10 @@ export function EmbedVideo({
     }
     const { stopAt } = params;
     const onTime = () => {
-      if (stopAt !== null && el.currentTime >= stopAt && !el.paused) el.pause();
+      if (stopAt !== null && el.currentTime >= stopAt) {
+        el.dispatchEvent(new Event("vidra:pause-request"));
+        el.pause();
+      }
     };
     el.addEventListener("timeupdate", onTime);
     const onEndedEv = () => endedRef.current?.();
@@ -228,17 +231,20 @@ export function EmbedVideo({
     let onMeta: (() => void) | null = null;
     if (params.api && window.parent !== window) {
       api = startEmbedApi({ video: el, parent: window.parent, scope: params.scope, targetOrigin: parentOrigin() });
-      if (el.readyState >= HTMLMediaElement.HAVE_METADATA) api.notifyReady();
-      else {
-        onMeta = () => api?.notifyReady();
-        el.addEventListener("loadedmetadata", onMeta, { once: true });
-      }
+      let readySent = false;
+      onMeta = () => { if (!readySent) { readySent = true; api?.notifyReady(); } };
+      el.addEventListener("loadedmetadata", onMeta, { once: true });
+      el.addEventListener("vidra:player-ready", onMeta);
+      if (el.readyState >= HTMLMediaElement.HAVE_METADATA || el.dataset.adTransportReady === "true") onMeta();
     }
     return () => {
       el.removeEventListener("timeupdate", onTime);
       el.removeEventListener("ended", onEndedEv);
       el.removeEventListener("canplay", tryAutoplay);
-      if (onMeta) el.removeEventListener("loadedmetadata", onMeta);
+      if (onMeta) {
+        el.removeEventListener("loadedmetadata", onMeta);
+        el.removeEventListener("vidra:player-ready", onMeta);
+      }
       api?.stop();
     };
   }, [params]);
@@ -251,6 +257,9 @@ export function EmbedVideo({
         startAt={params.startAt}
         variant="embed"
         controls={params.controls}
+        autoplay={params.autoplay}
+        initialMuted={params.muted}
+        stopAt={params.stopAt}
         playbackToken={playbackToken}
       >
         {params.title ? (
