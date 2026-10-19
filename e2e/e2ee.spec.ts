@@ -751,13 +751,18 @@ test("the devices settings page lists a device and removes it", async ({ page })
   await gotoEncryptedThread(page);
   await expect(page.getByLabel("Write an encrypted message")).toBeVisible();
   await page.goto("/settings/devices");
-  await expect(page.getByText("This browser", { exact: true })).toBeVisible();
-  await expect(page.getByText("This device", { exact: true })).toBeVisible();
+  const currentDeviceRow = page
+    .getByRole("listitem")
+    .filter({ hasText: "This browser" });
+  await expect(currentDeviceRow).toBeVisible();
+  await expect(
+    currentDeviceRow.getByText("This device", { exact: true }),
+  ).toBeVisible();
   // Safety number is rendered (grouped signing key).
   await expect(page.getByText("SGKS ELFA AAAB", { exact: false })).toBeVisible();
 
   await page.getByRole("button", { name: "Remove device This browser" }).click();
   await page.getByRole("button", { name: "Confirm remove" }).click();
-  await expect(page.getByText("This browser", { exact: true })).toBeHidden();
+  await expect(currentDeviceRow).toHaveCount(0);
   expect(deleted).toBe(true);
 });
