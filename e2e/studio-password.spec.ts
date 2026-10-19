@@ -168,7 +168,8 @@ test("password list failure offers retry without inventing an empty set", async 
   await expect(page.getByLabel("New password")).toBeDisabled();
   await expect(page.getByRole("button", { name: "Add", exact: true })).toBeDisabled();
   await page.getByRole("button", { name: "Try again" }).click();
-  await expect(page.getByText("Password 1", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Remove password 1", exact: true })).toBeVisible();
+  await expect(page.getByLabel("New password")).toBeEnabled();
   expect(reads).toBe(2);
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect.poll(() => saves).toBe(1);
