@@ -12,7 +12,7 @@ import { cn } from "@/lib/cn";
  * transient toast is `Toast` — an Alert is the *inline* message that sits
  * inside a form or a settings section.
  */
-export type AlertVariant = "danger" | "success" | "warning";
+type AlertVariant = "danger" | "success" | "warning";
 
 // Danger uses the opaque danger-surface tint plus a border (matching `Badge`'s
 // note: systemRed text cannot clear AA on a 15% red fill); success and warning

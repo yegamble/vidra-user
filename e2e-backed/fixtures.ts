@@ -108,7 +108,7 @@ export async function ensureAdmin(request: APIRequestContext): Promise<void> {
 // LIVE_INGEST_SECRET is the shared secret the backed backend is started with
 // (frontend-e2e-backed.yml / local run) so a test can drive the media-server-facing
 // live ingest hooks. Test-only value, not a real secret.
-export const LIVE_INGEST_SECRET = "e2e-ingest-secret";
+const LIVE_INGEST_SECRET = "e2e-ingest-secret";
 
 // liveIngest calls the media-server-facing live ingest hook (start|stop) with the
 // ingest secret + a publisher's stream key. Returns the HTTP status.
@@ -703,7 +703,7 @@ export async function waitForIpfsPin(
 }
 
 /** One media class's pin tally from GET /api/v1/ipfs/status (schema IPFSClassPinCounts). */
-export type IpfsClassCounts = {
+type IpfsClassCounts = {
   media_class: string;
   pinned: number;
   pending: number;
@@ -954,7 +954,7 @@ export async function muteInstance(
 const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
 /** base32Decode decodes an (unpadded) RFC 4648 base32 string. */
-export function base32Decode(encoded: string): Buffer {
+function base32Decode(encoded: string): Buffer {
   const clean = encoded.toUpperCase().replace(/=+$/, "");
   let bits = 0;
   let value = 0;

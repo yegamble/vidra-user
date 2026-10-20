@@ -68,7 +68,7 @@ export const MIGRATION_STATE_LABEL: Record<StorageMigrationState, string> = {
   failed: "Failed",
 };
 
-export const MIGRATION_STATE_VARIANT: Record<StorageMigrationState, BadgeVariant> = {
+const MIGRATION_STATE_VARIANT: Record<StorageMigrationState, BadgeVariant> = {
   enumerating: "accent",
   copying: "accent",
   // The one phase that is waiting on a human: everything is verified in the

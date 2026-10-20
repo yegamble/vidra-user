@@ -46,7 +46,7 @@ type threadedComment = RemoteVideoComment & { depth: number; replyingTo?: string
 // something absent (never mirrored, or hidden from THIS reader by a block) is
 // treated as a root — the same answer as no parent at all, which is what keeps
 // a per-viewer block from swallowing everything underneath it.
-export function threadComments(comments: RemoteVideoComment[]): threadedComment[] {
+function threadComments(comments: RemoteVideoComment[]): threadedComment[] {
   const byURL = new Map(comments.map((c) => [c.object_url, c]));
   const children = new Map<string, RemoteVideoComment[]>();
   const roots: RemoteVideoComment[] = [];

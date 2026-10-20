@@ -21,11 +21,11 @@
 // and components/InstanceCustomization.tsx (the injected override).
 
 /** The theme canvases the accent sits on (app/globals.css --canvas). */
-export const LIGHT_THEME_SURFACE = "#ffffff";
-export const DARK_THEME_SURFACE = "#0a0a0a";
+const LIGHT_THEME_SURFACE = "#ffffff";
+const DARK_THEME_SURFACE = "#0a0a0a";
 
 /** WCAG AA threshold for normal text; the wave's warning line. */
-export const WCAG_AA_CONTRAST = 4.5;
+const WCAG_AA_CONTRAST = 4.5;
 
 /** The two candidate label inks for text on the accent fill. */
 const ACCENT_FG_LIGHT_INK = "#ffffff";

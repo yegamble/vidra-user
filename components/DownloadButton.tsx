@@ -4,13 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 
 import { DownloadIcon } from "@/components/icons";
 import { Button, Checkbox, Modal, Radio } from "@/components/ui";
-import { api, errorMessage, type Video, type VideoDownloadFile } from "@/lib/api";
+import { api, errorMessage, type VideoDownloadFile } from "@/lib/api";
 import { useSettledOptionalSession } from "@/lib/use-settled-session";
 import { formatBytes } from "@/lib/format";
-import { useVideoActionPermissions } from "@/lib/use-video-action-permissions";
-
-const PILL =
-  "focus-ring flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[10px] bg-surface-muted px-4 py-2 text-[13px] font-semibold text-fg transition-colors hover:bg-surface-strong";
 
 type DownloadMode = "video" | "audio" | "subtitles";
 
@@ -41,36 +37,6 @@ function fileDetails(file: VideoDownloadFile): string {
   if (file.kind === "subtitle" && file.language) details.push(file.language);
   if (file.kind === "original" && file.original_name) details.push(file.original_name);
   return details.join(" · ");
-}
-
-/** Watch-page download action, hidden when instance policy disallows it. */
-export function DownloadButton({
-  video,
-  playbackToken,
-}: {
-  video: Video;
-  playbackToken?: string | null;
-}) {
-  const [open, setOpen] = useState(false);
-  const { canDownload } = useVideoActionPermissions(video);
-
-  if (!canDownload) return null;
-
-  return (
-    <>
-      <button type="button" onClick={() => setOpen(true)} className={PILL}>
-        <DownloadIcon size={16} strokeWidth={2} />
-        <span>Download</span>
-      </button>
-      {open ? (
-        <DownloadDialog
-          videoId={video.id}
-          playbackToken={playbackToken}
-          onClose={() => setOpen(false)}
-        />
-      ) : null}
-    </>
-  );
 }
 
 /**
