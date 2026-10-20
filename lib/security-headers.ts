@@ -4,10 +4,10 @@
 
 /** Same-origin path of the violation sink (app/csp-report/route.ts). Not under
  *  /api/: in the single-origin topology Caddy routes /api/* to vidra-core. */
-export const CSP_REPORT_PATH = "/csp-report";
+const CSP_REPORT_PATH = "/csp-report";
 /** Reporting-Endpoints group name the policy's report-to names. */
-export const CSP_REPORT_GROUP = "csp";
-export const REPORTING_ENDPOINTS = `${CSP_REPORT_GROUP}="${CSP_REPORT_PATH}"`;
+const CSP_REPORT_GROUP = "csp";
+const REPORTING_ENDPOINTS = `${CSP_REPORT_GROUP}="${CSP_REPORT_PATH}"`;
 
 export type CspOptions = {
   nonce: string;

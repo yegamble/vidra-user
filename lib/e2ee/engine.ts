@@ -21,12 +21,12 @@ export const MIN_ONE_TIME_KEYS = 20;
 /** Refill target when replenishing (sits comfortably above the floor). */
 export const OTK_UPLOAD_BATCH = 30;
 
-export class DeviceRemovedError extends Error {
+class DeviceRemovedError extends Error {
   readonly name = "DeviceRemovedError";
   constructor() { super("This browser's encryption device was removed. Reset encryption here to prepare a new device."); }
 }
 
-export class PeerNotReadyError extends Error {
+class PeerNotReadyError extends Error {
   readonly name = "PeerNotReadyError";
   constructor(readonly skipped: string[] = []) {
     super("The other person is not ready to receive encrypted messages yet.");

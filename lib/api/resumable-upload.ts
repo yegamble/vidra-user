@@ -53,14 +53,14 @@ export interface StoredUploadSession {
 const STORE_KEY = "vidra.upload-sessions";
 
 /** The ApiError code carried when the server finalised the upload as failed. */
-export const UPLOAD_FAILED_CODE = "upload_failed";
+const UPLOAD_FAILED_CODE = "upload_failed";
 
 /**
  * The ApiError code carried when server-side processing did not settle inside
  * the client's overall cap. The upload is NOT necessarily lost — the job may
  * still finish — so the message says so rather than claiming failure.
  */
-export const UPLOAD_PROCESSING_TIMEOUT_CODE = "upload_processing_timeout";
+const UPLOAD_PROCESSING_TIMEOUT_CODE = "upload_processing_timeout";
 
 /** Default poll interval while the server finalises (before backoff). */
 const DEFAULT_POLL_INTERVAL_MS = 2_000;

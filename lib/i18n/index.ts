@@ -13,7 +13,7 @@ import { DEFAULT_LOCALE, type Locale } from "./locales";
  */
 
 /** CLDR plural forms chosen by `vars.count`; `other` is mandatory. */
-export type PluralMessage = Partial<Record<Intl.LDMLPluralRule, string>> & { other: string };
+type PluralMessage = Partial<Record<Intl.LDMLPluralRule, string>> & { other: string };
 export type Message = string | PluralMessage;
 /** A translated catalog: any subset of the en keys. */
 export type Messages = Partial<Record<MessageKey, Message>>;
@@ -67,5 +67,3 @@ export function createTranslator(locale: Locale, messages: Messages = {}): Trans
   };
   return translate as Translate;
 }
-
-export type { MessageKey };

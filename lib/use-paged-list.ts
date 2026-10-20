@@ -21,7 +21,7 @@ export interface ListPage<T> {
   offset: number;
 }
 
-export type ListStatus = "loading" | "error" | "ready";
+type ListStatus = "loading" | "error" | "ready";
 
 /**
  * One shared empty array for every "no rows yet" render. A fresh `[]` each time

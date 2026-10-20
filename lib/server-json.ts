@@ -35,7 +35,7 @@ import { injectTraceContext } from "@/lib/observability/trace";
  * "no-store" bypasses the Next data cache entirely; a number revalidates the
  * cached entry after that many seconds.
  */
-export type ServerJsonFreshness = "no-store" | { revalidateSeconds: number };
+type ServerJsonFreshness = "no-store" | { revalidateSeconds: number };
 
 export type ServerJsonOptions<T> = {
   freshness: ServerJsonFreshness;

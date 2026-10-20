@@ -35,11 +35,11 @@ export interface AppendingPage<T> {
   hasMore?: boolean;
 }
 
-export type AppendingStatus = "loading" | "error" | "ready";
-export type AppendingMoreStatus = "idle" | "loading" | "error";
+type AppendingStatus = "loading" | "error" | "ready";
+type AppendingMoreStatus = "idle" | "loading" | "error";
 
 /** The window one `load` call is being asked for. */
-export interface AppendingWindow {
+interface AppendingWindow {
   limit: number;
   offset: number;
 }

@@ -12,21 +12,9 @@ import type {
   SensitiveVideoFields,
 } from "./types";
 
-export type { InstanceAboutResponse, InstanceContactRequest, SensitiveContentPolicy };
+export type { InstanceAboutResponse,  SensitiveContentPolicy };
 export type ExtendedInstanceResponse = InstanceResponse;
 export type ContactInstanceRequest = InstanceContactRequest;
-export type InstancePlatformExtras = Pick<
-  InstanceResponse,
-  | "short_description"
-  | "default_language"
-  | "categories"
-  | "moderator_languages"
-  | "server_country"
-  | "is_sensitive"
-  | "sensitive_content_policy"
-  | "contact_form_enabled"
-  | "social_links"
->;
 
 /** The all-empty about document — what a 404 (backend not landed / nothing set) maps to. */
 export const EMPTY_INSTANCE_ABOUT: InstanceAboutResponse = {
@@ -62,7 +50,6 @@ export function contactInstance(body: ContactInstanceRequest): Promise<void> {
 
 // --- Video-level sensitive flag ----------------------------------------------
 
-export type { SensitiveVideoFields };
 
 /** True when a video carries the sensitive flag (absent field = false). */
 export function isSensitiveVideo(video: object): boolean {
@@ -95,9 +82,4 @@ export function getInstanceCached(): Promise<InstanceResponse> {
  */
 export function invalidateInstanceCache(): void {
   cachedInstance = null;
-}
-
-/** Test-only alias kept for existing callers. */
-export function resetInstanceCacheForTests(): void {
-  invalidateInstanceCache();
 }

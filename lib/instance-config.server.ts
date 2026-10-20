@@ -82,7 +82,7 @@ export type InstanceCustomizationBlock = {
 };
 
 /** W4. Distinct from social_links.x (the About-page link). */
-export type InstanceSocialBlock = {
+type InstanceSocialBlock = {
   twitter_username?: string;
 };
 

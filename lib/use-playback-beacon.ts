@@ -7,7 +7,7 @@ import { api } from "@/lib/api";
 // Seconds of actual playback accumulated before a sample is sent. The server
 // caps one sample at 12 s (this heartbeat plus slack) and rate-limits per
 // client and video, so 10 s keeps a viewer at ~6 requests/min.
-export const BEACON_INTERVAL_S = 10;
+const BEACON_INTERVAL_S = 10;
 const MAX_SAMPLE_S = 12;
 
 // A currentTime step larger than this between two timeupdate ticks is a seek,

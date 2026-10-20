@@ -14,7 +14,7 @@
 // missing session).
 
 const SESSION_KEY = "vidra.search-session";
-export const SEARCH_SESSION_HEADER = "X-Vidra-Session";
+const SEARCH_SESSION_HEADER = "X-Vidra-Session";
 
 /**
  * getSearchSessionId returns the current tab's search-session UUID, minting and
@@ -22,7 +22,7 @@ export const SEARCH_SESSION_HEADER = "X-Vidra-Session";
  * sessionStorage (server render, or a privacy mode that throws) — callers then
  * simply omit the header. Never throws.
  */
-export function getSearchSessionId(): string | undefined {
+function getSearchSessionId(): string | undefined {
   if (typeof window === "undefined") return undefined;
   try {
     const existing = window.sessionStorage.getItem(SESSION_KEY);
@@ -64,7 +64,7 @@ export function searchSessionHeaders(): Record<string, string> {
  * declaration rather than something core could infer: an API consumer sends no
  * batch, and must keep the routed emit as the only record of its searches.
  */
-export const SEARCH_EVENTS_HEADER = "X-Vidra-Search-Events";
+const SEARCH_EVENTS_HEADER = "X-Vidra-Search-Events";
 
 /**
  * clientSearchEventHeaders is the header bag for a search request whose
