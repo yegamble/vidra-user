@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { Component, type MouseEvent, type ReactNode } from "react";
-import ReactMarkdown, { type Components } from "react-markdown";
+import ReactMarkdown, { type Components, type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import type { Pluggable } from "unified";
 
 import { cn } from "@/lib/cn";
 import { splitTimestamps } from "@/lib/timestamp-links";
@@ -45,7 +44,7 @@ import { exceedsParseBudget, remarkBoundTree, rehypeMentions, rehypeTimestamps }
  * not allowed, or the break would double).
  */
 
-export type UserTextVariant = "description" | "comment";
+type UserTextVariant = "description" | "comment";
 
 // PeerTube parity: descriptions get emphasis, lists, links, code; comments get
 // links, emphasis and lists. Headings are rendered as bold paragraphs so their
@@ -287,7 +286,7 @@ export function UserText({
     },
   };
 
-  const rehypePlugins: Pluggable[] = [];
+  const rehypePlugins: NonNullable<Options["rehypePlugins"]> = [];
   if (mentions) rehypePlugins.push([rehypeMentions, { skip: [...SKIP[variant], "code", "pre"] }]);
   if (timestamps) rehypePlugins.push([rehypeTimestamps, { durationSeconds, skip: SKIP[variant] }]);
 

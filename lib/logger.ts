@@ -6,7 +6,7 @@
 // readable in dev) and security-friendly (a redaction denylist strips secrets,
 // tokens, and obvious PII before anything is written).
 
-export type LogLevel = "debug" | "info" | "warn" | "error";
+type LogLevel = "debug" | "info" | "warn" | "error";
 
 const LEVELS: Record<LogLevel, number> = { debug: 10, info: 20, warn: 30, error: 40 };
 

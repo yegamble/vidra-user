@@ -15,7 +15,7 @@ export type BadgeVariant =
   | "federated";
 
 /** The three federation protocols a `protocol` badge can carry. */
-export type ProtocolColor = "activitypub" | "bluesky" | "ipfs";
+type ProtocolColor = "activitypub" | "bluesky" | "ipfs";
 
 const VARIANT: Record<Exclude<BadgeVariant, "protocol" | "federated">, string> = {
   neutral: "bg-surface-muted text-fg-muted",

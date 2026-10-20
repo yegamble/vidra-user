@@ -110,7 +110,7 @@ function Tile({ label, value }: { label: string; value: string }) {
 // watched (0–100%), as an inline-SVG area + line like StatsChart (no chart
 // library). Gridlines at 0/50/100%, labelled axis ends, and a summary label so
 // the shape is available without sight.
-export function RetentionChart({
+function RetentionChart({
   retention,
   durationSeconds,
 }: {

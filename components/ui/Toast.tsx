@@ -15,7 +15,7 @@ import { CloseIcon } from "@/components/icons";
 import { useT } from "@/components/I18nProvider";
 import { cn } from "@/lib/cn";
 
-export type ToastVariant = "info" | "success" | "error";
+type ToastVariant = "info" | "success" | "error";
 
 export type ToastOptions = {
   message: string;

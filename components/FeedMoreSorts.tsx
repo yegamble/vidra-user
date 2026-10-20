@@ -10,7 +10,7 @@ import { feedHref, type FeedFilters, type FeedUrlDefaults } from "@/lib/feed-url
 // They live in a select rather than three more chips so the tab group keeps its
 // three-button shape; the pick is URL-backed (?sort=name) like every other
 // feed control. "hot" is not offered - see vidra-core's feedSorts.
-export const MORE_SORT_OPTIONS: { sort: FeedSort; label: string }[] = [
+const MORE_SORT_OPTIONS: { sort: FeedSort; label: string }[] = [
   { sort: "originally_published_at", label: "Original date" },
   { sort: "name", label: "Name (A–Z)" },
 ];

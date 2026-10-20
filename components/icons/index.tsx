@@ -600,27 +600,6 @@ export function SlidersIcon(props: IconProps) {
   );
 }
 
-/** Credit card — donations / payment settings. */
-export function CreditCardIcon(props: IconProps) {
-  return (
-    <Icon {...props}>
-      <rect x="2.5" y="5" width="19" height="14" rx="2.5" />
-      <path d="M2.5 10h19" />
-    </Icon>
-  );
-}
-
-/** Database — storage / media capacity. */
-export function DatabaseIcon(props: IconProps) {
-  return (
-    <Icon {...props}>
-      <ellipse cx="12" cy="5" rx="8" ry="3" />
-      <path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5" />
-      <path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6" />
-    </Icon>
-  );
-}
-
 /** Link — connections / linked accounts. */
 export function LinkIcon(props: IconProps) {
   return (

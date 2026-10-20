@@ -18,7 +18,7 @@ import { cn } from "@/lib/cn";
  * chip jump 1px. Both borders are declared here so the row never reflows.
  */
 
-export type FilterChipSize = "sm" | "md";
+type FilterChipSize = "sm" | "md";
 
 const CHIP_SIZE: Record<FilterChipSize, string> = {
   // sm — dense facet rows (the Users All/Staff/Deactivated pills).

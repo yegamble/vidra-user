@@ -44,7 +44,7 @@ export const NAV_LINKS: readonly NavLinkDef[] = [
 ] as const;
 
 /** The Messages destination's href — the one primary entry an operator can turn off. */
-export const MESSAGES_HREF = "/messages";
+const MESSAGES_HREF = "/messages";
 
 /**
  * The primary destinations for this instance. When the operator has turned

@@ -43,7 +43,7 @@ function identityLabel(identity: OAuthIdentity): string {
  * oauthErrorMessage — and the first one is the whole point of the flow: it
  * REFUSES rather than moving an identity between accounts.
  */
-export function linkErrorMessage(code: string): string {
+function linkErrorMessage(code: string): string {
   switch (code) {
     case "identity_belongs_to_another_account":
       return "That provider account is already connected to a different account here. Sign in as that account, or disconnect it there first.";

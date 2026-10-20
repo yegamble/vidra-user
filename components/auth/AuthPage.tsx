@@ -60,7 +60,7 @@ export function AuthPoweredBy() {
  * neutral "Home" when the software name is hidden and the instance is unnamed —
  * the link must never lose its accessible name).
  */
-export function AuthBrandLink({
+function AuthBrandLink({
   className,
   instanceName,
 }: {

@@ -8,7 +8,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Textarea } from "@/components/ui/Textarea";
 
 /** Mirrors core's admin.MaxBanReasonLen (and the user_bans CHECK). */
-export const MAX_BAN_REASON = 500;
+const MAX_BAN_REASON = 500;
 
 /**
  * BanUserDialog — banning needs a stated reason. Core stores it, shows it to

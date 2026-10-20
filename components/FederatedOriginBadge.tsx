@@ -15,7 +15,7 @@ import { cn } from "@/lib/cn";
  * watch page — all three of which already sit beside a `ProtocolBadge` spelling
  * out "ActivityPub".
  */
-export type FederatedOriginVariant = "ribbon" | "plain";
+type FederatedOriginVariant = "ribbon" | "plain";
 
 /**
  * Two sizes, because the pill's padding and weight are not overridable from a
@@ -23,7 +23,7 @@ export type FederatedOriginVariant = "ribbon" | "plain";
  * `px-2.5` cannot beat a base `px-2`. `sm` is the inline-metadata pill (11px,
  * medium); `md` is the watch-page header pill (12px, semibold).
  */
-export type FederatedOriginSize = "sm" | "md";
+type FederatedOriginSize = "sm" | "md";
 
 const PLAIN_SIZE: Record<FederatedOriginSize, string> = {
   sm: "px-2 py-0.5 text-[11px] font-medium",

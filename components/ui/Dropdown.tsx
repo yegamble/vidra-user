@@ -17,7 +17,7 @@ import { anchoredPosition } from "@/lib/anchored-position";
 import { cn } from "@/lib/cn";
 
 /** A selectable menu row. */
-export type DropdownMenuItem = {
+type DropdownMenuItem = {
   /** Item label. */
   label: ReactNode;
   /**

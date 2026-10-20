@@ -1,10 +1,5 @@
 import { api } from "@/lib/api";
-import type { AccountChannelStats, AccountStatsResponse, DailyViews } from "@/lib/api";
-
-// The per-channel rollup row the "All channels" scope shows — the backend's
-// AccountChannelStats (id, handle, display_name, views, followers, videos,
-// views_28d).
-export type ChannelBreakdown = AccountChannelStats;
+import type { AccountStatsResponse, DailyViews } from "@/lib/api";
 
 // The account-level stats shape — the backend's AccountStatsResponse:
 // { totals, daily_views (field `day`), channels }.

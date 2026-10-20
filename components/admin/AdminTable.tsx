@@ -27,14 +27,14 @@ export type AdminTableColumn<Row> = {
 };
 
 /** Row padding. `compact` matches the job-runs/QoE tables, `comfortable` the videos table. */
-export type AdminTableDensity = "compact" | "comfortable";
+type AdminTableDensity = "compact" | "comfortable";
 
 const DENSITY: Record<AdminTableDensity, string> = {
   compact: "px-3 py-2.5",
   comfortable: "px-4 py-3",
 };
 
-export type AdminTableStatus = "idle" | "loading" | "error";
+type AdminTableStatus = "idle" | "loading" | "error";
 
 export type AdminTableProps<Row> = {
   /** Accessible table name ("Job executions"). Also names the loading spinner. */

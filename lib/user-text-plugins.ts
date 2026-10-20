@@ -12,7 +12,7 @@ interface Node {
 }
 
 /** Block/inline nesting beyond this is flattened to text (stack-safety bound). */
-export const MAX_NESTING = 12;
+const MAX_NESTING = 12;
 
 // Iterative on purpose: this runs on the subtree that is too deep to recurse.
 function collectText(root: Node): string {
@@ -147,8 +147,8 @@ export function rehypeMentions(options: { skip: string[] }) {
 // description is rendered on the server on every uncached view. So parse cost is
 // bounded up front: a body above ANY budget below skips the parser and renders as
 // plain text (with safe bare-URL links and timestamps; see UserText).
-export const MAX_PARSE_BYTES = 3000;
-export const MAX_DELIMITERS = 256;
+const MAX_PARSE_BYTES = 3000;
+const MAX_DELIMITERS = 256;
 
 // 100+ consecutive structure markers (measured: ~2,000 bytes of "- " blocks the
 // thread for seconds) — also catches long runs of characters not counted below.
@@ -164,7 +164,7 @@ const DELIMITER_RE = /[*_~`\[\]|<>]/g;
 // delimiter), and the forgiveness is capped so it can only ever discount a
 // bounded number of delimiters.
 const URL_RUN_RE = /https?:\/\/[\w\-.:/?#@!$&'+,;=%]+/gi;
-export const MAX_URL_FORGIVEN = 256;
+const MAX_URL_FORGIVEN = 256;
 const LIST_MARKER_RE = /^[ \t]*(?:[-+]|\d{1,9}[.)])[ \t]/gm;
 
 export function exceedsParseBudget(text: string): boolean {

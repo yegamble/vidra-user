@@ -235,14 +235,3 @@ export function FullscreenExitGlyph(props: GlyphProps) {
     </Glyph>
   );
 }
-
-/** ellipsis.vertical — the bar's overflow trigger. */
-export function OverflowGlyph(props: GlyphProps) {
-  return (
-    <Glyph {...props}>
-      <circle cx="12" cy="5.5" r="1.95" />
-      <circle cx="12" cy="12" r="1.95" />
-      <circle cx="12" cy="18.5" r="1.95" />
-    </Glyph>
-  );
-}

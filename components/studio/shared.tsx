@@ -261,7 +261,7 @@ export function failedStateError(source: "file" | "url", t: Translate): string {
 // uploadCancelled builds the same cancellation ApiError the upload layer throws
 // (status 0 + the "upload_cancelled" code), so a cancelled import poll is
 // recognised by isUploadCancelled exactly like an aborted chunk upload.
-export function uploadCancelled(): ApiError {
+function uploadCancelled(): ApiError {
   return new ApiError({
     status: 0,
     code: "upload_cancelled",

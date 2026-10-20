@@ -4,7 +4,7 @@ import { useId, useRef, useState, type ReactNode } from "react";
 
 import { cn } from "@/lib/cn";
 
-export type TabItem = {
+type TabItem = {
   /** Stable id, used for the tab/panel aria wiring and as the selection key. */
   id: string;
   /** Visible tab label. */
