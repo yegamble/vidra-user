@@ -84,7 +84,8 @@ describe("remoteVideoToCard", () => {
   });
 
   it("tolerates a hit without published_at", () => {
-    const { published_at: _dropped, ...rest } = videoHit.video;
+    const rest: Partial<typeof videoHit.video> = { ...videoHit.video };
+    delete rest.published_at;
     const card = remoteVideoToCard(rest as RemoteVideo);
     expect(card.created_at).toBe("");
   });
