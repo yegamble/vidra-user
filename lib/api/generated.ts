@@ -3554,7 +3554,10 @@ export interface paths {
         get?: never;
         /**
          * Reorder a playlist's videos
-         * @description Rewrites the order of a playlist owned by the caller. The body must list exactly the playlist's current video ids, each once, in the desired order (a drag-reorder UI submits the full order); any missing, extra, or duplicated id is 422.
+         * @deprecated
+         * @description Rewrites the order of a playlist owned by the caller. The body must list exactly the playlist's current video ids, each once, in the desired order; any missing, extra, or duplicated id is 422.
+         *
+         *     DEPRECATED: use POST /api/v1/playlists/{id}/videos/{videoId}/move. GET /api/v1/playlists/{id} pages its items, so a client that has loaded only part of a long playlist cannot know the full id list this call demands, and the reorder fails. A move needs only the item and its new predecessor. This operation still works and will be removed in a later release.
          */
         put: operations["reorderPlaylistItems"];
         /**
