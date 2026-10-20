@@ -1,0 +1,19 @@
+min_version: 2.2.2
+lefthook: go run github.com/evilmartians/lefthook/v2@v2.2.2
+assert_lefthook_installed: true
+
+pre-commit:
+  jobs:
+    - name: whitespace
+      run: git diff --cached --check
+    - name: quality
+      run: npm run quality
+    - name: workflows
+      run: npm run lint:workflows
+
+pre-push:
+  jobs:
+    - name: quality
+      run: npm run quality
+    - name: workflows
+      run: npm run lint:workflows

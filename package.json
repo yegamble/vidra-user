@@ -14,7 +14,11 @@
     "start": "next start",
     "lint": "eslint",
     "lint:icons": "node scripts/check-no-emoji.mjs",
+    "lint:unused": "knip",
+    "lint:workflows": "bash scripts/ci/workflow-lint.sh",
+    "hooks:install": "bash scripts/install-hooks.sh",
     "typecheck": "tsc --noEmit",
+    "quality": "npm run typecheck && npm run lint && npm run lint:icons && npm run lint:unused",
     "codegen": "node scripts/codegen.mjs",
     "check:contract": "node scripts/check-contract.mjs",
     "audit:deps": "bash scripts/ci/dependency-audit.sh",
@@ -23,7 +27,7 @@
     "test": "vitest run",
     "e2e": "playwright test --project=chromium",
     "e2e:backed": "playwright test --project=backend-backed",
-    "ci": "npm run typecheck && npm run lint && npm run lint:icons && npm run test && NEXT_PUBLIC_API_BASE_URL=http://localhost:8080 npm run build && npm run e2e"
+    "ci": "npm run quality && npm run test && NEXT_PUBLIC_API_BASE_URL=http://localhost:8080 npm run build && npm run e2e"
   },
   "dependencies": {
     "@matrix-org/olm": "^3.2.15",
@@ -49,6 +53,7 @@
     "eslint-config-next": "16.4.2",
     "jsdom": "^30.1.1",
     "jsqr": "^1.4.0",
+    "knip": "6.42.1",
     "openapi-typescript": "^7.13.0",
     "sharp": "^0.35.5",
     "tailwindcss": "^4",
