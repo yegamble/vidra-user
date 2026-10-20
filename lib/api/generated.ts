@@ -5842,7 +5842,7 @@ export interface paths {
         };
         /**
          * Get effective instance settings (admin)
-         * @description Returns every runtime-mutable instance setting's EFFECTIVE value together with its config default and whether the database currently overrides it. This is the DB-backed overlay (fix_plan P10) on top of the static config: the instance name/description and legal-contact metadata, the PeerTube platform-information fields (links, markdown bodies, default language, categories, moderator languages, sensitive-content policy), the registration gates (registration_enabled, registration_require_approval), the upload quarantine gate (quarantine_new_uploads), and the feature toggles (uploads_enabled, imports_enabled, live_enabled, comments_enabled, downloads_enabled). Downloads default to enabled and are controlled only by this runtime setting (there is no env/config counterpart). Boot-time-only secrets and infrastructure (database DSN, KEKs, JWT secret, storage backend) are NOT represented here — they stay in config. Player advertising is opt-in: player_vast_enabled defaults false and player_vast_tag_url defaults empty. The public tag URL is fetched only by browsers; it must be absolute HTTP(S), at most 2000 bytes, without whitespace, credentials, or fragments. An empty string clears the tag. player_vast_midroll_tag_url and player_vast_postroll_tag_url follow the same URL rules and default empty. player_vast_midroll_offset_seconds is an integer from 1 to 86400, default 300 (five minutes into content). Independent player_vast_preroll_enabled, player_vast_midroll_enabled, and player_vast_postroll_enabled switches default true beneath the disabled master toggle. Disabled placements expose empty public tag URLs. player_vast_midroll_min_duration_seconds (default 600) and player_vast_cooldown_seconds (default 300) range from 0 to 86400; zero removes the respective minimum. Cooldown covers all video ad breaks across video changes and is enforced by clients. Google Analytics is opt-in: analytics_google_enabled defaults false, analytics_google_measurement_id defaults empty and must match ^G-[A-Z0-9]{4,20}$ when set. It is a public GA4 browser identifier, not a secret or server-fetched resource. Empty clears the ID. Restricted to admins.
+         * @description Returns every runtime-mutable instance setting's EFFECTIVE value together with its config default and whether the database currently overrides it. This is the DB-backed overlay (fix_plan P10) on top of the static config: the instance name/description and legal-contact metadata, the PeerTube platform-information fields (links, markdown bodies, default language, categories, moderator languages, sensitive-content policy), the registration gates (registration_enabled, registration_require_approval), the upload quarantine gate (quarantine_new_uploads), and the feature toggles (uploads_enabled, imports_enabled, live_enabled, comments_enabled, downloads_enabled). Downloads default to enabled and are controlled only by this runtime setting (there is no env/config counterpart). Boot-time-only secrets and infrastructure (database DSN, KEKs, JWT secret, storage backend) are NOT represented here — they stay in config. Player advertising is opt-in: player_vast_enabled defaults false and player_vast_tag_url defaults empty. The public tag URL is fetched only by browsers; it must be absolute HTTP(S), at most 2000 bytes, without whitespace, credentials, or fragments. An empty string clears the tag. player_vast_midroll_tag_url and player_vast_postroll_tag_url follow the same URL rules and default empty. player_vast_midroll_offset_seconds is an integer from 1 to 86400, default 300 (five minutes into content). Independent player_vast_preroll_enabled, player_vast_midroll_enabled, and player_vast_postroll_enabled switches default true beneath the disabled master toggle. Disabled placements expose empty public tag URLs. player_vast_midroll_min_duration_seconds (default 600) and player_vast_cooldown_seconds (default 300) range from 0 to 86400; zero removes the respective minimum. Cooldown covers all video ad breaks across video changes and is enforced by clients. player_vast_embed_enabled and player_vast_controls default true. player_vast_skip_after_seconds defaults 5 (0–300; zero disables skipping). player_vast_midroll_offset_percent defaults 0 (0–100; zero uses seconds, positive values use content-duration percentage). Plain-text settings player_vast_skip_countdown (default "Skip in {seconds}…", max 200 bytes), player_vast_skip_label (default "Skip ad", max 80 bytes), and player_vast_remaining_message (default "This ad will end in {seconds}", max 200 bytes) are public text, never HTML. The countdown and remaining message support {seconds} substitution; empty labels/countdown allow client fallback and an empty remaining message hides it. Google Analytics is opt-in: analytics_google_enabled defaults false, analytics_google_measurement_id defaults empty and must match ^G-[A-Z0-9]{4,20}$ when set. It is a public GA4 browser identifier, not a secret or server-fetched resource. Empty clears the ID. Restricted to admins.
          */
         get: operations["getInstanceSettings"];
         put?: never;
@@ -7118,6 +7118,41 @@ export interface components {
                  * @default 300
                  */
                 cooldown_seconds: number;
+                /**
+                 * @description Whether VAST ads may run in embedded players; clients use true when absent.
+                 * @default true
+                 */
+                embed_enabled: boolean;
+                /**
+                 * @description Show standard ad-player controls; clients use true when absent. Does not enable seeking or early skipping.
+                 * @default true
+                 */
+                controls: boolean;
+                /**
+                 * @description Minimum playback before allowing an ad skip; zero disables skipping. Clients use 5 when absent.
+                 * @default 5
+                 */
+                skip_after_seconds: number;
+                /**
+                 * @description Positive values place the midroll at this percentage of content duration; zero or absent uses midroll_offset_seconds.
+                 * @default 0
+                 */
+                midroll_offset_percent: number;
+                /**
+                 * @description Plain text, at most 200 bytes, never HTML; {seconds} is substituted by clients. Empty or absent uses the default countdown.
+                 * @default Skip in {seconds}…
+                 */
+                skip_countdown: string;
+                /**
+                 * @description Plain text, at most 80 bytes, never HTML; empty or absent uses the default label.
+                 * @default Skip ad
+                 */
+                skip_label: string;
+                /**
+                 * @description Plain text, at most 200 bytes, never HTML; {seconds} is substituted by clients. Empty hides the message, absent uses the default.
+                 * @default This ad will end in {seconds}
+                 */
+                remaining_message: string;
             };
             /** @description Operator broadcast banner (W3 renders it). */
             broadcast: {
