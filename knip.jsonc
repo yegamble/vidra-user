@@ -1,0 +1,17 @@
+{
+  "$schema": "https://unpkg.com/knip@6.42.1/schema.json",
+  // Playwright's regular expression testMatch is not a static import.
+  "entry": ["e2e-backed/admin.setup.ts"],
+  // Vendored design references are never application or test source.
+  "ignore": [".ralph/design-templates/**"],
+  // scripts/codegen.mjs resolves this exact local binary through node_modules.
+  "ignoreDependencies": ["openapi-typescript"],
+  // The full backend contract is generator-owned, including unused schema maps.
+  "ignoreIssues": {
+    "lib/api/generated.ts": ["types"],
+    // Both names are used: transcode-safe sample and legacy tiny-upload fixture.
+    "e2e-backed/fixtures.ts": ["duplicates"],
+    // Runtime invalidation and the test reset intentionally share one function.
+    "lib/use-video-action-permissions.ts": ["duplicates"]
+  }
+}

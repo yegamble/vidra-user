@@ -20,6 +20,8 @@ const eslintConfig = defineConfig([
   {
     rules: {
       "no-console": "error",
+      // Knip covers module exports; private dead code must block the gate too.
+      "@typescript-eslint/no-unused-vars": "error",
     },
   },
   // i18n: UI code translates through useT() (client) or getI18n() (server),

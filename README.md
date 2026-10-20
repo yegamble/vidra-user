@@ -98,6 +98,10 @@ npm run dev                  # http://localhost:3000
 | `npm run typecheck` | `tsc --noEmit` (strict) |
 | `npm run lint` | ESLint (`no-console`; `lib/logger.ts` is the only exception) |
 | `npm run lint:icons` | Bans emoji/glyph icons (`scripts/check-no-emoji.mjs`) |
+| `npm run lint:unused` | Knip checks unused files, exports, types and dependencies |
+| `npm run lint:workflows` | Actionlint, ShellCheck and zizmor (Go 1.27, uv and ShellCheck required) |
+| `npm run quality` | Typecheck, ESLint, icon lint and Knip; no browser or backend required |
+| `npm run hooks:install` | Install the pinned commit/push checks without overwriting unmanaged hooks |
 | `npm run test` | Vitest unit/component tests |
 | `npm run e2e` | Mocked Playwright suite — no backend needed |
 | `npm run e2e:backed` | Backend-backed Playwright suite — requires a live `vidra-core` |
@@ -110,8 +114,31 @@ npm run dev                  # http://localhost:3000
 **`npm run ci` is the canonical gate** and runs:
 
 ```
-typecheck && lint && lint:icons && test && build && e2e
+quality && test && build && e2e
 ```
+
+Knip includes unit and browser test entry points. A test import counts as use;
+this gate does not prove that every tested component is mounted in production.
+Its narrow exceptions document generated contract maps, design references,
+the dynamically resolved codegen binary, and intentional duplicate aliases.
+
+Install the pinned hook runner and repository commit/push checks:
+
+```bash
+npm run hooks:install
+```
+
+The installer preserves existing unmanaged hooks. Both hooks invoke the exact
+Lefthook version in `lefthook.yml`, then run the quality and workflow checks;
+pre-commit also checks staged whitespace. Install Go 1.27, uv and ShellCheck
+alongside the Node dependencies before using these hooks.
+CI enforces the same quality gate when local hooks are bypassed or absent.
+Workflow checks also run independently in
+`ci-guard`; run `npm run lint:workflows` when changing Actions or CI scripts.
+Update Knip in `package.json` and `package-lock.json`; update workflow scanner
+pins in `scripts/ci/workflow-lint.sh` across all three component repositories.
+Keep the Lefthook install pin in `scripts/install-hooks.sh` and the command and
+minimum in `lefthook.yml` in sync.
 
 ## Environment variables
 
