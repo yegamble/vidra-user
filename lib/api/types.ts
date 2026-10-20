@@ -20,7 +20,6 @@ import type { components, operations } from "./generated";
 type Schemas = components["schemas"];
 
 // Re-export the raw generated maps for anything not aliased below.
-export type { components, operations, paths } from "./generated";
 
 // --- Errors -----------------------------------------------------------------
 export type ApiErrorEnvelope = Schemas["ErrorResponse"];
@@ -40,26 +39,14 @@ export type VideoPrivacy = NonNullable<Schemas["Video"]["privacy"]>;
 export type VideoState = NonNullable<Schemas["Video"]["state"]>;
 export type Video = Schemas["Video"];
 export type SensitiveVideoFields = Pick<Video, "is_sensitive">;
-export type VideoRendition = Schemas["VideoRendition"];
 // Seek-bar chapters (CORE-15): a video's chapter list (GET, ascending) and the
 // whole-set replace request (PUT). One chapter = { start_seconds, title }.
 export type VideoChapter = Schemas["VideoChapter"];
 export type VideoChapters = Schemas["VideoChapters"];
 export type SetVideoChaptersRequest = Schemas["SetVideoChaptersRequest"];
-// IPFS mirror CIDs on the public video detail (present only when public+published
-// and at least one object is pinned). The card/feed IPFS badge reads the boolean
-// Video["ipfs_pinned"]; this object carries the gateway CIDs for detail consumers.
-export type VideoIPFS = Schemas["VideoIPFS"];
-// Password-protected videos + embed privacy (CORE-17). The unlock request/response
-// mint a short-lived, video-scoped playback token; the password projections expose
-// id + created_at only (the plaintext/hash are write-only). EmbedPrivacy is the
-// tier + (whitelist only) allow-listed hostnames.
-export type UnlockVideoRequest = Schemas["UnlockVideoRequest"];
 export type UnlockVideoResponse = Schemas["UnlockVideoResponse"];
 export type VideoPassword = Schemas["VideoPassword"];
 export type VideoPasswords = Schemas["VideoPasswords"];
-export type SetVideoPasswordRequest = Schemas["SetVideoPasswordRequest"];
-export type ReplaceVideoPasswordsRequest = Schemas["ReplaceVideoPasswordsRequest"];
 export type EmbedPrivacy = Schemas["EmbedPrivacy"];
 export type EmbedPrivacyStatus = EmbedPrivacy["status"];
 export type VideoConfigOption = Schemas["VideoConfigOption"];
@@ -72,7 +59,6 @@ export type VideoListResponse = Schemas["VideoListResponse"];
 // delete / set-privacy request + per-id results (POST /me/videos/bulk).
 export type BulkVideosRequest = Schemas["BulkVideosRequest"];
 export type BulkVideosResponse = Schemas["BulkVideosResponse"];
-export type BulkVideoResult = Schemas["BulkVideoResult"];
 export type VideoSearchResponse = Schemas["VideoSearchResponse"];
 export type VideoDownloadFile = Schemas["VideoDownloadFile"];
 export type VideoDownloadResponse = Schemas["VideoDownloadResponse"];
@@ -83,13 +69,11 @@ export type VideoDownloadResponse = Schemas["VideoDownloadResponse"];
 // live_stream_id (exactly one) — which is what lets a player consume a session
 // the same way whichever it is playing. See lib/playback-session.ts.
 export type PlaybackSession = Schemas["PlaybackSession"];
-export type PlaybackPackagingFormat = NonNullable<PlaybackSession["packaging_format"]>;
 // One playback measurement for POST /qoe/events (batched from lib/playback-qoe.ts).
 // Note what the schema does NOT have: a delivery_source. The client reports the
 // URL it fetched from and the SERVER classifies it, which is what keeps that
 // dimension bounded — see lib/playback-qoe.ts.
 export type QoEEventInput = Schemas["QoEEventInput"];
-export type QoEEventType = QoEEventInput["type"];
 export type QoEErrorClass = NonNullable<QoEEventInput["error_class"]>;
 // `QoEEngine` and `QoEPackagingFormat` are one closed vocabulary shared by the
 // beacon that writes these events and the rollups that read them, so they are
@@ -106,7 +90,6 @@ export type FeedTokenIssued = Schemas["FeedTokenIssued"];
 export type SearchSuggestionsResponse =
   operations["searchSuggestions"]["responses"]["200"]["content"]["application/json"];
 export type SearchSuggestion = SearchSuggestionsResponse["suggestions"][number];
-export type SearchSuggestionType = "query" | "video" | "channel" | "tag" | "history";
 // The entity searches. Both are ordinary paged lists over types the app already
 // renders: channel hits are plain `Channel` objects, and an account hit is a
 // strict subset of `PublicUserProfile` — so a result card is the profile card,
@@ -117,7 +100,6 @@ export type AccountSearchResult = Schemas["AccountSearchResult"];
 // A home / related recommendation rail: video cards each carrying a `reason`.
 export type RecommendationsResponse = Schemas["RecommendationsResponse"];
 export type RecommendationItem = RecommendationsResponse["items"][number];
-export type RecommendationSource = NonNullable<RecommendationsResponse["source"]>;
 // The caller's stored search history (GET /me/search-history). Inline in the
 // spec, derived from the operation.
 export type SearchHistoryResponse =
@@ -128,7 +110,7 @@ export type SearchHistoryEntry = NonNullable<SearchHistoryResponse["entries"]>[n
 // properties are forwarded), so the client type is authored here: a discriminated
 // bag whose optional fields carry ONLY ids/positions/counts — never query text
 // beyond the search term the user typed, and no other PII. See lib/search-events.ts.
-export type SearchEventType =
+type SearchEventType =
   | "search.suggestions_shown"
   | "search.suggestion_selected"
   | "search.submitted"
@@ -192,15 +174,7 @@ export type SystemStatusProcess = NonNullable<SystemStatus["processes"]>[number]
 // projected off the parent because the spec declares them inline (no named
 // component to alias), which keeps them in lockstep with codegen.
 export type InfrastructureStatus = Schemas["InfrastructureStatus"];
-export type InfrastructureServer = InfrastructureStatus["server"];
 export type InfrastructureStorage = InfrastructureStatus["storage"];
-export type InfrastructureNetworking = InfrastructureStatus["networking"];
-export type InfrastructureBackups = InfrastructureStatus["backups"];
-// Optional deploy-shape blocks, unwrapped like SystemStatusDatabase: the
-// server omits delivery when no CDN is wired and live when FEATURE_LIVE is
-// off, so the presence check belongs at the call site.
-export type InfrastructureDelivery = NonNullable<InfrastructureStatus["delivery"]>;
-export type InfrastructureLive = NonNullable<InfrastructureStatus["live"]>;
 export type InfrastructureFeature = Schemas["InfrastructureFeature"];
 export type MailTestResult = Schemas["MailTestResult"];
 // Outbound-mail configuration (GET/PUT/DELETE /admin/mail-config). The READ
@@ -208,9 +182,6 @@ export type MailTestResult = Schemas["MailTestResult"];
 // those flags with the write-only secret itself, which is why the two shapes
 // are separate types rather than one with optional fields.
 export type MailConfigState = Schemas["MailConfigState"];
-export type MailConfigSource = MailConfigState["source"];
-export type MailConfigSecretStatus = MailConfigState["secret_status"];
-export type MailConfigEnvironment = Schemas["MailConfigEnvironment"];
 export type MailConfigDocument = Schemas["MailConfigDocument"];
 export type MailTransport = MailConfigDocument["transport"];
 // Admin-managed OIDC sign-in providers (/admin/oidc-providers). The client
@@ -219,9 +190,9 @@ export type OIDCProvider = Schemas["OIDCProvider"];
 export type OIDCProviderList = Schemas["OIDCProviderList"];
 export type OIDCProviderCreateRequest = Schemas["OIDCProviderCreateRequest"];
 export type OIDCProviderUpdateRequest = Schemas["OIDCProviderUpdateRequest"];
-export type MailConfigSMTP = Schemas["MailConfigSMTP"];
+type MailConfigSMTP = Schemas["MailConfigSMTP"];
 export type MailSMTPEncryption = MailConfigSMTP["encryption"];
-export type MailConfigMailgun = Schemas["MailConfigMailgun"];
+type MailConfigMailgun = Schemas["MailConfigMailgun"];
 export type MailgunRegion = MailConfigMailgun["region"];
 export type MailConfigInput = Schemas["MailConfigInput"];
 export type MailConfigPutRequest = Schemas["MailConfigPutRequest"];
@@ -239,13 +210,8 @@ export type OwnerTransferResponse = Schemas["OwnerTransferResponse"];
 
 // --- Admin: instance settings / jobs / media GB (slice user-admin-config) ----
 export type InstanceSetting = Schemas["InstanceSetting"];
-export type InstanceSettingType = NonNullable<Schemas["InstanceSetting"]["type"]>;
 export type InstanceSettingsResponse = Schemas["InstanceSettingsResponse"];
 export type UpdateInstanceSettingsRequest = Schemas["UpdateInstanceSettingsRequest"];
-// Dry-run validation (POST /admin/instance-settings/validate). An issue is the
-// SAME {field, message} shape the PATCH's 422 carries, deliberately, so the
-// config form renders early answers and save-time rejections through one path.
-export type SettingValidationIssue = Schemas["SettingValidationIssue"];
 export type InstanceSettingsValidationResponse =
   Schemas["InstanceSettingsValidationResponse"];
 // Instance documents (config-parity W1 store, W6 editors). Hand-written: the
@@ -259,10 +225,7 @@ export type InstanceDocument = {
   hash: string;
 };
 export type JobsOverview = Schemas["JobsOverview"];
-export type QueueStatus = Schemas["QueueStatus"];
-export type JobFailure = Schemas["JobFailure"];
 export type JobRunState = Schemas["JobRunState"];
-export type JobMetadata = Schemas["JobMetadata"];
 export type JobRun = Schemas["JobRun"];
 export type JobEvent = Schemas["JobEvent"];
 export type JobRunsResponse = Schemas["JobRunsResponse"];
@@ -278,19 +241,13 @@ export type MediaGCAdoptBucketResponse = Schemas["MediaGCAdoptBucketResponse"];
 export type StorageMigration = Schemas["StorageMigration"];
 export type StorageMigrationState = StorageMigration["state"];
 export type StorageMigrationList = Schemas["StorageMigrationList"];
-export type StorageMigrationFailure = Schemas["StorageMigrationFailure"];
 export type StorageMigrationPreview = Schemas["StorageMigrationPreview"];
-/** Why a paused campaign is paused. Absent on every other state. */
-export type StorageMigrationPausedReason = NonNullable<
-  StorageMigration["paused_reason"]
->;
 export type IPFSStatus = Schemas["IPFSStatus"];
 export type IPFSConfig = Schemas["IPFSConfig"];
 export type IPFSConfigDocument = Schemas["IPFSConfigDocument"];
 export type IPFSConfigUpdate = Schemas["IPFSConfigUpdate"];
 export type IPFSOperationRequest = Schemas["IPFSOperationRequest"];
 export type IPFSOperationResult = Schemas["IPFSOperationResult"];
-export type IPFSNetworks = Schemas["IPFSNetworks"];
 export type IPFSNetworkStatus = Schemas["IPFSNetworkStatus"];
 export type IPFSPinCounts = Schemas["IPFSPinCounts"];
 export type IPFSClassPinCounts = Schemas["IPFSClassPinCounts"];
@@ -331,11 +288,9 @@ export type PeerTubeImportConflictPolicy = NonNullable<
 export type PeerTubeImportMediaMode = NonNullable<
   Schemas["PeerTubeImportLaunchRequest"]["media_mode"]
 >;
-export type PeerTubeImportRunMediaMode = NonNullable<Schemas["PeerTubeImportRun"]["media_mode"]>;
 export type PeerTubeImportCounts = Schemas["PeerTubeImportCounts"];
 export type PeerTubeImportReport = Schemas["PeerTubeImportReport"];
 export type PeerTubeImportRun = Schemas["PeerTubeImportRun"];
-export type PeerTubeImportRunState = NonNullable<Schemas["PeerTubeImportRun"]["state"]>;
 export type PeerTubeImportRunList = Schemas["PeerTubeImportRunList"];
 
 export type RegistrationRequestStatus = NonNullable<Schemas["RegistrationRequest"]["status"]>;
@@ -384,7 +339,6 @@ export type AccountArchive = Schemas["AccountArchive"];
 export type AccountImportSummary = Schemas["AccountImportSummary"];
 export type PeerTubeArchiveImportSummary = Schemas["PeerTubeImportSummary"];
 export type PeerTubeFollowImportStatus = Schemas["PeerTubeFollowImportStatus"];
-export type DeleteAccountRequest = Schemas["DeleteAccountRequest"];
 export type MFARequiredResponse = Schemas["MFARequiredResponse"];
 export type MFAStatusResponse = Schemas["MFAStatusResponse"];
 export type RecognisedDevice = Schemas["RecognisedDevice"];
@@ -392,7 +346,6 @@ export type RecognisedDevicesResponse = Schemas["RecognisedDevicesResponse"];
 export type SecurityPrefsRequest = Schemas["SecurityPrefsRequest"];
 export type TOTPEnrollmentResponse = Schemas["TOTPEnrollmentResponse"];
 export type RecoveryCodesResponse = Schemas["RecoveryCodesResponse"];
-export type MFAChallengeRequest = Schemas["MFAChallengeRequest"];
 export type OAuthIdentity = Schemas["OAuthIdentity"];
 export type OAuthIdentitiesResponse = Schemas["OAuthIdentitiesResponse"];
 export type AuthResponse = Schemas["AuthResponse"];
@@ -404,10 +357,7 @@ export type FollowedChannel = Schemas["FollowedChannel"];
 export type FollowedChannelsResponse = Schemas["FollowedChannelsResponse"];
 /** The per-follow notification bell: "all" = every new public video, "none" = muted. */
 export type NotificationSetting = NonNullable<Schemas["Channel"]["notification_setting"]>;
-export type SetFollowNotificationsRequest = Schemas["SetFollowNotificationsRequest"];
 export type FollowNotificationsResponse = Schemas["FollowNotificationsResponse"];
-// The caller's role on a channel (GET /me/channels only): "owner" or "editor".
-export type ChannelRole = NonNullable<Schemas["Channel"]["role"]>;
 
 // --- Channel collaborators (editors, migration 0097) ------------------------
 export type ChannelMember = Schemas["ChannelMember"];
@@ -437,9 +387,7 @@ export type CreateVideoRequest = Schemas["CreateVideoRequest"];
 // --- Reports / moderation ---------------------------------------------------
 export type CreateReportRequest = Schemas["CreateReportRequest"];
 export type ReportReason = Schemas["ReportReason"];
-export type ReportTargetType = NonNullable<Schemas["Report"]["target_type"]>;
 export type ReportStatus = NonNullable<Schemas["Report"]["status"]>;
-export type ReportReporter = Schemas["ReportReporter"];
 export type Report = Schemas["Report"];
 export type ReportListResponse = Schemas["ReportListResponse"];
 export type ResolveReportRequest = Schemas["ResolveReportRequest"];
@@ -473,7 +421,6 @@ export type AdminCommentListResponse = Schemas["AdminCommentListResponse"];
 export type BulkRemoveCommentsResponse = Schemas["BulkRemoveCommentsResponse"];
 export type WatchedWord = Schemas["WatchedWord"];
 export type WatchedWordListResponse = Schemas["WatchedWordListResponse"];
-export type CreateWatchedWordRequest = Schemas["CreateWatchedWordRequest"];
 export type WatchedWordList = Schemas["WatchedWordList"];
 export type WatchedWordListsPage = Schemas["WatchedWordListsPage"];
 export type CreateWatchedWordListRequest = Schemas["CreateWatchedWordListRequest"];
@@ -503,23 +450,16 @@ export type SuggestionBanResponse = Schemas["SuggestionBanResponse"];
 
 // --- Video update / upload --------------------------------------------------
 export type UpdateVideoRequest = Schemas["UpdateVideoRequest"];
-/** POST /api/v1/videos/{id}/file response (the published video + stored file). */
-export type UploadVideoResult = Schemas["UploadVideoFileResponse"];
 export type CreateUploadSessionRequest = Schemas["CreateUploadSessionRequest"];
 export type UploadSessionResponse = Schemas["UploadSessionResponse"];
-export type UploadSessionState = NonNullable<Schemas["UploadStatusResponse"]["state"]>;
 export type UploadStatusResponse = Schemas["UploadStatusResponse"];
 /** GET /api/v1/me/uploads — one of the caller's active resumable sessions. */
 export type ActiveUpload = Schemas["ActiveUpload"];
 export type ActiveUploadsResponse = Schemas["ActiveUploadsResponse"];
-export type ImportJobState = NonNullable<Schemas["ImportJob"]["state"]>;
 export type ImportJob = Schemas["ImportJob"];
 export type ImportJobResponse = Schemas["ImportJobResponse"];
 export type ImportResolver = NonNullable<Schemas["ImportVideoRequest"]["resolver"]>;
 export type VideoFile = Schemas["VideoFile"];
-
-// --- Live streaming ---------------------------------------------------------
-export type LiveStreamState = NonNullable<Schemas["LiveStream"]["state"]>;
 export type LiveStream = Schemas["LiveStream"];
 export type CreateLiveStreamRequest = Schemas["CreateLiveStreamRequest"];
 export type UpdateLiveStreamRequest = Schemas["UpdateLiveStreamRequest"];
@@ -555,8 +495,6 @@ export type CommentsPolicy = NonNullable<Video["comments_policy"]>;
 // --- Captions ---------------------------------------------------------------
 export type Caption = Schemas["Caption"];
 export type CaptionListResponse = Schemas["CaptionListResponse"];
-export type CaptionJobState = NonNullable<Schemas["CaptionJob"]["state"]>;
-export type CaptionJob = Schemas["CaptionJob"];
 export type CaptionJobResponse = Schemas["CaptionJobResponse"];
 export type AutoCaptionRequest = Schemas["AutoCaptionRequest"];
 
@@ -583,7 +521,6 @@ export type BlocklistAllowlistResponse = Schemas["BlocklistAllowlistResponse"];
 // --- Federation / remote content --------------------------------------------
 export type RemoteVideo = Schemas["RemoteVideo"];
 export type CreateRemoteFollowRequest = Schemas["CreateRemoteFollowRequest"];
-export type RemoteFollowState = NonNullable<Schemas["RemoteFollow"]["state"]>;
 export type RemoteFollow = Schemas["RemoteFollow"];
 export type RemoteFollowListResponse = Schemas["RemoteFollowListResponse"];
 export type RemoteInteractionResolution = Schemas["RemoteInteractionResolution"];
@@ -593,7 +530,6 @@ export type RemoteVideoCommentListResponse = Schemas["RemoteVideoCommentListResp
 // federated to the origin. `local:true` is the discriminator against the
 // mirrored RemoteVideoComment (`local:false`).
 export type AuthoredRemoteComment = Schemas["AuthoredRemoteComment"];
-export type AuthoredRemoteCommentRequest = Schemas["AuthoredRemoteCommentRequest"];
 // The federation status of the reply sent to the origin. The comment is hosted
 // and shown locally regardless of this value.
 export type RemoteCommentDeliveryState = AuthoredRemoteComment["delivery_state"];
@@ -623,7 +559,6 @@ export type DMAttachmentKind = NonNullable<Schemas["DMAttachment"]["kind"]>;
 export type DMAttachment = Schemas["DMAttachment"];
 export type LinkPreview = Schemas["LinkPreview"];
 export type UploadAttachmentResponse = Schemas["UploadAttachmentResponse"];
-export type MarkConversationReadRequest = Schemas["MarkConversationReadRequest"];
 export type MessageListResponse = Schemas["MessageListResponse"];
 // DM privacy toggles (GET/PATCH /api/v1/me/messaging-prefs). Today just the
 // read-receipts switch: core DEFAULTS it on and hides the caller's read
@@ -637,12 +572,9 @@ export type E2EEDevice = Schemas["E2EEDevice"];
 export type E2EEDeviceListResponse = Schemas["E2EEDeviceListResponse"];
 export type RegisterE2EEDeviceRequest = Schemas["RegisterE2EEDeviceRequest"];
 export type E2EEOneTimeKey = Schemas["E2EEOneTimeKey"];
-export type UploadOneTimeKeysRequest = Schemas["UploadOneTimeKeysRequest"];
 export type UploadOneTimeKeysResponse = Schemas["UploadOneTimeKeysResponse"];
 export type OneTimeKeyCountResponse = Schemas["OneTimeKeyCountResponse"];
-export type E2EEClaim = Schemas["E2EEClaim"];
 export type E2EEClaimResponse = Schemas["E2EEClaimResponse"];
-export type EncryptedEnvelope = Schemas["EncryptedEnvelope"];
 export type SendEncryptedMessageRequest = Schemas["SendEncryptedMessageRequest"];
 export type SendEncryptedResponse = Schemas["SendEncryptedResponse"];
 export type EncryptedMessage = Schemas["EncryptedMessage"];
@@ -655,10 +587,6 @@ export type RemoteVideoRating = Schemas["RemoteVideoRating"];
 export type WatchProgress = Schemas["WatchProgress"];
 export type HistoryItem = Schemas["HistoryItem"];
 export type WatchHistoryResponse = Schemas["WatchHistoryResponse"];
-
-// --- Notifications ----------------------------------------------------------
-export type NotificationType = NonNullable<Schemas["Notification"]["type"]>;
-export type NotificationActor = Schemas["NotificationActor"];
 export type Notification = Schemas["Notification"];
 export type NotificationListResponse = Schemas["NotificationListResponse"];
 export type UnreadCountResponse = Schemas["UnreadCountResponse"];
@@ -682,14 +610,12 @@ export type PlaybackShare = Schemas["PlaybackShare"];
 // Account-level rollup (GET /me/stats): totals summed across all OWNED channels,
 // the aggregated 30-day daily series, and a per-channel breakdown row per channel.
 export type AccountStatsResponse = Schemas["AccountStatsResponse"];
-export type AccountChannelStats = Schemas["AccountChannelStats"];
 
 // --- Storage quota ----------------------------------------------------------
 export type QuotaStatus = Schemas["QuotaStatus"];
 
 // --- Notification preferences -----------------------------------------------
 export type NotificationPrefsResponse = Schemas["NotificationPrefsResponse"];
-export type UpdateNotificationPrefsRequest = Schemas["UpdateNotificationPrefsRequest"];
 
 // --- Player settings (PLAY-07) ----------------------------------------------
 export type PlayerSettings = Schemas["PlayerSettings"];

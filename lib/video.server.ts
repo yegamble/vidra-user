@@ -36,7 +36,7 @@ import { serverJson } from "@/lib/server-json";
 // could share one backend read for up to a minute. On a hot video that is the
 // difference between ~1 request/minute and one per view. WatchView's own client
 // fetch is unchanged.
-export const PUBLIC_VIDEO_FRESHNESS = "no-store" as const;
+const PUBLIC_VIDEO_FRESHNESS = "no-store" as const;
 
 /**
  * Fetch one video's public detail document server-side (anonymous — no bearer

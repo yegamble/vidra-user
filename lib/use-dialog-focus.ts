@@ -7,7 +7,7 @@ import { useEffect, useRef, type RefObject } from "react";
  * already excludes disabled controls and `tabindex="-1"`, which is sufficient
  * for our dialogs (no conditionally hidden focusables live inside them).
  */
-export const DIALOG_FOCUSABLE =
+const DIALOG_FOCUSABLE =
   'a[href],button:not([disabled]),textarea:not([disabled]),input:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])';
 
 /**

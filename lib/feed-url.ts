@@ -26,7 +26,7 @@ export interface FeedUrlDefaults {
   scope: FeedScope;
 }
 
-export const SHIPPED_FEED_URL_DEFAULTS: FeedUrlDefaults = { sort: "recent", scope: "local" };
+const SHIPPED_FEED_URL_DEFAULTS: FeedUrlDefaults = { sort: "recent", scope: "local" };
 
 /**
  * feedHref builds the canonical browse URL for a sort mode + filters, keeping

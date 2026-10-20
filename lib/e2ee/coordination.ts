@@ -7,7 +7,7 @@ const OPERATIONS = new Set<PropertyKey>([
 ]);
 const localQueues = new Map<string, Promise<unknown>>();
 
-export function supportsCrossTabCoordination(): boolean {
+function supportsCrossTabCoordination(): boolean {
   return typeof navigator !== "undefined" && typeof navigator.locks?.request === "function";
 }
 

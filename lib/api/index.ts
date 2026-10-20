@@ -1,23 +1,14 @@
-export { ApiError, apiRequest, restoreSession } from "./client";
-export type { RequestOptions } from "./client";
-export {
-  errorMessage,
-  fieldErrors,
-  GENERIC_ERROR_MESSAGE,
-  NETWORK_ERROR_MESSAGE,
-  RATE_LIMITED_MESSAGE,
-} from "./error-message";
-export { isUploadCancelled, uploadWithProgress } from "./upload";
-export type { UploadOptions, UploadPhase, UploadProgress } from "./upload";
+export { ApiError, restoreSession } from "./client";
+export { errorMessage, fieldErrors } from "./error-message";
+export { isUploadCancelled } from "./upload";
+export type { UploadPhase } from "./upload";
 export {
   adminWatchedWordLists,
   api,
   myWatchedWordLists,
   channelAvatarUrl,
   channelBannerUrl,
-  ipfsHlsMasterUrl,
   liveHlsMasterUrl,
-  playlistThumbnailUrl,
   remoteVideoThumbnailUrl,
   userAvatarUrl,
   userBannerUrl,
@@ -31,35 +22,13 @@ export {
 export {
   findResumableUploadSession,
   forgetUploadSession,
-  rememberUploadSession,
   resumableUpload,
-  UPLOAD_FAILED_CODE,
-  UPLOAD_PROCESSING_TIMEOUT_CODE,
 } from "./resumable-upload";
-export type {
-  ResumableUploadOptions,
-  ResumableUploadResult,
-  StoredUploadSession,
-} from "./resumable-upload";
-export { computeFileFingerprint, findUploadByFingerprint } from "./fingerprint";
-export type {
-  FeedParams,
-  InstanceLogoType,
-  JobRunListParams,
-  SearchParams,
-  SearchVideosParams,
-} from "./endpoints";
-export {
-  openAuthenticatedEventStream,
-  parseEventStream,
-  subscribeEventStream,
-} from "./sse";
-export type {
-  EventStreamOptions,
-  EventStreamState,
-  EventStreamSubscription,
-  ServerSentEvent,
-} from "./sse";
+export type { StoredUploadSession } from "./resumable-upload";
+export { computeFileFingerprint } from "./fingerprint";
+export type { FeedParams, InstanceLogoType, SearchVideosParams } from "./endpoints";
+export { subscribeEventStream } from "./sse";
+export type { EventStreamState, ServerSentEvent } from "./sse";
 export { getVideoConfigCached, resolveOptionLabel } from "./video-config";
 export {
   EMPTY_INSTANCE_ABOUT,
@@ -68,15 +37,11 @@ export {
   getInstanceCached,
   invalidateInstanceCache,
   isSensitiveVideo,
-  resetInstanceCacheForTests,
 } from "./instance-platform";
 export type {
-  ContactInstanceRequest,
   ExtendedInstanceResponse,
   InstanceAboutResponse,
-  InstancePlatformExtras,
   SensitiveContentPolicy,
-  SensitiveVideoFields,
 } from "./instance-platform";
 export { authApi, beginATProtoLogin, oauthBeginUrl } from "./auth";
 export type { LoginCredentials } from "./auth";

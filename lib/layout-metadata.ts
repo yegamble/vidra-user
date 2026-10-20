@@ -45,11 +45,11 @@ import {
 // two drift.
 export const FALLBACK_DESCRIPTION = "A federated, PeerTube-inspired video platform.";
 export const FALLBACK_ICON = "/icon.svg";
-export const NEUTRAL_ICON = "/neutral-icon.svg";
+const NEUTRAL_ICON = "/neutral-icon.svg";
 // The product Apple touch icon is only used when software branding is visible.
 // Hidden instances use an operator image or a neutral PNG; Safari cannot use SVG.
 export const APPLE_TOUCH_ICON = "/apple-touch-icon.png";
-export const NEUTRAL_APPLE_TOUCH_ICON = "/neutral-apple-touch-icon.png";
+const NEUTRAL_APPLE_TOUCH_ICON = "/neutral-apple-touch-icon.png";
 
 /**
  * The site's NAME for a document/app slot (root <title>, PWA name): the

@@ -17,7 +17,7 @@ import type { DMAttachment, LinkPreview } from "@/lib/api";
 
 import { sameDay, separatorLabel } from "./time";
 
-export type SendState = "sending" | "failed";
+type SendState = "sending" | "failed";
 
 /**
  * A message as displayed in the timeline: the server `Message` fields we render,
@@ -39,7 +39,7 @@ export interface DisplayMessage {
   sendState?: SendState;
 }
 
-export type RunPosition = "single" | "first" | "middle" | "last";
+type RunPosition = "single" | "first" | "middle" | "last";
 
 export interface TimelineRunMessage {
   message: DisplayMessage;

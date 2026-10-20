@@ -551,7 +551,7 @@ export type ControlKind =
  * ATProto/local member to mislabel. Extend only when a gate for another
  * protocol actually ships.
  */
-export type SettingProtocol = "activitypub";
+type SettingProtocol = "activitypub";
 
 /** One choice of an enum-segmented control: the wire value + its picker label. */
 export type EnumOption = { value: string; label: string };
@@ -561,7 +561,7 @@ export type EnumOption = { value: string; label: string };
 // expose these through the setting's `options` (that field is enum-only), so
 // the client carries the suggestion set; the server's validator stays the truth
 // (an unknown rung 422s). The shipped default ladder is a subset (1080–360p).
-export const TRANSCODING_RUNG_OPTIONS: readonly EnumOption[] = [
+const TRANSCODING_RUNG_OPTIONS: readonly EnumOption[] = [
   { value: "2160", label: "2160p" },
   { value: "1440", label: "1440p" },
   { value: "1080", label: "1080p" },

@@ -10,7 +10,7 @@ import type { SettingValue } from "@/lib/admin-config-ia";
  * Long enough that tabbing straight through a section does not fire a burst of
  * requests, short enough that the answer is there before they reach for Save.
  */
-export const VALIDATE_DEBOUNCE_MS = 400;
+const VALIDATE_DEBOUNCE_MS = 400;
 
 export type SettingValidation = {
   /** Per-key messages from the most recent dry run. Same shape as 422 fields. */

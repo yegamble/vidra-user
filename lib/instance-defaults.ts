@@ -77,5 +77,3 @@ export function setInstanceDefaultsForTests(defaults: InstanceDefaultsBlock | nu
   primed = defaults !== null;
   if (typeof window !== "undefined") window.dispatchEvent(new Event(EVENT));
 }
-
-export { EVENT as INSTANCE_DEFAULTS_EVENT };

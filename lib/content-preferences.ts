@@ -7,7 +7,7 @@ import { useSyncExternalStore } from "react";
 
 import type { ContentPreferences } from "@/lib/api";
 
-export const NO_CONTENT_PREFERENCES: ContentPreferences = {
+const NO_CONTENT_PREFERENCES: ContentPreferences = {
   sensitive_flag_policies: {},
   preferred_languages: [],
 };

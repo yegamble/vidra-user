@@ -39,7 +39,7 @@ import {
 } from "@/components/icons";
 
 /** Which group of the desktop rail an entry renders in. */
-export type AdminNavGroup = "primary" | "more";
+type AdminNavGroup = "primary" | "more";
 
 export type AdminNavItem = {
   href: string;
@@ -215,7 +215,7 @@ export const ADMIN_NAV: readonly AdminNavItem[] = [
 ] as const;
 
 /** The console index — where an unresolvable path falls back to. */
-export const ADMIN_NAV_HOME = "/admin";
+const ADMIN_NAV_HOME = "/admin";
 
 /** The rail's icon-bearing top group (deliberately small). */
 export const ADMIN_NAV_PRIMARY: readonly AdminNavItem[] = ADMIN_NAV.filter(

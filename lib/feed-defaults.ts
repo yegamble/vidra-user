@@ -15,8 +15,8 @@ import type {
 } from "@/lib/instance-config.server";
 
 /** The shipped fallbacks (pre-W5 behavior; also vidra-core's config defaults). */
-export const FALLBACK_FEED_SORT: FeedSort = "recent";
-export const FALLBACK_FEED_SCOPE: FeedScope = "local";
+const FALLBACK_FEED_SORT: FeedSort = "recent";
+const FALLBACK_FEED_SCOPE: FeedScope = "local";
 
 /** How a browse list advances past its first page. */
 export type BrowseScrollMode = "button" | "auto";
@@ -25,7 +25,7 @@ export type BrowseScrollMode = "button" | "auto";
  * The shipped fallback: an explicit "Load more" button. Infinite scroll is
  * something an operator opts into, never something a missing snapshot turns on.
  */
-export const FALLBACK_BROWSE_SCROLL_MODE: BrowseScrollMode = "button";
+const FALLBACK_BROWSE_SCROLL_MODE: BrowseScrollMode = "button";
 
 /** What "/" shows a visitor who expressed no preference of their own. */
 export type LandingPage = "home-recent" | "trending" | "local" | "home";

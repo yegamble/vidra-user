@@ -30,12 +30,6 @@ export type RemoteSearchResult =
   | { type: "channel"; actor: RemoteSearchActor }
   | { type: "account"; actor: RemoteSearchActor };
 
-/** The two effective gates from GET /instance `search{}` (absent = off). */
-export interface InstanceSearchBlock {
-  remote_uri_users?: boolean;
-  remote_uri_anonymous?: boolean;
-}
-
 function isActor(v: unknown): v is RemoteSearchActor {
   if (typeof v !== "object" || v === null) return false;
   const a = v as Record<string, unknown>;

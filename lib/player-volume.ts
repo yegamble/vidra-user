@@ -29,21 +29,6 @@ function clamp(value: number): number {
   return Math.min(1, Math.max(0, value));
 }
 
-/** subscribeVolume notifies on a change here or in another tab. */
-export function subscribeVolume(onChange: () => void): () => void {
-  window.addEventListener("storage", onChange);
-  window.addEventListener(VOLUME_EVENT, onChange);
-  return () => {
-    window.removeEventListener("storage", onChange);
-    window.removeEventListener(VOLUME_EVENT, onChange);
-  };
-}
-
-/** The SSR snapshot: always the baked default, so hydration cannot disagree. */
-export function serverVolume(): StoredVolume {
-  return DEFAULT_VOLUME;
-}
-
 /**
  * readStoredVolume returns the remembered level, or the default when nothing is
  * stored, the value is corrupt, or storage is unavailable (private mode).

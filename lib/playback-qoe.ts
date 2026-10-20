@@ -58,7 +58,7 @@ import { logger } from "@/lib/logger";
 export const QOE_MAX_BATCH = 20;
 const FLUSH_INTERVAL_MS = 5_000;
 /** The server's own ceiling on any measured duration (1 hour), clamped here too. */
-export const QOE_MAX_MEASUREMENT_MS = 3_600_000;
+const QOE_MAX_MEASUREMENT_MS = 3_600_000;
 /** The server's `source_url` length fence. A longer URL is dropped, not truncated. */
 const MAX_SOURCE_URL_LENGTH = 2048;
 
@@ -193,9 +193,9 @@ export function beaconSourceUrl(raw: string | null | undefined): string | undefi
  * come from? That is a different question from "did the URL change", which a
  * generation tag, a rung change or a segment answers yes to on every request.
  */
-export const SAME_ORIGIN = "same-origin" as const;
+const SAME_ORIGIN = "same-origin" as const;
 
-export function beaconSourceOrigin(reduced: string | undefined): string | undefined {
+function beaconSourceOrigin(reduced: string | undefined): string | undefined {
   if (!reduced) return undefined;
   if (reduced.startsWith("/")) return SAME_ORIGIN;
   const match = /^(https?:\/\/[^/]+)/i.exec(reduced);

@@ -7,7 +7,7 @@ import type { ImportJob } from "@/lib/api";
 // four-step progress rail. Kept dependency-free (no React) so it is unit-tested
 // directly.
 
-export type ImportStageKey = "queued" | "metadata" | "downloading" | "processing";
+type ImportStageKey = "queued" | "metadata" | "downloading" | "processing";
 
 export type ImportStage = { key: ImportStageKey; label: string };
 

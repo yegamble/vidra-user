@@ -21,7 +21,7 @@ export type VttCue = {
 };
 
 /** A block the editor leaves alone (NOTE, STYLE, REGION, malformed timing). */
-export type VttRaw = { kind: "raw"; key: string; text: string };
+type VttRaw = { kind: "raw"; key: string; text: string };
 
 export type VttBlock = VttCue | VttRaw;
 

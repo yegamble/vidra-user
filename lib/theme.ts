@@ -27,7 +27,7 @@ export type ThemePreference = "light" | "dark" | "system";
 const THEME_KEY = THEME_STORAGE_KEY;
 const THEME_EVENT = "vidra:theme";
 
-export function readThemePreference(): ThemePreference {
+function readThemePreference(): ThemePreference {
   try {
     const value = localStorage.getItem(THEME_KEY);
     return value === "light" || value === "dark" ? value : "system";

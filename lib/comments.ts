@@ -27,7 +27,7 @@ export type CommentThread = {
  * the orphan case, where a reply whose own parent isn't loaded is itself the
  * root of the thread it heads.
  */
-export function rootIdOf(c: Comment, byId: Map<string, Comment>): string {
+function rootIdOf(c: Comment, byId: Map<string, Comment>): string {
   let cur = c;
   const seen = new Set<string>();
   while (cur.parent_id && byId.has(cur.parent_id) && !seen.has(cur.id)) {
