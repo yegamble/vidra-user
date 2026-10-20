@@ -20,6 +20,13 @@ const ADS = {
   postroll_tag_url: "https://ads.example/post.xml",
   midroll_min_duration_seconds: 600,
   cooldown_seconds: 300,
+  embed_enabled: true,
+  controls: true,
+  skip_after_seconds: 5,
+  midroll_offset_percent: 0,
+  skip_countdown: "Skip in {seconds}…",
+  skip_label: "Skip ad",
+  remaining_message: "This ad will end in {seconds}",
 } satisfies NonNullable<InstanceResponse["ads"]>;
 
 function Probe() {
