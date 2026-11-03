@@ -113,8 +113,8 @@ function failedFamilies(
 }
 
 // AdminPeerTubeImportView is the admin-only "Import from PeerTube" operations
-// page. It launches a DRY-RUN (writes nothing) or a real import against the
-// server-configured source, renders the mapping/conflict/count report, streams
+// page. It launches a preview (with run records and storage probes) or a real
+// import against the server-configured source, renders the mapping/conflict/count report, streams
 // progress by polling the run, and exposes a conflict-policy selector. It NEVER
 // asks for or accepts source database credentials in the browser — the source
 // connection comes from the server configuration; this page only triggers and
@@ -386,9 +386,10 @@ function ImportPanel() {
             ) : null}
           </div>
           <p className="text-xs text-fg-muted">
-            A dry run reports the mapping plan, counts, and conflicts and writes nothing — run one
-            first. Start import performs the migration; it is idempotent and resumable, so re-running
-            safely skips already-imported rows.
+            Preview reports the mapping plan, counts, and conflicts without importing accounts,
+            videos or media. It records the run and may write and try to delete a small test object
+            in destination storage. Run a preview first. Start import performs the migration;
+            it is idempotent and resumable, so re-running safely skips already-imported rows.
           </p>
           {launchError ? (
             <p role="alert" className="text-sm text-danger">
@@ -547,8 +548,8 @@ function UnverifiedSchemaNotice({
         downstream re-checks what was written — you would have to.
       </p>
       <p className="text-sm text-fg-muted">
-        If you accept it, preview first. A dry run still writes nothing, and it is the cheapest way
-        to find out how much of schema v{version} this importer can actually read. Before a real
+        If you accept it, preview first. Preview does not import accounts, videos or media;
+        it checks how much of schema v{version} this importer can actually read. Before a real
         import, have a database backup you are willing to restore from.
       </p>
       <Checkbox
@@ -736,7 +737,7 @@ function RunPanel({ run, onRetry, retryDisabled }: {
             {noMedia > 0 ? (
               <p className="text-sm text-fg-muted">
                 {isDryRun
-                  ? "This preview writes nothing. Check source files and media mode before importing videos that may have nothing to play."
+                  ? "No accounts, videos or media were imported. Check source files and media mode before importing videos that may have nothing to play."
                   : "Check the source files and media mode for videos with nothing to play."}
                 {" "}
                 A retry cannot recreate missing originals or replace completed media mappings.
@@ -812,7 +813,7 @@ function ReportView({
     <div className="flex flex-col gap-4">
       <p className="text-sm text-fg-muted">
         {isDryRun
-          ? "This plan was computed without writing anything. Review the mapping and conflicts, then start the import."
+          ? "No accounts, videos or media were imported. Review the mapping and conflicts, then start the import."
           : "The migration summary below reflects what was written."}
       </p>
 

@@ -88,6 +88,15 @@ afterEach(() => {
 });
 
 describe("AdminPeerTubeImportView — launch payload", () => {
+  it("explains preview run records and destination storage probes without promising no writes", async () => {
+    render(<AdminPeerTubeImportView />);
+    await screen.findByRole("button", { name: "Preview (dry run)" });
+
+    expect(screen.getByText(/It records the run and may write and try to delete a small test object/)).toBeTruthy();
+    expect(screen.getByText(/without importing accounts, videos or media/)).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/writes nothing|without writing anything/i);
+  });
+
   it("POSTs the mode and the chosen conflict policy, with no schema sign-off", async () => {
     render(<AdminPeerTubeImportView />);
     await screen.findByRole("button", { name: "Start import" });
@@ -246,6 +255,8 @@ describe("AdminPeerTubeImportView — unverified schema sign-off", () => {
 
     render(<AdminPeerTubeImportView />);
     const box = await screen.findByRole("checkbox", { name: /I accept PeerTube schema v1055/ });
+    expect(screen.getByText(/Preview does not import accounts, videos or media/)).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/writes nothing|without writing anything/i);
     expect(startButton().disabled).toBe(true);
 
     fireEvent.click(box);
@@ -397,7 +408,8 @@ describe("AdminPeerTubeImportView — report and history", () => {
     expect(within(panel).getByRole("alert").textContent).not.toMatch(/only reference|copy mode does/);
     expect(within(panel).getByRole("alert").textContent).toContain("Check the source media");
     const review = within(panel).getByRole("region", { name: "Review migration gaps" });
-    expect(review.textContent).toContain("This preview writes nothing");
+    expect(review.textContent).toContain("No accounts, videos or media were imported.");
+    expect(panel.textContent).not.toMatch(/writes nothing|without writing anything/i);
     expect(review.textContent).not.toContain("arrived");
     expect(within(screen.getByRole("region", { name: "Import history" }))
       .getByText("Finished with gaps")).toBeTruthy();
