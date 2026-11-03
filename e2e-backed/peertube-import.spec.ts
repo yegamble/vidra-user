@@ -60,7 +60,7 @@ test("an admin previews a real PeerTube source with a dry run", async ({ page, r
   ).toBeVisible();
   expect(await page.locator('input[type="password"]').count()).toBe(0);
 
-  // Launch a dry run — writes nothing, just reports the plan.
+  // Preview records the run and probes storage without importing entities/media.
   await page.getByRole("button", { name: "Preview (dry run)" }).click();
 
   // The real worker finishes the analysis and the plan report renders (poll may
@@ -69,7 +69,7 @@ test("an admin previews a real PeerTube source with a dry run", async ({ page, r
     timeout: 60_000,
   });
   await expect(
-    page.getByText("This plan was computed without writing anything.", { exact: false }),
+    page.getByText("No accounts, videos or media were imported. Review the mapping and conflicts, then start the import.", { exact: true }),
   ).toBeVisible({ timeout: 60_000 });
 
   // The run is durably recorded: the admin API read shows a done dry-run with a

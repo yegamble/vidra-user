@@ -65,7 +65,7 @@ function run(overrides: Partial<Run>): Run {
   };
 }
 
-// A dry-run report: writes nothing, tallies the plan + conflicts + deferred kinds.
+// A dry-run report: no imported entities/media; tallies the plan, conflicts and deferred kinds.
 const dryReport = {
   source_version: 810,
   dry_run: true,
@@ -201,8 +201,8 @@ test("an admin runs a dry run and sees the mapping, counts, and conflicts", asyn
   ).toBeVisible();
   expect(await page.locator('input[type="password"]').count()).toBe(0);
 
-  // Pick a conflict policy and a media mode, then preview (a dry run writes
-  // nothing). Media mode is per-run precisely so it can be decided here rather
+  // Pick a conflict policy and a media mode, then preview without importing
+  // entities or media. Media mode is per-run so it can be decided here rather
   // than by restarting the api mid-migration.
   await page.getByLabel("Conflict policy").selectOption("rename");
   await page.getByLabel("Media").selectOption("copy");
@@ -210,6 +210,7 @@ test("an admin runs a dry run and sees the mapping, counts, and conflicts", asyn
 
   // Progress → the plan/mapping report.
   await expect(page.getByRole("heading", { name: "Dry run preview" })).toBeVisible();
+  await expect(page.getByText("No accounts, videos or media were imported. Review the mapping and conflicts, then start the import.", { exact: true })).toBeVisible();
   const table = page.getByRole("table");
   await expect(table.getByRole("rowheader", { name: "video" })).toBeVisible();
   await expect(table.getByRole("cell", { name: "140" })).toBeVisible();
