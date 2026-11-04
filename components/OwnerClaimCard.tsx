@@ -53,11 +53,13 @@ export function OwnerClaimCard({
     <section
       aria-labelledby="owner-claim-card-heading"
       className={cn(
-        "rounded-2xl border border-border-subtle bg-surface p-5 shadow-soft sm:p-6",
+        "@container rounded-2xl border border-border-subtle bg-surface p-5 shadow-soft sm:p-6",
         className,
       )}
     >
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+      {/* Container, not viewport, breakpoint: on /login and /signup the card sits in a
+          ~22rem column, where a row squeezed the copy into a one-word-per-line strip. */}
+      <div className="flex flex-col gap-4 @lg:flex-row @lg:items-center">
         <span
           aria-hidden="true"
           className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent/12 text-accent"
@@ -73,7 +75,7 @@ export function OwnerClaimCard({
             create the owner account to open it up.
           </p>
         </div>
-        <LinkButton href={OWNER_CLAIM_PATH} className="shrink-0 sm:self-center">
+        <LinkButton href={OWNER_CLAIM_PATH} className="shrink-0 self-start @lg:self-center">
           Finish setup
         </LinkButton>
       </div>

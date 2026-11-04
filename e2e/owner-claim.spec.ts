@@ -78,6 +78,34 @@ test("an unclaimed server points at the wizard from home, sign in and sign up", 
   }
 });
 
+test("the first-run card stacks inside the narrow sign-in column", async ({ page }) => {
+  // Regression: a viewport `sm:` breakpoint laid the card out as a row inside the
+  // ~22rem auth column, squeezing the copy to one or two words per line.
+  await page.setViewportSize({ width: 1480, height: 900 });
+  await mockInstance(page, true);
+
+  for (const path of ["/login", "/signup"]) {
+    await page.goto(path);
+    const heading = page.getByRole("heading", { name: CARD_HEADING });
+    await expect(heading).toBeVisible();
+    const card = page.locator("section", { has: heading });
+    const cardBox = (await card.boundingBox())!;
+    const headingBox = (await heading.boundingBox())!;
+    const ctaBox = (await page.getByRole("link", { name: "Finish setup" }).boundingBox())!;
+    // The button sits below the copy, and the heading gets most of the card's width.
+    expect(ctaBox.y).toBeGreaterThan(headingBox.y + headingBox.height);
+    expect(headingBox.width).toBeGreaterThan(cardBox.width * 0.6);
+  }
+
+  // Where there is room (home), it stays one row.
+  await page.goto("/");
+  const homeHeading = page.getByRole("heading", { name: CARD_HEADING });
+  await expect(homeHeading).toBeVisible();
+  const h = (await homeHeading.boundingBox())!;
+  const c = (await page.getByRole("link", { name: "Finish setup" }).boundingBox())!;
+  expect(c.y).toBeLessThan(h.y + h.height);
+});
+
 test("a claimed server shows no first-run card anywhere", async ({ page }) => {
   await mockInstance(page, false);
 
