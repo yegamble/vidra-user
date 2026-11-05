@@ -14,7 +14,7 @@ import {
   PlusSquareIcon,
   SearchIcon,
 } from "@/components/icons";
-import { api } from "@/lib/api";
+import { fetchUnreadNotificationCount } from "@/lib/unread-notification-count";
 import { isStandaloneRoute } from "@/lib/app-shell";
 import type { PlainMessageKey } from "@/lib/i18n";
 
@@ -82,14 +82,17 @@ export function BottomTabBar() {
     // Signed out there is nothing to fetch; the dot is also gated on `status`
     // below so a stale count can never render after sign-out.
     if (status !== "authed") return;
-    const controller = new AbortController();
-    api
-      .getUnreadNotificationCount(controller.signal)
-      .then((res) => setUnread(res.unread_count))
+    let live = true;
+    fetchUnreadNotificationCount(pathname)
+      .then((n) => {
+        if (live) setUnread(n);
+      })
       .catch(() => {
         // A failed count is non-critical; leave the dot as-is.
       });
-    return () => controller.abort();
+    return () => {
+      live = false;
+    };
   }, [status, pathname]);
 
   if (isStandaloneRoute(pathname)) {
