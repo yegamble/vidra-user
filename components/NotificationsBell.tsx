@@ -14,6 +14,7 @@ import {
 import { Spinner } from "@/components/ui/Spinner";
 import { api } from "@/lib/api";
 import type { Notification } from "@/lib/api";
+import { fetchUnreadNotificationCount } from "@/lib/unread-notification-count";
 
 // How many recent notifications the popover shows; the full list lives on
 // /notifications ("See all notifications").
@@ -45,14 +46,17 @@ export function NotificationsBell() {
 
   useEffect(() => {
     if (status !== "authed") return;
-    const controller = new AbortController();
-    api
-      .getUnreadNotificationCount(controller.signal)
-      .then((res) => setCount(res.unread_count))
+    let live = true;
+    fetchUnreadNotificationCount(pathname)
+      .then((n) => {
+        if (live) setCount(n);
+      })
       .catch(() => {
         // A failed count is non-critical; leave the badge as-is.
       });
-    return () => controller.abort();
+    return () => {
+      live = false;
+    };
   }, [status, pathname]);
 
   // Route changes (following a notification, or any other navigation) close
