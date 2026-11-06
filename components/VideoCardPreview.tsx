@@ -274,8 +274,10 @@ export function VideoCardPreview({
         </video>
       ) : null}
 
+      {/* No prefetch: a grid would server-render every watch page on the viewer's API budget. */}
       <Link
         href={href}
+        prefetch={false}
         aria-label={title}
         className="focus-ring absolute inset-0 z-10 rounded-[inherit]"
       >

@@ -14,9 +14,10 @@ vi.mock("next/link", () => ({
   default: ({
     href,
     children,
+    prefetch,
     ...props
-  }: { href: string; children: React.ReactNode } & React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
-    <a href={href} {...props}>
+  }: { href: string; children: React.ReactNode; prefetch?: boolean | null } & React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
+    <a href={href} data-prefetch={String(prefetch)} {...props}>
       {children}
     </a>
   ),
@@ -224,6 +225,7 @@ describe("SearchResults video actions", () => {
     render(<SearchResults query="grading" />);
 
     expect(await screen.findByRole("heading", { name: "Search match" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Search match" }).closest("a")?.getAttribute("data-prefetch")).toBe("false");
     const actions = screen.getByRole("button", { name: "Actions for Search match" });
     expect(actions.parentElement?.className).toContain("opacity-0");
     expect(actions.parentElement?.className).toContain("group-hover/card:opacity-100");

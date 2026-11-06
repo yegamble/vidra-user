@@ -181,7 +181,7 @@ export function VideoCard({
             {/* line-clamp lives on the Link so the anchor fills the title block
                 (its own width, not just the text run): the whole two-line title
                 is the click/tap target, matching the card thumbnail link. */}
-            <Link href={watchHref} className="focus-ring line-clamp-2 rounded-sm text-fg">
+            <Link href={watchHref} prefetch={false} className="focus-ring line-clamp-2 rounded-sm text-fg">
               {video.title}
             </Link>
           </h3>

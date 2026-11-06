@@ -14,9 +14,10 @@ vi.mock("next/link", () => ({
   default: ({
     href,
     children,
+    prefetch,
     ...props
-  }: { href: string; children: React.ReactNode } & React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
-    <a href={href} {...props}>
+  }: { href: string; children: React.ReactNode; prefetch?: boolean | null } & React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
+    <a href={href} data-prefetch={String(prefetch)} {...props}>
       {children}
     </a>
   ),
@@ -194,6 +195,7 @@ describe("LibraryView", () => {
     const historyLinks = screen.getAllByRole("link", { name: "Grading session" });
     expect(historyLinks).toHaveLength(2);
     expect(historyLinks.every((link) => link.getAttribute("href") === "/videos/h1")).toBe(true);
+    expect(historyLinks.find((link) => !link.textContent?.includes("No preview"))?.getAttribute("data-prefetch")).toBe("false");
     expect(historyLinks.some((link) => link.textContent?.includes("No preview"))).toBe(true);
 
     // Playlists rows.

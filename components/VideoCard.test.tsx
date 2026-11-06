@@ -15,9 +15,10 @@ vi.mock("next/link", () => ({
   default: ({
     href,
     children,
+    prefetch,
     ...props
-  }: { href: string; children: React.ReactNode } & React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
-    <a href={href} {...props}>
+  }: { href: string; children: React.ReactNode; prefetch?: boolean | null } & React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
+    <a href={href} data-prefetch={String(prefetch)} {...props}>
       {children}
     </a>
   ),
@@ -203,4 +204,10 @@ it("carries playlist context on both watch links", () => {
   render(<VideoCard video={video} playlistId="private/list" />);
   expect(screen.getByRole("link", { name: "Playlist video" }).getAttribute("href")).toContain("?playlist=private%2Flist");
   expect(mocks.previewProps?.href).toContain("?playlist=private%2Flist");
+});
+
+it("does not prefetch the watch page from its title link", () => {
+  const video = { id: "v1", title: "Grid video", created_at: "2026-09-05", has_thumbnail: false } as Video;
+  render(<VideoCard video={video} />);
+  expect(screen.getByRole("link", { name: "Grid video" }).getAttribute("data-prefetch")).toBe("false");
 });
