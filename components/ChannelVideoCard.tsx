@@ -97,7 +97,7 @@ export function ChannelVideoCard({
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <h3 className="text-[13px] font-semibold leading-snug tracking-[-0.01em] text-fg">
             {/* line-clamp on the Link so the whole two-line title is the tap target. */}
-            <Link href={watchHref} className="focus-ring line-clamp-2 rounded-sm">
+            <Link href={watchHref} prefetch={false} className="focus-ring line-clamp-2 rounded-sm">
               {video.title}
             </Link>
           </h3>

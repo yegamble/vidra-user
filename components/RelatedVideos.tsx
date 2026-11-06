@@ -251,7 +251,7 @@ function RelatedRow({ video, onDeleted }: { video: Video; onDeleted: () => void 
         />
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-0.5 pt-0.5">
-        <Link href={href} className="focus-ring rounded">
+        <Link href={href} prefetch={false} className="focus-ring rounded">
           <h3 className="line-clamp-2 text-[13px] font-semibold leading-snug text-fg">
             {video.title}
           </h3>

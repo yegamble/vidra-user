@@ -10,9 +10,10 @@ vi.mock("next/link", () => ({
   default: ({
     href,
     children,
+    prefetch,
     ...props
-  }: { href: string; children: React.ReactNode } & React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
-    <a href={href} {...props}>
+  }: { href: string; children: React.ReactNode; prefetch?: boolean | null } & React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
+    <a href={href} data-prefetch={String(prefetch)} {...props}>
       {children}
     </a>
   ),
@@ -88,6 +89,7 @@ describe("ChannelVideoCard", () => {
     expect(heading).toBeTruthy();
     // The title heading wraps a link to the watch page.
     expect(screen.getAllByRole("link")[0].getAttribute("href")).toBe("/videos/v1");
+    expect(heading.querySelector("a")?.getAttribute("data-prefetch")).toBe("false");
     expect(screen.getByText("96K views")).toBeTruthy();
     expect(screen.getByText("31:40")).toBeTruthy();
   });

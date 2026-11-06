@@ -19,9 +19,10 @@ vi.mock("next/link", () => ({
   default: ({
     href,
     children,
+    prefetch,
     ...props
-  }: { href: string; children: React.ReactNode } & React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
-    <a href={href} {...props}>
+  }: { href: string; children: React.ReactNode; prefetch?: boolean | null } & React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
+    <a href={href} data-prefetch={String(prefetch)} {...props}>
       {children}
     </a>
   ),
@@ -107,6 +108,11 @@ afterEach(() => {
 });
 
 describe("VideoCardPreview", () => {
+  it("does not prefetch the watch page it links to", () => {
+    renderPreview();
+    expect(screen.getByRole("link", { name: BASE_PROPS.title }).getAttribute("data-prefetch")).toBe("false");
+  });
+
   it("marks an above-the-fold poster eager and high priority", () => {
     const { container } = renderPreview({ posterPriority: true });
     const poster = container.querySelector('img[src="/poster.jpg"]');

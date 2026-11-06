@@ -14,9 +14,10 @@ vi.mock("next/link", () => ({
   default: ({
     href,
     children,
+    prefetch,
     ...props
-  }: { href: string; children: React.ReactNode } & React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
-    <a href={href} {...props}>
+  }: { href: string; children: React.ReactNode; prefetch?: boolean | null } & React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
+    <a href={href} data-prefetch={String(prefetch)} {...props}>
       {children}
     </a>
   ),
@@ -136,6 +137,7 @@ describe("RelatedVideos recommendations endpoint", () => {
     // Rows carry the ?src=related discovery marker.
     const link = screen.getByRole("heading", { name: "Recommended one" }).closest("a");
     expect(link?.getAttribute("href")).toBe("/videos/rec-1?src=related");
+    expect(link?.getAttribute("data-prefetch")).toBe("false");
   });
 
   it("falls back to the channel+category composition when the endpoint is empty", async () => {
