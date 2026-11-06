@@ -22,8 +22,9 @@ import type {
 import { formatCount, pluralize, relativeTime } from "@/lib/format";
 
 // Poll cadence for a launched (dry-run or real) import while it is still
-// pending/running — one scheduled read per tick, unmount-safe.
-const POLL_MS = 2000;
+// pending/running — one scheduled read per tick, unmount-safe. Each read counts
+// against the admin's per-minute API budget; at 2s a long import ate a quarter of it.
+const POLL_MS = 5000;
 
 const CONFLICT_POLICIES: { value: PeerTubeImportConflictPolicy; label: string }[] = [
   { value: "skip", label: "Skip — leave existing Vidra rows untouched (safest)" },
@@ -192,12 +193,13 @@ function ImportPanel() {
 
   // Poll the active run while it is still pending/running. A success replaces
   // the run object (re-running this effect for the next tick); a transient
-  // failure bumps pollNonce to retry. Unmount clears the timer and aborts.
+  // failure bumps pollNonce to retry. A hidden tab defers the tick until it is
+  // shown again. Unmount clears the timer and listener and aborts.
   useEffect(() => {
     if (!isInFlight(activeRun)) return;
     const id = activeRun.id;
     const controller = new AbortController();
-    const timer = setTimeout(() => {
+    const poll = () => {
       api
         .getPeerTubeImport(id, controller.signal)
         .then((run) => {
@@ -210,9 +212,19 @@ function ImportPanel() {
           if (controller.signal.aborted) return;
           setPollNonce((n) => n + 1);
         });
+    };
+    const onVisible = () => {
+      if (document.hidden) return;
+      document.removeEventListener("visibilitychange", onVisible);
+      poll();
+    };
+    const timer = setTimeout(() => {
+      if (document.hidden) document.addEventListener("visibilitychange", onVisible);
+      else poll();
     }, POLL_MS);
     return () => {
       clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisible);
       controller.abort();
     };
   }, [activeRun, pollNonce]);

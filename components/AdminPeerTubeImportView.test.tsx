@@ -34,7 +34,7 @@ import { ApiError } from "@/lib/api";
 import type { PeerTubeImportCounts, PeerTubeImportReport, PeerTubeImportRun } from "@/lib/api";
 
 // Must match POLL_MS in the component — the cadence the in-flight poll runs at.
-const POLL_MS = 2000;
+const POLL_MS = 5000;
 const RUN_ID = "11111111-1111-1111-1111-111111111111";
 
 function run(over: Partial<PeerTubeImportRun> = {}): PeerTubeImportRun {
@@ -352,9 +352,14 @@ describe("AdminPeerTubeImportView — in-flight polling", () => {
     expect(screen.getByText("An import run is in progress…")).toBeTruthy();
     // The poll is scheduled, not immediate — the mount read is the first fact.
     expect(mocks.getPeerTubeImport).not.toHaveBeenCalled();
+    // Every read is charged to the admin's per-minute API budget, so it does not run every 2s.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    expect(mocks.getPeerTubeImport).not.toHaveBeenCalled();
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(POLL_MS);
+      await vi.advanceTimersByTimeAsync(POLL_MS - 2000);
     });
 
     expect(mocks.getPeerTubeImport).toHaveBeenCalledWith(RUN_ID, expect.anything());
@@ -368,6 +373,38 @@ describe("AdminPeerTubeImportView — in-flight polling", () => {
       await vi.advanceTimersByTimeAsync(POLL_MS * 3);
     });
     expect(mocks.getPeerTubeImport).not.toHaveBeenCalled();
+  });
+});
+
+describe("AdminPeerTubeImportView — hidden tab", () => {
+  let hidden = false;
+  beforeEach(() => {
+    hidden = false;
+    Object.defineProperty(document, "hidden", { configurable: true, get: () => hidden });
+  });
+  afterEach(() => {
+    delete (document as { hidden?: boolean }).hidden;
+  });
+
+  it("pauses polling while the tab is hidden and resumes as soon as it is shown", async () => {
+    vi.useFakeTimers();
+    mocks.listPeerTubeImports.mockResolvedValue({ runs: [run({ state: "running" })] });
+    mocks.getPeerTubeImport.mockResolvedValue(run({ state: "running" }));
+
+    render(<AdminPeerTubeImportView />);
+    await act(async () => {});
+
+    hidden = true;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(POLL_MS * 4);
+    });
+    expect(mocks.getPeerTubeImport).not.toHaveBeenCalled();
+
+    hidden = false;
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    expect(mocks.getPeerTubeImport).toHaveBeenCalledTimes(1);
   });
 });
 
