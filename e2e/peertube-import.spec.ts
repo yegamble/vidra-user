@@ -353,35 +353,43 @@ test("a preview refused for an unverified schema names the detected version", as
   ).toBeVisible();
 });
 
-test("both launch buttons stay dead until the unverified version is acknowledged", async ({
+test("Start stays dead until the unverified version is acknowledged; preview re-checks without one", async ({
   page,
 }) => {
   await signIn(page, "admin");
-  let launched = false;
+  const launches: Record<string, unknown>[] = [];
   await page.route(IMPORT, (route) => {
     if (route.request().method() === "POST") {
-      launched = true;
-      return route.fulfill({ status: 202, json: run({ id: "r10", state: "pending" }) });
+      launches.push(route.request().postDataJSON() as Record<string, unknown>);
+      // Still unverified: the server refuses the unacknowledged preview again.
+      return route.fulfill({ status: 202, json: unverified() });
     }
     // The refusal is the newest run in the history, so a reload lands straight
     // back on the decision rather than losing it.
     return route.fulfill({ json: { runs: [unverified()] } });
   });
+  await page.route(IMPORT_ONE, (route) => route.fulfill({ json: unverified() }));
 
   await openImport(page);
   const preview = page.getByRole("button", { name: "Preview (dry run)" });
   const start = page.getByRole("button", { name: "Start import" });
-  await expect(preview).toBeDisabled();
   await expect(start).toBeDisabled();
 
-  // Even forced, a disabled control launches nothing.
-  await preview.click({ force: true });
+  // Even forced, a disabled Start launches nothing.
   await start.click({ force: true });
-  expect(launched).toBe(false);
+  expect(launches).toHaveLength(0);
 
-  // Ticking the version — and only that — opens both.
-  await page.getByRole("checkbox", { name: /I accept PeerTube schema v1040/ }).check();
+  // A preview is how a refusal that predates an importer upgrade is re-checked,
+  // so it needs no sign-off and sends none — the server keeps the real gate.
   await expect(preview).toBeEnabled();
+  await preview.click();
+  await expect.poll(() => launches.length).toBe(1);
+  expect(launches[0].mode).toBe("dry_run");
+  expect(launches[0]).not.toHaveProperty("acknowledged_schema_version");
+  await expect(start).toBeDisabled();
+
+  // Ticking the version — and only that — opens Start.
+  await page.getByRole("checkbox", { name: /I accept PeerTube schema v1040/ }).check();
   await expect(start).toBeEnabled();
 });
 

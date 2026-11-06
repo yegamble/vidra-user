@@ -288,6 +288,28 @@ describe("AdminPeerTubeImportView — unverified schema sign-off", () => {
     expect(startButton().disabled).toBe(true);
   });
 
+  it("lets a preview re-check a stale refusal without a sign-off, and only a passing preview opens Start", async () => {
+    // The refusal on screen can predate an upgrade that verified this version;
+    // preview is the read that finds out, so it must not need the sign-off.
+    mocks.listPeerTubeImports.mockResolvedValue({ runs: [refused()] });
+    mocks.launchPeerTubeImport.mockResolvedValue(run({ mode: "dry_run", state: "pending" }));
+
+    render(<AdminPeerTubeImportView />);
+    await screen.findByRole("checkbox", { name: /I accept PeerTube schema v1055/ });
+    const preview = screen.getByRole("button", { name: "Preview (dry run)" }) as HTMLButtonElement;
+    expect(preview.disabled).toBe(false);
+    expect(startButton().disabled).toBe(true);
+
+    fireEvent.click(preview);
+    await waitFor(() => expect(mocks.launchPeerTubeImport).toHaveBeenCalled());
+    expect(launchBody().mode).toBe("dry_run");
+    expect(launchBody()).not.toHaveProperty("acknowledged_schema_version");
+    // The new run is no longer a refusal, so the sign-off is gone and Start no longer waits on it.
+    await waitFor(() =>
+      expect(screen.queryByRole("checkbox", { name: /I accept PeerTube schema v1055/ })).toBeNull(),
+    );
+  });
+
   it("offers no sign-off at all when preflight could read no version", async () => {
     mocks.listPeerTubeImports.mockResolvedValue({
       runs: [run({ state: "failed", error_code: "undetectable_schema" })],
