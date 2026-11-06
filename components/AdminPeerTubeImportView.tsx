@@ -241,8 +241,10 @@ function ImportPanel() {
     async (mode: PeerTubeImportMode, repair = false) => {
       if (launching || isInFlight(activeRun)) return;
       // Blocked on an unacknowledged schema refusal — the buttons are disabled,
-      // this is the second lock so no code path can launch around it.
-      if (awaitingAcknowledgement) return;
+      // this is the second lock so no code path can launch around it. A preview
+      // is exempt: it is how a refusal that predates an importer upgrade is
+      // re-checked, and without a sign-off the server simply refuses it again.
+      if (awaitingAcknowledgement && mode !== "dry_run") return;
       // Repairs retain the recorded byte-handling decision, but never inherit
       // a cutover's permission to overwrite existing data or its schema sign-off.
       const launchMedia = repair ? activeRun?.media_mode ?? "" : mediaMode;
@@ -338,6 +340,7 @@ function ImportPanel() {
   // two launch buttons (the conflict policy stays editable while deciding).
   const controlsDisabled = launching || inFlight;
   const launchDisabled = controlsDisabled || awaitingAcknowledgement;
+  const previewDisabled = controlsDisabled;
 
   return (
     <div className="flex flex-col gap-6">
@@ -387,7 +390,7 @@ function ImportPanel() {
           {schemaUndetectable ? <UndetectableSchemaNotice /> : null}
 
           <div className="flex flex-wrap items-center gap-3">
-            <Button variant="secondary" onClick={() => void launch("dry_run")} disabled={launchDisabled}>
+            <Button variant="secondary" onClick={() => void launch("dry_run")} disabled={previewDisabled}>
               {launching ? "Starting…" : "Preview (dry run)"}
             </Button>
             <Button onClick={() => void launch("run")} disabled={launchDisabled}>
@@ -562,7 +565,9 @@ function UnverifiedSchemaNotice({
       <p className="text-sm text-fg-muted">
         If you accept it, preview first. Preview does not import accounts, videos or media;
         it checks how much of schema v{version} this importer can actually read. Before a real
-        import, have a database backup you are willing to restore from.
+        import, have a database backup you are willing to restore from. If this server has been
+        upgraded since that refusal, preview without ticking the box: it re-checks the source, and
+        a newer importer that has verified v{version} lets it through.
       </p>
       <Checkbox
         label={`I accept PeerTube schema v${version} for this run, and that the import may stop partway through or write wrong data.`}
