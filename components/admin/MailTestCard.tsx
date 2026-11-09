@@ -5,6 +5,7 @@ import { useCallback, useRef, useState } from "react";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { Input } from "@/components/ui/Input";
 import { Spinner } from "@/components/ui/Spinner";
 import { TextLink } from "@/components/ui/TextLink";
 import { ApiError, api, errorMessage } from "@/lib/api";
@@ -113,6 +114,11 @@ export function MailTestCard({
 }: MailTestCardProps = {}) {
   const [phase, setPhase] = useState<MailPhase>("idle");
   const [error, setError] = useState<string | null>(null);
+  // Blank = the instance's contact address. Any other address costs a fresh
+  // password, so a stolen session alone cannot turn this into a relay.
+  const [recipient, setRecipient] = useState("");
+  const [password, setPassword] = useState("");
+  const [sentToNamed, setSentToNamed] = useState(false);
 
   const inFlight = useRef(false);
 
@@ -122,11 +128,24 @@ export function MailTestCard({
     // guard — not the DOM — is what makes a second Enter a no-op. A ref, not
     // the phase state, because two Enters in one tick see the same stale state.
     if (inFlight.current) return;
+    const to = recipient.trim();
+    if (to !== "" && password === "") {
+      // Refused here rather than by the server: the budget is 10 an hour.
+      setPhase("idle");
+      setError(
+        "Enter your password to send to another address. It is what stops a stolen session from using this button as a relay.",
+      );
+      return;
+    }
     inFlight.current = true;
     setPhase("sending");
     setError(null);
+    const proof = password;
+    // The password must not outlive this attempt in a controlled input.
+    setPassword("");
     try {
-      await api.sendTestMail();
+      await api.sendTestMail(to === "" ? undefined : { to, current_password: proof });
+      setSentToNamed(to !== "");
       setPhase("sent");
     } catch (err) {
       setPhase("idle");
@@ -145,7 +164,13 @@ export function MailTestCard({
         "503":
           "This instance has no outbound mail configured yet. Choose how mail should be sent, save, then test again.",
         "409":
-          "No instance contact email is set, so there is nowhere to send the test. Set contact_email on the General config page first.",
+          to === ""
+            ? "No instance contact email is set, so there is nowhere to send the test. Enter another address above, or set contact_email on the General config page."
+            : "Your account has no password to confirm this with. Set one in Settings → Security, or send to the contact address instead.",
+        step_up_required:
+          "Enter your password to send to another address. It is what stops a stolen session from using this button as a relay.",
+        "403": "That password was not accepted. Enter your own account password to send to another address.",
+        "422": "Enter one plain email address, with no name and no list.",
         // The app-wide 429 copy says "wait a moment"; this endpoint's budget is
         // 10 messages per admin per hour, so a moment is the wrong advice.
         "429":
@@ -157,7 +182,7 @@ export function MailTestCard({
     } finally {
       inFlight.current = false;
     }
-  }, [smtpHost, smtpPort, fromAddress]);
+  }, [recipient, password, smtpHost, smtpPort, fromAddress]);
 
   const sending = phase === "sending";
 
@@ -171,10 +196,33 @@ export function MailTestCard({
           <p className="mt-1 text-sm text-fg-muted">
             Send one probe message to find out whether mail works before a user
             needs a password reset. It goes to this instance&rsquo;s own contact
-            address — you cannot choose the recipient, which is what keeps this
-            button from being a relay for anyone who gets an admin password.
+            address unless you name another one below — that asks for your
+            password, so a stolen session cannot use this button as a relay.
           </p>
         </div>
+        <Input
+          type="email"
+          inputMode="email"
+          autoComplete="off"
+          spellCheck={false}
+          label="Send to another address (optional)"
+          hint="Leave empty to use the contact address. Useful for checking delivery to a particular mailbox."
+          value={recipient}
+          onChange={(e) => {
+            setRecipient(e.target.value);
+            if (e.target.value.trim() === "") setPassword("");
+          }}
+        />
+        {recipient.trim() !== "" ? (
+          <Input
+            type="password"
+            autoComplete="current-password"
+            label="Confirm with your password"
+            hint="Your own account password, asked again for every send to another address."
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        ) : null}
         <div className="flex flex-wrap items-center gap-3">
           {/* aria-disabled, never disabled: the user activated this button, so
               taking it out of the accessibility tree mid-press is how keyboard
@@ -200,8 +248,9 @@ export function MailTestCard({
 
       {phase === "sent" ? (
         <Alert variant="success">
-          The message was accepted for delivery to this instance&rsquo;s contact
-          address. Acceptance is a promise to try, not proof of delivery — check
+          The message was accepted for delivery to{" "}
+          {sentToNamed ? "the address you entered" : <>this instance&rsquo;s contact address</>}.
+          Acceptance is a promise to try, not proof of delivery — check
           that inbox. If it never arrives or lands in spam, publish the SPF and
           DKIM records your provider gives you: without them most mail is
           filtered or refused outright.
