@@ -176,6 +176,7 @@ export type SystemStatusProcess = NonNullable<SystemStatus["processes"]>[number]
 export type InfrastructureStatus = Schemas["InfrastructureStatus"];
 export type InfrastructureStorage = InfrastructureStatus["storage"];
 export type InfrastructureFeature = Schemas["InfrastructureFeature"];
+export type MailTestRequest = Schemas["MailTestRequest"];
 export type MailTestResult = Schemas["MailTestResult"];
 // Outbound-mail configuration (GET/PUT/DELETE /admin/mail-config). The READ
 // document reports each credential as a `*_set` boolean; the INPUT replaces

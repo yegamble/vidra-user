@@ -29,6 +29,7 @@ import type {
   OIDCProviderCreateRequest,
   OIDCProviderList,
   OIDCProviderUpdateRequest,
+  MailTestRequest,
   MailTestResult,
   UpdateInstanceSettingsRequest,
   InstanceAboutResponse,
@@ -2962,14 +2963,18 @@ export const api = {
 
   /**
    * POST /api/v1/admin/mail/test — send one outbound-mail probe (admin only).
-   * No request body and no recipient parameter: the server sends to the
-   * instance's own contact address, so the button cannot be turned into an
-   * open relay. 202 means the relay accepted the message, not that it was
-   * delivered. 503 = no mail path configured, 409 = no contact address set,
-   * 502 = the relay refused, 429 = throttled (its own small budget).
+   * Without a body the server sends to the instance's own contact address. A
+   * named `to` is honoured only with the caller's current_password (403
+   * otherwise), so a session alone cannot turn the button into a relay. 202
+   * means the relay accepted the message, not that it was delivered. 503 = no
+   * mail path, 409 = no contact address and no `to`, 422 = `to` is not one
+   * plain address, 502 = the relay refused, 429 = throttled.
    */
-  sendTestMail: () =>
-    apiRequest<MailTestResult>("/api/v1/admin/mail/test", { method: "POST" }),
+  sendTestMail: (body?: MailTestRequest) =>
+    apiRequest<MailTestResult>(
+      "/api/v1/admin/mail/test",
+      body ? { method: "POST", body } : { method: "POST" },
+    ),
 
   /**
    * GET /api/v1/admin/mail-config — the outbound-mail configuration and the

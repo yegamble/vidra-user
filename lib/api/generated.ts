@@ -5682,7 +5682,7 @@ export interface paths {
         put?: never;
         /**
          * Send an outbound-mail test message (admin)
-         * @description Sends one probe message so an admin can find out whether outbound mail works BEFORE a user needs a password reset. No request body. The recipient is the instance's own effective contact address and the caller CANNOT choose it. That is the security design of the endpoint: an authenticated send-to-any-address button is an open relay behind an admin password — useful for spam, for phishing from the instance's own domain, and for burning its sending reputation. With a fixed recipient there is nothing to abuse. 202 means the message was handed to the relay, not that it was delivered: SMTP acceptance is a promise to try, and an admin who reads "sent" and finds nothing in the inbox has learned something real. Restricted to admins, throttled on its own budget (10 per admin per hour in production wiring), and audited as admin.mail.test with the OUTCOME only — never an address.
+         * @description Sends one probe message so an admin can find out whether outbound mail works BEFORE a user needs a password reset. The body is OPTIONAL: without it, or with a blank `to`, the recipient is the instance's own effective contact address. An admin may name another recipient in `to` — to check delivery to a particular mailbox, or before any contact address exists — but only with a fresh proof of their OWN password (`current_password`, or `step_up_token` for an admin without one), the same gate as saving the mail settings. A send-to-any-address button is otherwise an open relay behind a stolen admin session — useful for spam, for phishing from the instance's own domain and for burning its sending reputation — so a session alone can still only mail the operator. 202 means the message was handed to the relay, not that it was delivered: SMTP acceptance is a promise to try, and an admin who reads "sent" and finds nothing in the inbox has learned something real. Restricted to admins, throttled on its own budget (10 per admin per hour in production wiring) and by the strict auth limiter, and audited as admin.mail.test with the OUTCOME only — never an address.
          */
         post: operations["sendTestMail"];
         delete?: never;
@@ -11106,6 +11106,16 @@ export interface components {
             message_stream?: string;
             /** @description Write-only. Omit to keep the stored token. Never returned. */
             server_token?: string;
+        };
+        /** @description Optional body of POST /api/v1/admin/mail/test. Omit it, or leave `to` blank, to send to the instance contact address. A `to` needs exactly one of current_password / step_up_token. */
+        MailTestRequest: {
+            /**
+             * Format: email
+             * @description One bare address — no display name, no list.
+             */
+            to?: string;
+            current_password?: string;
+            step_up_token?: string;
         };
         /** @description The mail probe was handed to the relay. "sent" is the only value — a failure is an error response, not a status in here. */
         MailTestResult: {
@@ -29066,7 +29076,11 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MailTestRequest"];
+            };
+        };
         responses: {
             /** @description The message was handed to the mail relay. */
             202: {
@@ -29075,6 +29089,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MailTestResult"];
+                };
+            };
+            /** @description The body is not valid JSON. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Missing, invalid, or expired token. */
@@ -29086,7 +29109,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description The caller is not an admin. */
+            /** @description The caller is not an admin, or `to` was named without a valid fresh proof — code step_up_required (no proof, or the session needs a step-up) or an incorrect password. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -29095,8 +29118,17 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description No instance contact email is set, so there is nowhere to send the test. Set the contact_email instance setting first. */
+            /** @description No `to` was named and no instance contact email is set, so there is nowhere to send — set the contact_email instance setting, or name a recipient. Also password_not_set when a password is offered for an account that has none. */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `to` is not one plain email address (a display name, a list or a line break), both proofs were sent, or password_already_set (a step-up offered for an account that has a password). Field errors name the input. */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

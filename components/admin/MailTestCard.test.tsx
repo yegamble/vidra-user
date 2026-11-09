@@ -151,6 +151,80 @@ describe("MailTestCard", () => {
   });
 });
 
+describe("MailTestCard with a chosen recipient", () => {
+  const recipient = () => screen.getByLabelText(/Send to another address/);
+  const password = () => screen.queryByLabelText(/Confirm with your password/);
+
+  it("sends no body while no recipient is named", async () => {
+    mocks.sendTestMail.mockResolvedValue({});
+    render(<MailTestCard />);
+    expect(password()).toBeNull();
+    fireEvent.click(sendButton());
+    await screen.findByText(/not proof of\s+delivery/);
+    expect(mocks.sendTestMail).toHaveBeenCalledWith(undefined);
+  });
+
+  it("asks for the password once an address is typed, and sends both", async () => {
+    mocks.sendTestMail.mockResolvedValue({});
+    render(<MailTestCard />);
+    fireEvent.change(recipient(), { target: { value: " qa@elsewhere.test " } });
+    const pw = password();
+    expect(pw).not.toBeNull();
+    expect(pw?.getAttribute("type")).toBe("password");
+    expect(pw?.getAttribute("autocomplete")).toBe("current-password");
+    fireEvent.change(pw as HTMLElement, { target: { value: "supersecret" } });
+    fireEvent.click(sendButton());
+    const ok = await screen.findByText(/not proof of\s+delivery/);
+    expect(ok.textContent).toContain("the address you entered");
+    expect(mocks.sendTestMail).toHaveBeenCalledWith({
+      to: "qa@elsewhere.test",
+      current_password: "supersecret",
+    });
+    // The password must not outlive the attempt in a controlled input.
+    expect((password() as HTMLInputElement).value).toBe("");
+  });
+
+  it("does not spend the budget on a named recipient without a password", async () => {
+    render(<MailTestCard />);
+    fireEvent.change(recipient(), { target: { value: "qa@elsewhere.test" } });
+    fireEvent.click(sendButton());
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("Enter your password");
+    expect(mocks.sendTestMail).not.toHaveBeenCalled();
+  });
+
+  it("explains a wrong password and an address the server refused", async () => {
+    mocks.sendTestMail.mockRejectedValueOnce(
+      new ApiError({ status: 403, code: "forbidden", message: "incorrect password" }),
+    );
+    render(<MailTestCard />);
+    fireEvent.change(recipient(), { target: { value: "qa@elsewhere.test" } });
+    fireEvent.change(password() as HTMLElement, { target: { value: "nope" } });
+    fireEvent.click(sendButton());
+    expect((await screen.findByRole("alert")).textContent).toContain("password was not accepted");
+
+    mocks.sendTestMail.mockRejectedValueOnce(
+      new ApiError({ status: 422, code: "validation_failed", message: "validation failed" }),
+    );
+    fireEvent.change(password() as HTMLElement, { target: { value: "supersecret" } });
+    fireEvent.click(sendButton());
+    await waitFor(() =>
+      expect(screen.getByRole("alert").textContent).toContain("one plain email address"),
+    );
+  });
+
+  it("points a missing contact address at the field that works around it", async () => {
+    mocks.sendTestMail.mockRejectedValue(
+      new ApiError({ status: 409, code: "conflict", message: "no contact email" }),
+    );
+    render(<MailTestCard />);
+    fireEvent.click(sendButton());
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("contact_email");
+    expect(alert.textContent).toContain("another address");
+  });
+});
+
 describe("mailFailureCopy", () => {
   const ctx = { smtpHost: "smtp.example.com", smtpPort: 587, fromAddress: "no-reply@example.org" };
 

@@ -284,6 +284,41 @@ test("the mail probe reports acceptance without printing the address", async ({
   await expect(page.getByText(/@/)).toHaveCount(0);
 });
 
+test("a named mail-probe recipient travels only with the admin's password", async ({
+  page,
+}) => {
+  await signIn(page, "admin");
+  await page.route(INFRA, (route) => route.fulfill({ json: infrastructure }));
+  const bodies: (string | null)[] = [];
+  await page.route(MAIL_TEST, (route) => {
+    bodies.push(route.request().postData());
+    return route.fulfill({ status: 202, json: { status: "sent" } });
+  });
+  await openInfrastructure(page);
+  const card = page.getByRole("region", { name: "Outbound mail test" });
+  const password = card.getByLabel("Confirm with your password");
+
+  // The password field exists only once an address is named.
+  await expect(password).toHaveCount(0);
+  await card.getByLabel("Send to another address (optional)").fill("qa@elsewhere.test");
+
+  // Without the password nothing leaves the browser: the budget is 10 an hour.
+  await card.getByRole("button", { name: "Send test message" }).click();
+  await expect(card.getByRole("alert")).toContainText("Enter your password");
+  expect(bodies).toHaveLength(0);
+
+  await password.fill("supersecret");
+  await card.getByRole("button", { name: "Send test message" }).click();
+  await expect(page.getByText(/not proof of delivery/)).toBeVisible();
+  expect(bodies).toHaveLength(1);
+  expect(JSON.parse(bodies[0] ?? "{}")).toEqual({
+    to: "qa@elsewhere.test",
+    current_password: "supersecret",
+  });
+  // The password does not outlive the attempt.
+  await expect(password).toHaveValue("");
+});
+
 test("mail probe failures explain what to do next", async ({ page }) => {
   await signIn(page, "admin");
   await page.route(INFRA, (route) => route.fulfill({ json: infrastructure }));
