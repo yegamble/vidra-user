@@ -6,6 +6,7 @@ import {
   apiOriginOf,
   isFrameablePath,
   buildContentSecurityPolicy,
+  cspAllowancesFromEnv,
   shouldSendHsts,
 } from "./security-headers";
 
@@ -34,6 +35,64 @@ describe("buildContentSecurityPolicy", () => {
   it("lets any site frame /embed, and allows eval only in development", () => {
     expect(buildContentSecurityPolicy({ ...base, frameable: true })).not.toContain("frame-ancestors");
     expect(buildContentSecurityPolicy({ ...base, isDev: true })).toContain(" 'unsafe-eval';");
+  });
+});
+
+// Operator allowances: each switch adds exactly its own source or directive, and
+// the default (no allowance) stays the byte-identical strict policy asserted above.
+describe("buildContentSecurityPolicy operator allowances", () => {
+  const base = { nonce: "abc123", apiOrigin: null, frameable: false, isDev: false };
+  const none = { evalScripts: false, inlineEventHandlers: false, frameSources: [] };
+
+  it("changes nothing when every allowance is off", () => {
+    expect(buildContentSecurityPolicy({ ...base, allow: none })).toBe(buildContentSecurityPolicy(base));
+  });
+
+  it("adds 'unsafe-eval' to script-src only when eval is allowed", () => {
+    const policy = buildContentSecurityPolicy({ ...base, allow: { ...none, evalScripts: true } });
+    expect(policy).toContain("script-src 'self' 'nonce-abc123' 'strict-dynamic' 'wasm-unsafe-eval' 'unsafe-eval';");
+    expect(policy).not.toContain("frame-src");
+    expect(policy).not.toContain("script-src-attr");
+  });
+
+  it("allows inline event handlers through script-src-attr, never through script-src", () => {
+    const policy = buildContentSecurityPolicy({ ...base, allow: { ...none, inlineEventHandlers: true } });
+    expect(policy).toContain("; script-src-attr 'unsafe-inline';");
+    expect(policy).toContain("script-src 'self' 'nonce-abc123' 'strict-dynamic' 'wasm-unsafe-eval';");
+  });
+
+  it("widens frames to the given sources and keeps frame-ancestors", () => {
+    const policy = buildContentSecurityPolicy({ ...base, allow: { ...none, frameSources: ["https:"] } });
+    expect(policy).toContain("; frame-src 'self' https:;");
+    expect(policy).toContain("frame-ancestors 'self'");
+  });
+});
+
+describe("cspAllowancesFromEnv", () => {
+  it("is all off for an empty environment", () => {
+    expect(cspAllowancesFromEnv({})).toEqual({ evalScripts: false, inlineEventHandlers: false, frameSources: [] });
+  });
+
+  it("switches on only for the literal true", () => {
+    expect(cspAllowancesFromEnv({ CSP_ALLOW_EVAL: "true", CSP_ALLOW_INLINE_EVENT_HANDLERS: "1" })).toMatchObject({
+      evalScripts: true,
+      inlineEventHandlers: false,
+    });
+    expect(cspAllowancesFromEnv({ CSP_ALLOW_INLINE_EVENT_HANDLERS: "true" }).inlineEventHandlers).toBe(true);
+  });
+
+  it("keeps https frame sources and drops everything else", () => {
+    const { frameSources } = cspAllowancesFromEnv({
+      CSP_FRAME_SRC: "https:  https://ads.example https://*.ads.example:8443 http: * 'unsafe-inline' data: http://plain.example",
+    });
+    expect(frameSources).toEqual(["https:", "https://ads.example", "https://*.ads.example:8443"]);
+  });
+
+  // The value lands inside a response header: it must not be able to end the
+  // directive and start another one.
+  it("cannot be used to inject a directive", () => {
+    expect(cspAllowancesFromEnv({ CSP_FRAME_SRC: "https:; script-src * 'unsafe-inline'" }).frameSources).toEqual([]);
+    expect(cspAllowancesFromEnv({ CSP_FRAME_SRC: "https://a.example;script-src,*" }).frameSources).toEqual([]);
   });
 });
 
