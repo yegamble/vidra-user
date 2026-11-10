@@ -31,6 +31,28 @@ describe("proxy CSP", () => {
   });
 });
 
+// The allowances are read from the container environment per request; with none
+// set the response must carry the strict policy, not a widened one.
+describe("proxy CSP operator allowances", () => {
+  const csp = () => run("/").headers.get("content-security-policy") ?? "";
+  it("adds nothing by default", () => {
+    const policy = csp();
+    expect(policy).not.toContain("'unsafe-eval'");
+    expect(policy).not.toContain("frame-src");
+    expect(policy).not.toContain("script-src-attr");
+  });
+  it("applies each allowance set in the environment", () => {
+    vi.stubEnv("CSP_ALLOW_EVAL", "true");
+    vi.stubEnv("CSP_FRAME_SRC", "https:");
+    vi.stubEnv("CSP_ALLOW_INLINE_EVENT_HANDLERS", "true");
+    const policy = csp();
+    expect(policy).toMatch(/script-src [^;]*'unsafe-eval';/);
+    expect(policy).toContain("frame-src 'self' https:");
+    expect(policy).toContain("script-src-attr 'unsafe-inline'");
+    expect(policy).toContain("frame-ancestors 'self'");
+  });
+});
+
 // Reverting proxy.ts to an /embed-only check blanks every migrated PeerTube
 // iframe (the redirect hop would say frame-ancestors 'self'), and nothing else
 // would notice.

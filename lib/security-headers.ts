@@ -16,7 +16,45 @@ export type CspOptions = {
   /** /embed exists to be iframed by any site; nothing else does. */
   frameable: boolean;
   isDev: boolean;
+  /** Operator allowances; omitted = none. */
+  allow?: CspAllowances;
 };
+
+/**
+ * Operator-granted relaxations of the enforced policy, each its own switch and
+ * all off by default. Third-party tags an operator adds through custom.js (ad
+ * networks, widgets) often cannot run under the strict policy; before these the
+ * only way out was CSP_REPORT_ONLY, which drops the WHOLE policy, clickjacking
+ * protection included. Each one gives up a specific protection, so an operator
+ * turns on exactly what a tag was measured to need and nothing else.
+ */
+type CspAllowances = {
+  /** 'unsafe-eval' on script-src, for tags that unpack themselves with eval(). */
+  evalScripts: boolean;
+  /** Inline on*="…" attributes in markup a tag injects. The costliest of the
+   *  three: injected HTML with an event handler runs again. */
+  inlineEventHandlers: boolean;
+  /** Sources frames may load from besides this site, e.g. ["https:"]. */
+  frameSources: string[];
+};
+
+const NO_ALLOWANCES: CspAllowances = { evalScripts: false, inlineEventHandlers: false, frameSources: [] };
+
+// One https scheme-source or https host-source. Everything else is dropped —
+// quotes, ';', ',', keywords, http:, a bare '*' — so the value can widen
+// frame-src and can never smuggle in another directive.
+const FRAME_SOURCE = /^https:(\/\/(\*\.)?[a-z0-9]([a-z0-9.-]*[a-z0-9])?(:\d{1,5})?)?$/i;
+
+/** Reads CSP_ALLOW_EVAL, CSP_ALLOW_INLINE_EVENT_HANDLERS and CSP_FRAME_SRC from
+ *  the container environment (README). Only the literal "true" switches one
+ *  on, as with CSP_REPORT_ONLY. */
+export function cspAllowancesFromEnv(env: Record<string, string | undefined>): CspAllowances {
+  return {
+    evalScripts: env.CSP_ALLOW_EVAL === "true",
+    inlineEventHandlers: env.CSP_ALLOW_INLINE_EVENT_HANDLERS === "true",
+    frameSources: (env.CSP_FRAME_SRC ?? "").split(/\s+/).filter((source) => FRAME_SOURCE.test(source)),
+  };
+}
 
 /**
  * isFrameablePath: the paths any site may iframe. /embed, plus PeerTube's legacy
@@ -29,8 +67,9 @@ export function isFrameablePath(pathname: string): boolean {
   );
 }
 
-export function buildContentSecurityPolicy({ nonce, apiOrigin, frameable, isDev }: CspOptions) {
+export function buildContentSecurityPolicy({ nonce, apiOrigin, frameable, isDev, allow = NO_ALLOWANCES }: CspOptions) {
   const api = apiOrigin ? ` ${apiOrigin}` : "";
+  const evalSource = isDev || allow.evalScripts ? " 'unsafe-eval'" : "";
   return [
     "default-src 'self'",
     "base-uri 'self'",
@@ -39,7 +78,7 @@ export function buildContentSecurityPolicy({ nonce, apiOrigin, frameable, isDev 
     // 'strict-dynamic' (Next CSP guide): nonced scripts may load more — Next
     // chunks, olm.js, an operator custom.js's own loads. CSP3 browsers then
     // ignore 'self' and the API origin (kept for older ones). Dev needs eval.
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' 'wasm-unsafe-eval'${api}${isDev ? " 'unsafe-eval'" : ""}`,
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' 'wasm-unsafe-eval'${api}${evalSource}`,
     // No nonce: it would switch off 'unsafe-inline' for pervasive style attributes.
     `style-src 'self' 'unsafe-inline'${api}`,
     "font-src 'self' data:",
@@ -50,6 +89,11 @@ export function buildContentSecurityPolicy({ nonce, apiOrigin, frameable, isDev 
     // it fall back to main-thread work and reintroduces playback frame drops.
     "worker-src 'self' blob:",
     "manifest-src 'self'",
+    // Its own directive on purpose: next to a nonce, 'unsafe-inline' in script-src
+    // is ignored (and must stay so); script-src-attr covers attributes only.
+    ...(allow.inlineEventHandlers ? ["script-src-attr 'unsafe-inline'"] : []),
+    // Without frame-src, default-src 'self' governs frames.
+    ...(allow.frameSources.length > 0 ? [`frame-src 'self' ${allow.frameSources.join(" ")}`] : []),
     // Clickjacking: only this site frames the app; /embed sends no frame-ancestors.
     ...(frameable ? [] : ["frame-ancestors 'self'"]),
     // report-to for current browsers; report-uri for those without the Reporting API.
