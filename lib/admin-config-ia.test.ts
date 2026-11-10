@@ -108,6 +108,14 @@ const SERVER_REGISTRY: Array<[string, ConfigPageId, string]> = [
   ["player_vast_postroll_enabled", "vod", "advertising"],
   ["player_vast_midroll_min_duration_seconds", "vod", "advertising"],
   ["player_vast_cooldown_seconds", "vod", "advertising"],
+  ["player_vast_embed_enabled", "vod", "advertising"],
+  ["player_vast_controls", "vod", "advertising"],
+  ["player_vast_skip_after_seconds", "vod", "advertising"],
+  ["player_vast_midroll_offset_percent", "vod", "advertising"],
+  ["player_vast_midroll_interval_seconds", "vod", "advertising"],
+  ["player_vast_skip_countdown", "vod", "advertising"],
+  ["player_vast_skip_label", "vod", "advertising"],
+  ["player_vast_remaining_message", "vod", "advertising"],
   ["email_subject_prefix", "customization", "email"],
   ["email_body_signature", "customization", "email"],
   ["social_meta_twitter_username", "general", "social"],
@@ -290,6 +298,29 @@ describe("placementFor", () => {
     }
     expect(META.player_vast_cooldown_seconds.parent).toBe("player_vast_enabled");
     expect(META.player_vast_cooldown_seconds.help).toMatch(/0.*cooldown/);
+    expect(keys).toHaveLength(18);
+    for (const [key, control, parent] of [
+      ["player_vast_embed_enabled", "toggle", "player_vast_enabled"],
+      ["player_vast_controls", "toggle", "player_vast_enabled"],
+      ["player_vast_skip_after_seconds", "number", "player_vast_enabled"],
+      ["player_vast_skip_countdown", "text", "player_vast_enabled"],
+      ["player_vast_skip_label", "text", "player_vast_enabled"],
+      ["player_vast_remaining_message", "text", "player_vast_enabled"],
+      ["player_vast_midroll_offset_percent", "number", "player_vast_midroll_enabled"],
+      ["player_vast_midroll_interval_seconds", "number", "player_vast_midroll_enabled"],
+    ]) {
+      expect(META[key]?.control, key).toBe(control);
+      expect(META[key]?.parent, key).toBe(parent);
+      expect(META[key]?.label, key).toBeTruthy();
+    }
+    expect(META.player_vast_skip_after_seconds.help).toMatch(/0 .*skip/i);
+    expect(META.player_vast_midroll_offset_percent.help).toMatch(/0 uses the seconds position/);
+    expect(META.player_vast_midroll_interval_seconds.help).toMatch(/0 .*one mid-roll/);
+    expect(META.player_vast_midroll_interval_seconds.help).toMatch(/60 seconds/);
+    expect(META.player_vast_midroll_interval_seconds.help).toMatch(/cooldown.*skipped/);
+    for (const key of ["player_vast_skip_countdown", "player_vast_remaining_message"]) {
+      expect(META[key].help, key).toContain("{seconds}");
+    }
   });
 
   it("server page/section metadata wins over the client map", () => {

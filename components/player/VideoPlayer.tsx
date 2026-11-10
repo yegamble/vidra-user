@@ -200,7 +200,8 @@ export function VideoPlayer({
   onPause?: () => void;
   onDeliveryChange?: (delivery: PlaybackDelivery) => void;
   adBreaks?: { before?: string | null; mid?: string | null; after?: string | null;
-    midAt?: number; midPercent?: number; minDuration?: number; cooldown?: number; pending?: boolean } | null;
+    midAt?: number; midPercent?: number; midInterval?: number; minDuration?: number; cooldown?: number; pending?: boolean;
+    skipAfter?: number; controls?: boolean; skipCountdown?: string; skipLabel?: string; remainingMessage?: string } | null;
   /** Explicit embed autoplay, subject to the browser's normal policy. */
   autoplay?: boolean;
   initialMuted?: boolean;
@@ -211,12 +212,19 @@ export function VideoPlayer({
   const t = useT();
   const instanceAds = useInstanceAds();
   const adBreaks = adBreaksOverride !== undefined ? adBreaksOverride : instanceAds === undefined ? { pending: true }
-    : instanceAds ? { before: instanceAds.vast_tag_url || null, mid: instanceAds.midroll_tag_url || null,
-      after: instanceAds.postroll_tag_url || null, midAt: instanceAds.midroll_offset_seconds ?? 300,
-      minDuration: instanceAds.midroll_min_duration_seconds ?? 600, cooldown: instanceAds.cooldown_seconds ?? 300 } : null;
+    // Embeds with ads turned off make no tag request at all.
+    : instanceAds && !(variant === "embed" && instanceAds.embed_enabled === false)
+      ? { before: instanceAds.vast_tag_url || null, mid: instanceAds.midroll_tag_url || null,
+        after: instanceAds.postroll_tag_url || null, midAt: instanceAds.midroll_offset_seconds ?? 300,
+        midPercent: instanceAds.midroll_offset_percent ?? 0, midInterval: instanceAds.midroll_interval_seconds ?? 0,
+        minDuration: instanceAds.midroll_min_duration_seconds ?? 600, cooldown: instanceAds.cooldown_seconds ?? 300,
+        skipAfter: instanceAds.skip_after_seconds ?? 5, controls: instanceAds.controls ?? true,
+        skipCountdown: instanceAds.skip_countdown, skipLabel: instanceAds.skip_label,
+        remainingMessage: instanceAds.remaining_message } : null;
   const pre = useVastPreroll(videoRef, video.id, adBreaks?.pending ? undefined : adBreaks?.before ?? null, adBreaks?.cooldown ?? 0);
   const breaks = useVastBreaks(videoRef, video.id, adBreaks?.mid ?? null, adBreaks?.midAt ?? 300,
-    adBreaks?.after ?? null, adBreaks?.minDuration ?? 0, adBreaks?.cooldown ?? 0, adBreaks?.midPercent ?? 0, stopAt);
+    adBreaks?.after ?? null, adBreaks?.minDuration ?? 0, adBreaks?.cooldown ?? 0, adBreaks?.midPercent ?? 0, stopAt,
+    adBreaks?.midInterval ?? 0);
   useEffect(() => {
     const el = videoRef.current;
     if (!el || !pre.blocked || adBreaks?.pending) return;
@@ -1369,7 +1377,9 @@ export function VideoPlayer({
       {overlay}
       </div>
       {adActive ? ad ? <PrerollAd key={`${video.id}-${ad.mediaUrl}`} ad={ad} onDone={finishAd}
-        onStart={markVastPlayed} initialVolume={volume} initialMuted={muted} />
+        onStart={markVastPlayed} initialVolume={volume} initialMuted={muted}
+        showControls={adBreaks?.controls ?? true} skipAfterSeconds={adBreaks?.skipAfter}
+        skipCountdown={adBreaks?.skipCountdown} skipLabel={adBreaks?.skipLabel} remainingMessage={adBreaks?.remainingMessage} />
         : <div className="absolute inset-0 z-40 flex items-center justify-center bg-black">
           <Spinner label={t("watch.ad.loading")} variant="media" />
         </div> : null}
