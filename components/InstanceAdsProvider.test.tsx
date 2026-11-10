@@ -24,6 +24,7 @@ const ADS = {
   controls: true,
   skip_after_seconds: 5,
   midroll_offset_percent: 0,
+  midroll_interval_seconds: 0,
   skip_countdown: "Skip in {seconds}…",
   skip_label: "Skip ad",
   remaining_message: "This ad will end in {seconds}",

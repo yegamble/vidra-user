@@ -2,7 +2,9 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useRef, type ComponentProps } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { InstanceAdsProvider } from "@/components/InstanceAdsProvider";
 import type { Video } from "@/lib/api";
+import type { InstanceResponse } from "@/lib/api/types";
 import type { VastDocument } from "@/lib/vast";
 import { resetPlayerSettings } from "@/lib/player-settings";
 import { VideoPlayer } from "./VideoPlayer";
@@ -119,4 +121,101 @@ it.each(["standard", "Safari"])("exits content picture-in-picture before showing
   fireEvent.click(screen.getByRole("button", { name: "Play" })); await deliver();
   if (mode === "standard") expect(exit).toHaveBeenCalledOnce(); else expect(exit).toHaveBeenCalledWith("inline");
   Reflect.deleteProperty(document, "pictureInPictureElement"); Reflect.deleteProperty(document, "exitPictureInPicture");
+});
+
+type Ads = NonNullable<InstanceResponse["ads"]>;
+const INSTANCE_ADS: Ads = { enabled: true, vast_tag_url: "/pre", midroll_tag_url: "", midroll_offset_seconds: 300,
+  postroll_tag_url: "", midroll_min_duration_seconds: 0, cooldown_seconds: 0, embed_enabled: true, controls: true,
+  skip_after_seconds: 5, midroll_offset_percent: 0, midroll_interval_seconds: 0, skip_countdown: "Skip in {seconds}…",
+  skip_label: "Skip ad", remaining_message: "This ad will end in {seconds}" };
+const withInstanceAds = (ads: Partial<Ads>, props: Options = {}) =>
+  render(<InstanceAdsProvider ads={{ ...INSTANCE_ADS, ...ads }}><Harness {...props} /></InstanceAdsProvider>);
+async function startPreroll(ad: Partial<VastDocument> = {}) {
+  fireEvent.click(screen.getByRole("button", { name: "Play" }));
+  await act(async () => { resolveAd({ ...AD, ...ad }); });
+  const media = adMedia(); fireEvent.playing(media);
+  return (time: number) => { media.currentTime = time; fireEvent.timeUpdate(media); };
+}
+function playContent(duration: number) {
+  const video = content(); Object.defineProperty(video, "duration", { configurable: true, value: duration });
+  act(() => { void video.play(); });
+  return async (time: number) => {
+    video.currentTime = time; fireEvent.timeUpdate(video);
+    // No fill: the break ends at once and content resumes.
+    if (mocks.loadVast.mock.calls.length && video.paused) await act(async () => { resolveAd(null); });
+  };
+}
+const MID = { vast_tag_url: "", midroll_tag_url: "/mid" };
+
+it("places the instance mid-roll by percentage, not by the seconds offset", async () => {
+  withInstanceAds({ ...MID, midroll_offset_percent: 50 });
+  const playTo = playContent(1000);
+  await playTo(300); expect(mocks.loadVast).not.toHaveBeenCalled();
+  await playTo(499); expect(mocks.loadVast).not.toHaveBeenCalled();
+  await playTo(500); expect(mocks.loadVast.mock.calls.map(([url]) => url)).toEqual(["/mid"]);
+});
+
+it("repeats the instance mid-roll at the configured interval", async () => {
+  withInstanceAds({ ...MID, midroll_interval_seconds: 900 });
+  const playTo = playContent(3600);
+  await playTo(300); expect(mocks.loadVast).toHaveBeenCalledTimes(1);
+  await playTo(1199); expect(mocks.loadVast).toHaveBeenCalledTimes(1);
+  await playTo(1200); expect(mocks.loadVast).toHaveBeenCalledTimes(2);
+  await playTo(3000); expect(mocks.loadVast).toHaveBeenCalledTimes(3);
+});
+
+it("keeps one instance mid-roll when the server sends no interval", async () => {
+  const legacy: Partial<Ads> = { ...INSTANCE_ADS, ...MID }; delete legacy.midroll_interval_seconds;
+  render(<InstanceAdsProvider ads={legacy as Ads}><Harness /></InstanceAdsProvider>);
+  const playTo = playContent(3600);
+  await playTo(300); await playTo(1200); await playTo(3000);
+  expect(mocks.loadVast).toHaveBeenCalledTimes(1);
+});
+
+it("applies the instance skip delay to an ad that carries no skip offset", async () => {
+  withInstanceAds({ skip_after_seconds: 3 });
+  const adTo = await startPreroll();
+  adTo(2); expect(screen.queryByRole("button", { name: "Skip ad" })).toBeNull();
+  adTo(3); expect(screen.getByRole("button", { name: "Skip ad" })).toBeTruthy();
+});
+
+it("disables skipping when the instance skip delay is 0, even for a skippable ad", async () => {
+  withInstanceAds({ skip_after_seconds: 0 });
+  const adTo = await startPreroll({ skipAfter: 1 });
+  adTo(8); expect(screen.queryByRole("button", { name: "Skip ad" })).toBeNull();
+});
+
+it("hides the ad transport while playing when instance controls are off", async () => {
+  withInstanceAds({ controls: false });
+  await startPreroll();
+  expect(screen.queryByRole("button", { name: "Mute advertisement" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Pause advertisement" })).toBeNull();
+});
+
+it("shows the ad transport by default", async () => {
+  withInstanceAds({});
+  await startPreroll();
+  expect(screen.getByRole("button", { name: "Mute advertisement" })).toBeTruthy();
+});
+
+it("renders the instance's custom ad labels", async () => {
+  withInstanceAds({ skip_after_seconds: 2, skip_countdown: "Wait {seconds}", skip_label: "Jump ahead", remaining_message: "Back in {seconds}" });
+  const adTo = await startPreroll();
+  adTo(1); expect(screen.getByText("Wait 1")).toBeTruthy(); expect(screen.getByText("Back in 9")).toBeTruthy();
+  adTo(2); expect(screen.getByRole("button", { name: "Jump ahead" })).toBeTruthy();
+});
+
+it("requests no tag in an embed when the instance turns embed ads off", () => {
+  withInstanceAds({ embed_enabled: false }, { variant: "embed", autoplay: true });
+  expect(mocks.loadVast).not.toHaveBeenCalled();
+  expect(content().getAttribute("src")).toBe("/content.mp4");
+});
+
+it("still runs ads on the watch page when embed ads are off, and in embeds when they are on", () => {
+  withInstanceAds({ embed_enabled: false });
+  fireEvent.click(screen.getByRole("button", { name: "Play" }));
+  expect(mocks.loadVast).toHaveBeenCalledOnce();
+  cleanup(); mocks.loadVast.mockClear();
+  withInstanceAds({ embed_enabled: true }, { variant: "embed", autoplay: true });
+  expect(mocks.loadVast).toHaveBeenCalledOnce();
 });
