@@ -25,6 +25,7 @@ import {
   STRICT_TRANSPORT_SECURITY,
   apiOriginOf,
   buildContentSecurityPolicy,
+  cspAllowancesFromEnv,
   cspHeaderName,
   isFrameablePath,
   shouldSendHsts,
@@ -38,6 +39,7 @@ export function proxy(request: NextRequest) {
     apiOrigin: apiOriginOf(apiBaseUrl),
     frameable: isFrameablePath(pathname),
     isDev: process.env.NODE_ENV === "development",
+    allow: cspAllowancesFromEnv(process.env),
   });
   const header = cspHeaderName(process.env.CSP_REPORT_ONLY);
 
