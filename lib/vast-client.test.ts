@@ -104,3 +104,11 @@ it("expands raw/encoded beacon macros without auth, credentials, or referrer", a
   expect(fetcher).toHaveBeenCalledTimes(1);
   await Promise.resolve();
 });
+
+it("carries progress beacons from every wrapper layer to the played ad", async () => {
+  const outer = `<VAST><Ad><Wrapper><VASTAdTagURI>/inline.xml</VASTAdTagURI><Creatives><Creative><Linear><TrackingEvents><Tracking event="progress" offset="00:00:10.000">/view</Tracking></TrackingEvents></Linear></Creative></Creatives></Wrapper></Ad></VAST>`;
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(xml(outer)).mockResolvedValueOnce(xml(inline)));
+  const ad = await loadVast("https://ads.test/tag", signal());
+  expect(ad?.mediaUrl).toBe("https://ads.test/ad.mp4");
+  expect(ad?.progress).toEqual([{ url: "https://ads.test/view", at: 10, percent: false }]);
+});

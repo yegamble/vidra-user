@@ -12,6 +12,23 @@ function inline(creative: string, metadata = "") {
 }
 
 describe("parseVast", () => {
+  it("keeps progress beacons with their offset, even on a wrapper that has no duration", () => {
+    const events = `<TrackingEvents>
+      <Tracking event="progress" offset="00:00:10.000">/view</Tracking>
+      <Tracking event="progress" offset="50%">/half</Tracking>
+      <Tracking event="progress">/no-offset</Tracking>
+      <Tracking event="progress" offset="soon">/bad-offset</Tracking>
+      <Tracking event="start">/start</Tracking></TrackingEvents>`;
+    const wrapper = `<VAST version="3.0"><Ad><Wrapper><VASTAdTagURI>/next</VASTAdTagURI><Creatives><Creative><Linear>${events}</Linear></Creative></Creatives></Wrapper></Ad></VAST>`;
+    const want = [
+      { url: "https://ads.example/view", at: 10, percent: false },
+      { url: "https://ads.example/half", at: 50, percent: true },
+    ];
+    expect(parseVast(wrapper, base)?.progress).toEqual(want);
+    const ad = parseVast(inline(linear("00:00:30", "", media, events)), base);
+    expect(ad?.progress).toEqual(want);
+    expect(ad?.tracking).toEqual({ start: ["https://ads.example/start"] });
+  });
   it("reads one linear Inline ad, resolves CDATA URLs, and collects its beacons and clicks", () => {
     const xml = inline(linear("00:00:12.500", "25%", media, `
       <TrackingEvents>

@@ -40,6 +40,20 @@ it("tracks real playing and quartiles once, and completes only on ended", () => 
   fireEvent.ended(video); fireEvent.ended(video);
   expect(onDone).toHaveBeenCalledOnce(); expect(trackVast).toHaveBeenCalledWith(["complete"]);
 });
+it("sends each progress beacon once when the ad reaches its offset, and never before it plays", () => {
+  const progress = [{ url: "view-10s", at: 10, percent: false }, { url: "view-75pct", at: 75, percent: true }];
+  const { video, time } = setup({ progress, tracking: {} });
+  const sent = () => vi.mocked(trackVast).mock.calls.map(([urls]) => urls[0]).filter(url => url?.startsWith("view"));
+  time(12);
+  expect(sent()).toEqual([]);
+  fireEvent.playing(video);
+  time(9.9);
+  expect(sent()).toEqual([]);
+  time(10); time(11); time(3); time(10);
+  expect(sent()).toEqual(["view-10s"]);
+  time(30);
+  expect(sent()).toEqual(["view-10s", "view-75pct"]);
+});
 it("inherits content volume and embed mute without affecting the content element", () => {
   const { container } = render(<PrerollAd ad={ad} onDone={vi.fn()} initialVolume={0.25} initialMuted />);
   const video = container.querySelector("video")!;
