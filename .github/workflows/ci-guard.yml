@@ -22,7 +22,9 @@ name: ci-guard
 #      without a `# retired: <name> — <reason>` tombstone in the same file
 #      (which is why that file is in the path filter below: it defines
 #      "required", and a PR that only edits it ran no guard at all),
-#   9. a script under scripts/ci does not pass `bash -n` and `shellcheck -x`.
+#   9. a script under scripts/ci does not pass `bash -n` and `shellcheck -x`,
+#  10. the Playwright installer every lane runs (scripts/ci/install-playwright.sh)
+#      stops waiting out, retrying or time-bounding a package mirror that fails.
 on:
   push:
     branches: [main]
@@ -95,6 +97,11 @@ jobs:
             bash -n "$f"
             shellcheck -x "$f"
           done
+
+      # The installer only acts when the package mirror misbehaves, which a green
+      # lane never exercises: the suite drives its wait, backoff, retry and bound.
+      - name: The Playwright installer still survives a flaky mirror, within its budget
+        run: bash scripts/ci/install-playwright_test.sh
 
       - name: External actions use immutable commit pins
         run: |
