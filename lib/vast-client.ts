@@ -51,6 +51,7 @@ function merge(wrappers: VastDocument[], inline: VastDocument): VastDocument {
     errors: layers.flatMap(layer => layer.errors),
     clickTracking: layers.flatMap(layer => layer.clickTracking),
     tracking,
+    progress: layers.flatMap(layer => layer.progress ?? []),
     clickThrough: inline.clickThrough ?? nearest.find(layer => layer.clickThrough)?.clickThrough,
     skipAfter: skip == null ? null : Math.min(inline.duration, Math.max(0, skip)),
   };
