@@ -21,9 +21,12 @@ import { ApiError, beginATProtoLogin } from "@/lib/api";
 export function BlueskyLoginButton({
   enabled,
   returnTo,
+  termsAccepted = false,
 }: {
   enabled: boolean;
   returnTo: string;
+  /** The signup form's tick, carried to the ATProto flow. */
+  termsAccepted?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [handle, setHandle] = useState("");
@@ -57,7 +60,11 @@ export function BlueskyLoginButton({
     setError(null);
     setSubmitting(true);
     try {
-      const { authorization_url } = await beginATProtoLogin(trimmed, returnTo);
+      // The tick travels only when it was given: a sign-in from the login page
+      // says nothing about terms, and an existing account is never asked.
+      const { authorization_url } = termsAccepted
+        ? await beginATProtoLogin(trimmed, returnTo, true)
+        : await beginATProtoLogin(trimmed, returnTo);
       // Top-level navigation ONLY: the begin call sealed the httpOnly attempt
       // cookie and this hands the browser off to the authorization server.
       // Never fetch authorization_url.

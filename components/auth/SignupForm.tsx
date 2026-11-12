@@ -63,6 +63,10 @@ export function SignupForm({
   const [password, setPassword] = useState("");
   const [note, setNote] = useState("");
   const [ageAttested, setAgeAttested] = useState(false);
+  // The instance's documents and the person's acceptance of them. Never
+  // pre-ticked: the tick is theirs to give.
+  const [documents, setDocuments] = useState<SignupDocuments>(() => signupDocuments(initialInstance));
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(
     oauthError ? oauthErrorMessage(oauthError, t) : null,
@@ -105,6 +109,7 @@ export function SignupForm({
         setRequiresApproval(instance.registration_requires_approval === true);
         setRequiresVerification(instance.registration_requires_email_verification === true);
         setMinimumAge(instance.registration_minimum_age ?? 0);
+        setDocuments(signupDocuments(instance));
         setClosedReason(instance.registration_disabled_reason ?? "");
         setProviders(instance.oauth_providers ?? []);
         setProviderDetails(instance.oauth_provider_details ?? []);
@@ -131,6 +136,7 @@ export function SignupForm({
         password,
         note: note.trim() || undefined,
         age_attestation: minimumAge > 0 ? ageAttested : undefined,
+        terms_accepted: hasDocuments(documents) ? termsAccepted : undefined,
       });
       if (outcome === "pending" || outcome === "verification_pending") {
         // No session yet: the signup awaits admin approval, or the account is
@@ -349,6 +355,31 @@ export function SignupForm({
         </div>
       ) : null}
 
+      {hasDocuments(documents) ? (
+        <div className="flex items-start gap-2.5">
+          <input
+            id="signup-terms-accepted"
+            name="signup-terms-accepted"
+            type="checkbox"
+            checked={termsAccepted}
+            onChange={(e) => setTermsAccepted(e.target.checked)}
+            aria-invalid={fieldErrors.terms_accepted ? true : undefined}
+            aria-describedby={fieldErrors.terms_accepted ? "signup-terms-accepted-error" : undefined}
+            className="focus-ring mt-0.5 h-4 w-4 rounded border-border accent-accent"
+          />
+          <div className="flex flex-col">
+            <label htmlFor="signup-terms-accepted" className="text-sm font-medium text-fg">
+              I accept the <DocumentLinks documents={documents} />
+            </label>
+            {fieldErrors.terms_accepted ? (
+              <p id="signup-terms-accepted-error" className="text-xs text-danger">
+                {fieldErrors.terms_accepted}
+              </p>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
       <Button type="submit" size="lg" className="w-full" disabled={submitting}>
         {submitting ? "Creating account…" : "Create account"}
       </Button>
@@ -373,8 +404,8 @@ export function SignupForm({
           ATProto callback appends ?oauth=1 to a BARE return_to itself, so the
           Bluesky button passes "/signup" (not "/signup?oauth=1"). */}
       {providers.length === 0 && atprotoEnabled ? <AuthOrDivider /> : null}
-      <OAuthButtons providers={providers} details={providerDetails} returnTo="/signup?oauth=1" />
-      <BlueskyLoginButton enabled={atprotoEnabled} returnTo="/signup" />
+      <OAuthButtons providers={providers} details={providerDetails} returnTo="/signup?oauth=1" termsAccepted={termsAccepted} />
+      <BlueskyLoginButton enabled={atprotoEnabled} returnTo="/signup" termsAccepted={termsAccepted} />
 
       <p className="text-center text-subhead text-fg-muted">
         Already have an account?{" "}
@@ -386,5 +417,45 @@ export function SignupForm({
         </Link>
       </p>
     </form>
+  );
+}
+
+// The documents a signup accepts, as GET /instance reports them: each URL with
+// the operator's version label (either may be empty).
+type SignupDocuments = { termsUrl: string; termsVersion: string; privacyUrl: string; privacyVersion: string };
+
+function signupDocuments(instance?: Partial<InstanceResponse>): SignupDocuments {
+  return {
+    termsUrl: instance?.terms_url ?? "",
+    termsVersion: instance?.terms_version ?? "",
+    privacyUrl: instance?.privacy_url ?? "",
+    privacyVersion: instance?.privacy_version ?? "",
+  };
+}
+
+function hasDocuments(d: SignupDocuments): boolean {
+  return d.termsUrl !== "" || d.privacyUrl !== "";
+}
+
+// "terms of service (version X) and the privacy policy", linking whichever the
+// instance has configured. Links open in a new tab so reading one does not
+// throw away a half-filled form.
+function DocumentLinks({ documents }: { documents: SignupDocuments }) {
+  const link = (href: string, label: string, version: string) => (
+    <>
+      <a href={href} target="_blank" rel="noopener noreferrer" className="focus-ring rounded-sm text-accent underline">
+        {label}
+      </a>
+      {version ? <span className="font-normal text-fg-muted"> (version {version})</span> : null}
+    </>
+  );
+  const terms = documents.termsUrl ? link(documents.termsUrl, "terms of service", documents.termsVersion) : null;
+  const privacy = documents.privacyUrl ? link(documents.privacyUrl, "privacy policy", documents.privacyVersion) : null;
+  return (
+    <>
+      {terms}
+      {terms && privacy ? " and the " : null}
+      {privacy}
+    </>
   );
 }

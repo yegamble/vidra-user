@@ -481,9 +481,14 @@ export const authApi = {
  * ("/..."); the callback lands the session server-side in cookie mode and
  * redirects the browser there (with ?oauth_error=<code> on failure).
  */
-export function oauthBeginUrl(provider: string, returnTo?: string): string {
+export function oauthBeginUrl(provider: string, returnTo?: string, termsAccepted = false): string {
   const base = `${apiBaseUrl}/api/v1/auth/oauth/${encodeURIComponent(provider)}`;
-  return returnTo ? `${base}?return_to=${encodeURIComponent(returnTo)}` : base;
+  const query: string[] = [];
+  if (returnTo) query.push(`return_to=${encodeURIComponent(returnTo)}`);
+  // The signup form's tick. The backend seals it into the attempt and reads it
+  // only if this sign-in turns out to create an account.
+  if (termsAccepted) query.push("terms_accepted=1");
+  return query.length > 0 ? `${base}?${query.join("&")}` : base;
 }
 
 /**
@@ -501,10 +506,11 @@ export function oauthBeginUrl(provider: string, returnTo?: string): string {
 export function beginATProtoLogin(
   handle: string,
   returnTo: string,
+  termsAccepted = false,
 ): Promise<{ authorization_url: string }> {
   return apiRequest<{ authorization_url: string }>("/api/v1/auth/atproto/start", {
     method: "POST",
-    body: { handle, return_to: returnTo },
+    body: { handle, return_to: returnTo, ...(termsAccepted ? { terms_accepted: true } : {}) },
     credentials: "include",
     retryOn401: false,
   });
