@@ -7695,6 +7695,8 @@ export interface components {
             height?: number | null;
             /** @description Whether a poster image is available at GET /videos/{id}/thumbnail. Present on the detail endpoint; omitted on list/feed views. */
             has_thumbnail?: boolean;
+            /** @description Present (true) on a LISTED sensitive video for a caller without a session while the instance's `sensitive_anonymous_access` is `sign_in`: opening it answers 401 `sign_in_required`, and its poster is withheld (`has_thumbnail` is false on that card). Absent otherwise. Whether a sensitive video is listed at all is still `sensitive_content_policy`'s decision. */
+            sign_in_required?: boolean;
             /** @description Whether a seek-preview storyboard is available at GET /videos/{id}/storyboard.jpg (+ the .vtt map). Present on the detail endpoint; omitted on list/feed views. */
             has_storyboard?: boolean;
             /** @description Whether the video has seek-bar chapters at GET /videos/{id}/chapters. Present on the detail endpoint; omitted on list/feed views. Lets the player fetch chapters only when they exist. */
@@ -11801,6 +11803,8 @@ export interface components {
         };
         InstanceSettingsResponse: {
             settings: components["schemas"]["InstanceSetting"][];
+            /** @description Present only on a PATCH whose change leaves something for the operator to do by hand. Today: switching `sensitive_anonymous_access` to `sign_in` on an instance with a CDN wired answers with an instruction to purge the CDN zone, because copies cached before the switch stay public until then. (The same switch is REFUSED with a 422 on `sensitive_anonymous_access` while CDN delivery is on and no purge endpoint is configured.) */
+            notices?: string[];
         };
         /** @description One rejected setting: the key that would fail and the message the PATCH's 422 would carry for it. Identical in shape to the field errors in ErrorResponse, so a client renders both the same way. */
         SettingValidationIssue: {

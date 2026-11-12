@@ -17,6 +17,7 @@ export const watch = {
   "watch.notFound.message": "Cette vidéo n’existe pas ou elle est privée.",
   "watch.signIn.title": "Connectez-vous pour regarder cette vidéo",
   "watch.signIn.body": "— elle est réservée aux personnes connectées à cette instance.",
+  "watch.signIn.bodyWall": "— cette instance ne montre les vidéos sensibles ou réservées aux membres qu’aux personnes connectées.",
   "watch.error.load": "Impossible de charger cette vidéo.",
   "watch.restricted.title": "Indisponible en mode restreint",
   "watch.restricted.message": "Désactivez le mode restreint dans le menu du compte pour voir le contenu sensible.",

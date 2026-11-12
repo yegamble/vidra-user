@@ -74,6 +74,7 @@ const SERVER_REGISTRY: Array<[string, ConfigPageId, string]> = [
   ["report_email_alerts_enabled", "general", "contact"],
   ["instance_is_sensitive", "general", "moderation"],
   ["sensitive_content_policy", "general", "moderation"],
+  ["sensitive_anonymous_access", "general", "moderation"],
   ["instance_categories", "general", "identity"],
   ["instance_custom_categories", "general", "identity"],
   ["moderator_languages", "general", "identity"],

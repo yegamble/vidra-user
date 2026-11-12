@@ -211,3 +211,23 @@ it("does not prefetch the watch page from its title link", () => {
   render(<VideoCard video={video} />);
   expect(screen.getByRole("link", { name: "Grid video" }).getAttribute("data-prefetch")).toBe("false");
 });
+
+// A listed sensitive video behind the instance's sign-in wall: the card asks
+// for no poster and no preview (both answer 401) and its placeholder says why.
+describe("VideoCard behind the sensitive sign-in wall", () => {
+  it("renders a labelled placeholder instead of a poster", () => {
+    render(<VideoCard video={video({ is_sensitive: true, sign_in_required: true, has_thumbnail: false })} />);
+    expect(mocks.previewProps?.poster).toBeNull();
+    expect(mocks.previewProps?.src).toBeNull();
+    expect(mocks.previewProps?.previewEnabled).toBe(false);
+    const { getByText } = render(<>{mocks.previewProps?.fallback as React.ReactNode}</>);
+    expect(getByText("Sign in to watch")).toBeTruthy();
+  });
+
+  it("keeps the silent placeholder for a card that merely has no poster", () => {
+    render(<VideoCard video={video({ has_thumbnail: false })} />);
+    const { queryByText, getByText } = render(<>{mocks.previewProps?.fallback as React.ReactNode}</>);
+    expect(queryByText("Sign in to watch")).toBeNull();
+    expect(getByText("No preview")).toBeTruthy();
+  });
+});

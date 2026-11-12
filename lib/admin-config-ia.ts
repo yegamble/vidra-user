@@ -1059,6 +1059,17 @@ export const META: Record<string, SettingMeta> = {
     page: "general",
     section: "moderation",
   },
+  sensitive_anonymous_access: {
+    label: "Sensitive videos for visitors without an account",
+    help: "A sign-in wall, not age verification. “Sign-in required” refuses a sensitive video’s page, poster and stream to anyone who is not signed in, and keeps them off the CDN. It proves an account, not an age. Lists still follow the policy above.",
+    control: "enum-segmented",
+    options: [
+      { value: "open", label: "Open" },
+      { value: "sign_in", label: "Sign-in required" },
+    ],
+    page: "general",
+    section: "moderation",
+  },
   quarantine_new_uploads: {
     label: "Quarantine new uploads",
     help: "Hold new uploads for moderator review before they publish.",
