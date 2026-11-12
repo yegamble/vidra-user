@@ -35,6 +35,12 @@ export type VideoCardPresentation = {
   previewSrc: string | null;
   /** The poster image, or null when the payload reports no thumbnail. */
   posterSrc: string | null;
+  /**
+   * Core marked this card `sign_in_required`: a sensitive video on an instance
+   * that asks for an account first, shown to a visitor without one. Its poster
+   * and preview routes answer 401, so the card is a labelled placeholder.
+   */
+  signInRequired: boolean;
   /** Whole-second duration, or null when unknown or below one second. */
   duration: number | null;
 };
@@ -95,6 +101,7 @@ export function useVideoCardPresentation(
     ? `/remote/${video.id}`
     : watchPath(video, options.localWatchQuery ?? "");
 
+  const signInRequired = video.sign_in_required === true;
   const sensitive = isSensitiveVideo(video);
   const blurSensitive = sensitive && policy === "blur";
   const markSensitive = sensitive && (policy === "blur" || policy === "warn");
@@ -107,6 +114,7 @@ export function useVideoCardPresentation(
     video.privacy !== "private" &&
     video.privacy !== "password" &&
     video.privacy !== "internal" &&
+    !signInRequired &&
     !blurSensitive;
 
   // > 0 guard: a sub-second clip probes to 0 whole seconds, and a "0:00" badge is
@@ -125,11 +133,13 @@ export function useVideoCardPresentation(
     markSensitive,
     previewEligible,
     previewSrc: previewEligible ? videoOriginalUrl(video.id) : null,
-    posterSrc: video.has_thumbnail
-      ? isRemote
-        ? remoteVideoThumbnailUrl(video.id)
-        : videoThumbnailUrl(video.id)
-      : null,
+    posterSrc:
+      video.has_thumbnail && !signInRequired
+        ? isRemote
+          ? remoteVideoThumbnailUrl(video.id)
+          : videoThumbnailUrl(video.id)
+        : null,
+    signInRequired,
     duration,
   };
 }
