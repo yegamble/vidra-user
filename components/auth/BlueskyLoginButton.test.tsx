@@ -102,3 +102,15 @@ describe("BlueskyLoginButton", () => {
     expect(assignMock).not.toHaveBeenCalled();
   });
 });
+
+describe("BlueskyLoginButton (signup terms)", () => {
+  it("carries the signup form's tick to the start request", async () => {
+    beginATProtoLoginMock.mockResolvedValue({ authorization_url: "https://pds.example/authorize" });
+    render(<BlueskyLoginButton enabled returnTo="/signup" termsAccepted />);
+    fireEvent.change(expand(), { target: { value: "alice.bsky.social" } });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await waitFor(() =>
+      expect(beginATProtoLoginMock).toHaveBeenCalledWith("alice.bsky.social", "/signup", true),
+    );
+  });
+});

@@ -897,7 +897,7 @@ export interface paths {
          *
          *     Two callbacks do NOT end in a session. When the resolved account has two-factor enabled, no session is issued: the challenge token is set as the httpOnly `vidra_mfa_pending` cookie and the redirect carries `?mfa=required`, to be finished at POST /api/v1/auth/mfa/challenge. And when a session is ALREADY signed in in this browser, the callback is treated as a request to connect that identity to THAT account (`?link=<provider>`), or refused with `?oauth_error=identity_belongs_to_another_account` — never an account switch. (A callback started from `/link/start` uses `?link_error=` instead: the failure key is the one the ORIGIN page renders, and a refusal the landing page cannot show is a silent one.)
          *
-         *     User-actionable failures redirect with an `oauth_error` query code (`access_denied`, `email_conflict`, `email_required`, `account_disabled`, `conflict`, and for a provider that does not create accounts `signup_disabled` or `email_domain_not_allowed` — the latter also when the address in an allowed domain is unverified); protocol violations (missing/forged/ expired state, nonce mismatch) are 400.
+         *     User-actionable failures redirect with an `oauth_error` query code (`access_denied`, `email_conflict`, `email_required`, `account_disabled`, `conflict`, `terms_required` for a first sign-in started without `terms_accepted=1` on an instance that has terms or a privacy policy, and for a provider that does not create accounts `signup_disabled` or `email_domain_not_allowed` — the latter also when the address in an allowed domain is unverified); protocol violations (missing/forged/ expired state, nonce mismatch) are 400.
          */
         get: operations["completeOAuth"];
         put?: never;
@@ -957,7 +957,7 @@ export interface paths {
         };
         /**
          * ATProto identity-login callback
-         * @description The redirect target the authorization server sends the browser back to. Verifies the signed attempt cookie against the returned `state`, enforces the RFC 9207 `iss`, the token `sub` (which must equal the DID resolved at start), and the `atproto` scope, then logs in: a known identity signs its account in, otherwise a new passwordless account is created (username derived from the handle). The session is always issued in cookie mode — the rotating refresh token is set as the httpOnly `vidra_refresh` cookie and the SPA obtains an access token via POST /api/v1/auth/refresh with credentials — and the browser is redirected (302) to the validated `return_to` with `?oauth=1`. User-actionable failures redirect with an `oauth_error` query code (`access_denied`, `atproto_identity_mismatch`, `atproto_upstream`, `account_disabled`, `conflict`); protocol violations (missing/forged/expired state, missing code) are 400.
+         * @description The redirect target the authorization server sends the browser back to. Verifies the signed attempt cookie against the returned `state`, enforces the RFC 9207 `iss`, the token `sub` (which must equal the DID resolved at start), and the `atproto` scope, then logs in: a known identity signs its account in, otherwise a new passwordless account is created (username derived from the handle). The session is always issued in cookie mode — the rotating refresh token is set as the httpOnly `vidra_refresh` cookie and the SPA obtains an access token via POST /api/v1/auth/refresh with credentials — and the browser is redirected (302) to the validated `return_to` with `?oauth=1`. User-actionable failures redirect with an `oauth_error` query code (`access_denied`, `atproto_identity_mismatch`, `atproto_upstream`, `account_disabled`, `conflict`, `terms_required` for a first sign-in started without `terms_accepted`); protocol violations (missing/forged/expired state, missing code) are 400.
          */
         get: operations["completeATProtoLogin"];
         put?: never;
@@ -6941,6 +6941,11 @@ export interface components {
              * @enum {string}
              */
             sensitive_content_policy: "hide" | "warn" | "blur" | "display";
+            /**
+             * @description Whether a visitor without an account may open a video flagged sensitive. `open` (the default) changes nothing. With `sign_in`, every read of such a video by a caller without a session — the detail document, the embed policy, captions, chapters, the download list and every media route — answers 401 `sign_in_required`, and its bytes are no longer handed to a CDN or a presigned redirect. A sign-in wall, not age verification: it proves an account, not an age. Lists and search keep following `sensitive_content_policy`.
+             * @enum {string}
+             */
+            sensitive_anonymous_access?: "open" | "sign_in";
             /** @description EFFECTIVE contact-form availability: the admin toggle is on AND an effective contact email is set AND the deployment has an outbound mail path. POST /api/v1/instance/contact answers 409 whenever this is false. */
             contact_form_enabled: boolean;
             /** @description Operator social/link row; each value is "" when unset. */
@@ -6994,6 +6999,10 @@ export interface components {
             terms_url: string;
             /** @description Link to the instance privacy policy; may be empty. */
             privacy_url: string;
+            /** @description The operator's label for the document behind `terms_url` (for example a date). A signup records the label it accepted. Empty when the operator has set none. */
+            terms_version?: string;
+            /** @description The operator's label for the document behind `privacy_url`; same rules as `terms_version`. */
+            privacy_version?: string;
             /** @description Operator contact email; may be empty. */
             contact_email: string;
             /** @description Effective feature toggles (the DB-backed instance-settings overlay over static config). The frontend disables the matching affordances in lock-step with the backend's enforcement. The config-parity W8 flags (import_http, channel_sync, storyboards, transcription, user_import, user_export) and the W10 transcoding flag report EFFECTIVE availability — the runtime admin setting AND, where one exists, the deployment's boot capability (yt-dlp resolver, Whisper endpoint, ffmpeg/ffprobe). video_card_previews is the global half of the hover-preview gate; video_card_previews_default_enabled is the preference inherited by users who have never explicitly chosen. Signed-in clients must still require both the global gate and the effective video_card_previews_enabled player preference. The mail flag is pure boot capability (an outbound mail path exists). */
@@ -9882,6 +9891,21 @@ export interface components {
                 type: string;
                 enabled: boolean;
             }[];
+            /** @description What the account holder accepted and when: the instance's terms and privacy policy (with the operator's version label and the URL as they were at the time) and the age attestation. Export only — an import never creates a consent. */
+            consents?: {
+                /** @enum {string} */
+                document: "terms" | "privacy" | "age";
+                /** @description The operator's label for the document; may be empty. */
+                version: string;
+                /** @description Where the document lived; empty for `age`. */
+                url: string;
+                /** @description The age attested; `age` entries only. */
+                minimum_age?: number;
+                /** @enum {string} */
+                source: "signup" | "approval" | "oidc" | "atproto" | "reaccept";
+                /** Format: date-time */
+                accepted_at: string;
+            }[];
             /** @description Owned channels (metadata only; not re-created by import). */
             channels?: {
                 /** Format: uuid */
@@ -12114,6 +12138,8 @@ export interface components {
             note?: string;
             /** @description PeerTube-style minimum-age attestation ("I am at least N years old"). Required (true) while the instance's registration_minimum_age setting is active (GET /api/v1/instance reports the threshold); no birthdate is collected. Missing/false while active is a 422 field error on `age_attestation`. */
             age_attestation?: boolean;
+            /** @description "I accept the terms of service and the privacy policy." Required (true) while the instance has `terms_url` or `privacy_url` set (GET /api/v1/instance reports both, with the operator's version labels); missing/false while either is set is a 422 field error on `terms_accepted`. What was accepted — each document's URL and version label, and the time — is recorded with the account and is part of its data export. Ignored when neither document is configured. */
+            terms_accepted?: boolean;
             /**
              * @description Opt the new session into cookie mode (browser clients): the rotating refresh token is set as an httpOnly `vidra_refresh` cookie (Path=/api/v1/auth, SameSite=Lax, Secure on https instances, Max-Age = the refresh TTL) and omitted from the response body.
              * @default false
@@ -14314,6 +14340,8 @@ export interface operations {
             query?: {
                 /** @description Where to send the browser after the flow completes. Must be a same-origin relative path (`/...`); absolute URLs and `//...` are rejected. Defaults to `/`. */
                 return_to?: string;
+                /** @description `1` when the person ticked "I accept the terms of service and the privacy policy" on the signup form. Carried in the signed attempt state and consulted only if the sign-in turns out to create an account: on an instance with `terms_url` or `privacy_url` set, a first sign-in without it creates nothing and returns `oauth_error=terms_required`. An existing account is never asked. */
+                terms_accepted?: "1";
             };
             header?: never;
             path: {
@@ -14514,6 +14542,8 @@ export interface operations {
                     handle: string;
                     /** @description Same-origin relative path to return to after login (`/...`); absolute URLs and `//...` are rejected. Defaults to `/`. */
                     return_to?: string;
+                    /** @description The signup form's tick ("I accept the terms of service and the privacy policy"). Consulted only if the handle turns out to be a first sign-in: on an instance with `terms_url` or `privacy_url` set, that sign-in creates nothing without it and the callback returns `oauth_error=terms_required`. An existing account is never asked. */
+                    terms_accepted?: boolean;
                 };
             };
         };

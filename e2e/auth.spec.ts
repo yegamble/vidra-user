@@ -327,3 +327,70 @@ test("shows the registration-closed notice when disabled", async ({ page }) => {
   await expect(page.getByText("Registration is closed")).toBeVisible();
   await expect(page.getByRole("button", { name: "Create account" })).toHaveCount(0);
 });
+
+// The consent record: on an instance with terms and a privacy policy, the
+// signup form asks for the acceptance with an unticked checkbox and live links,
+// shows the server's refusal on that checkbox, and sends the tick as given.
+test("a signup accepts the instance's terms and privacy policy", async ({ page }) => {
+  await page.route(INSTANCE, (route) =>
+    route.fulfill({
+      json: {
+        ...instanceJson(true),
+        terms_url: "https://example.test/terms",
+        terms_version: "2026-11-12",
+        privacy_url: "https://example.test/privacy",
+        privacy_version: "",
+      },
+    }),
+  );
+  const bodies: Array<Record<string, unknown>> = [];
+  await page.route(REGISTER, (route) => {
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    bodies.push(body);
+    if (body.terms_accepted !== true) {
+      return route.fulfill({
+        status: 422,
+        json: {
+          error: {
+            code: "unprocessable_entity",
+            message: "validation failed",
+            fields: [{
+              field: "terms_accepted",
+              message: "you must accept the terms of service and the privacy policy to create an account",
+            }],
+          },
+        },
+      });
+    }
+    return route.fulfill({ json: session });
+  });
+  await page.route(FEED, (route) =>
+    route.fulfill({ json: { videos: [], sort: "recent", limit: 20, offset: 0 } }),
+  );
+
+  await page.goto("/signup");
+  const box = page.getByRole("checkbox", { name: /I accept the/ });
+  await expect(box).not.toBeChecked();
+  await expect(page.getByRole("link", { name: "terms of service" })).toHaveAttribute("href", "https://example.test/terms");
+  await expect(page.getByRole("link", { name: "privacy policy" })).toHaveAttribute("href", "https://example.test/privacy");
+  await expect(page.getByText("(version 2026-11-12)")).toBeVisible();
+
+  await page.getByLabel("Username").fill("ada");
+  await page.getByLabel("Email").fill("ada@example.test");
+  await page.getByLabel("Password").fill("supersecret");
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page.getByText("you must accept the terms of service and the privacy policy")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toHaveCount(0);
+
+  await box.check();
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page.getByRole("button", { name: "Open account menu" })).toBeVisible();
+  expect(bodies.map((b) => b.terms_accepted)).toEqual([false, true]);
+});
+
+test("without configured documents the signup form asks for no acceptance", async ({ page }) => {
+  await page.route(INSTANCE, (route) => route.fulfill({ json: instanceJson(true) }));
+  await page.goto("/signup");
+  await expect(page.getByLabel("Username")).toBeVisible();
+  await expect(page.getByRole("checkbox", { name: /I accept the/ })).toHaveCount(0);
+});

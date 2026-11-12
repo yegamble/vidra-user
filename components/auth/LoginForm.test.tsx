@@ -248,3 +248,16 @@ describe("LoginForm while white-labelled", () => {
     expect(document.body.textContent).not.toMatch(/vidra/i);
   });
 });
+
+// A provider sign-in that would have created an account on an instance with
+// terms to accept is not an error to show on the login page: the checkbox
+// lives on the signup page, so that is where the reason has to land.
+describe("LoginForm (provider sign-up refused for want of the terms)", () => {
+  it("sends the refusal to the signup page with its reason", async () => {
+    getInstanceMock.mockResolvedValue({ oauth_providers: ["google"], atproto_login: false });
+    render(<LoginForm oauthError="terms_required" />);
+    await waitFor(() =>
+      expect(routerReplace).toHaveBeenCalledWith("/signup?oauth_error=terms_required"),
+    );
+  });
+});

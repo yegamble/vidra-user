@@ -43,6 +43,8 @@ const SERVER_REGISTRY: Array<[string, ConfigPageId, string]> = [
   ["instance_description", "general", "identity"],
   ["terms_url", "general", "about"],
   ["privacy_url", "general", "about"],
+  ["terms_version", "general", "about"],
+  ["privacy_version", "general", "about"],
   ["contact_email", "general", "contact"],
   ["registration_enabled", "general", "signup"],
   ["registration_require_approval", "general", "signup"],
