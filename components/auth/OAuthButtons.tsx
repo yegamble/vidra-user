@@ -18,12 +18,14 @@ export function OAuthButtons({
   details = [],
   returnTo,
   termsAccepted = false,
+  ageAttested = false,
 }: {
   providers: string[];
   details?: InstanceResponse["oauth_provider_details"];
   returnTo: string;
-  /** The signup form's tick, carried to the provider flow (see oauthBeginUrl). */
+  /** The signup form's ticks, carried to the provider flow (see oauthBeginUrl). */
   termsAccepted?: boolean;
+  ageAttested?: boolean;
 }) {
   if (providers.length === 0) return null;
 
@@ -39,7 +41,7 @@ export function OAuthButtons({
                 No leading glyph: the icon set carries no third-party provider
                 brand marks and inline SVGs are disallowed. */}
             <a
-              href={oauthBeginUrl(provider, returnTo, termsAccepted)}
+              href={oauthBeginUrl(provider, returnTo, { termsAccepted, ageAttested })}
               className="focus-ring flex min-h-12 items-center justify-center gap-2 rounded-[10px] bg-surface-muted px-5 py-2.5 text-base font-semibold text-fg transition-colors hover:bg-surface-strong"
             >
               Continue with {providerDisplayName(provider, details.find((p) => p.name === provider)?.display_name)}
@@ -121,6 +123,9 @@ export function oauthErrorMessage(code: string, t?: Translate): string {
     // the checkbox.
     case "terms_required":
       return "To create an account this way, accept the terms of service and the privacy policy below, then choose your provider again.";
+    // The same, for the instance's minimum age.
+    case "age_required":
+      return "To create an account this way, confirm your age below, then choose your provider again.";
     case "registration_pending":
       return "Your request to join was sent to the moderators. You will be able to sign in once it is approved.";
     case "signup_disabled":

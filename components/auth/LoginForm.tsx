@@ -124,11 +124,12 @@ export function LoginForm({
   // Clean the one-shot OAuth markers out of the URL (they must not survive a
   // reload/bookmark); the outcome already lives in state.
   useEffect(() => {
-    // One error is a destination rather than a banner: a provider sign-in that
-    // would have created an account, on an instance with terms to accept. The
-    // checkbox is on the signup page, so that is where the reason is shown.
-    if (oauthError === "terms_required") {
-      router.replace("/signup?oauth_error=terms_required");
+    // Two errors are a destination rather than a banner: a provider sign-in
+    // that would have created an account, on an instance with terms to accept
+    // or a minimum age to confirm. The checkboxes are on the signup page, so
+    // that is where the reason is shown.
+    if (oauthError === "terms_required" || oauthError === "age_required") {
+      router.replace(`/signup?oauth_error=${oauthError}`);
       return;
     }
     if (oauthPending || oauthError || mfaPending) router.replace(loginPath);

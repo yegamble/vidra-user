@@ -897,7 +897,7 @@ export interface paths {
          *
          *     Two callbacks do NOT end in a session. When the resolved account has two-factor enabled, no session is issued: the challenge token is set as the httpOnly `vidra_mfa_pending` cookie and the redirect carries `?mfa=required`, to be finished at POST /api/v1/auth/mfa/challenge. And when a session is ALREADY signed in in this browser, the callback is treated as a request to connect that identity to THAT account (`?link=<provider>`), or refused with `?oauth_error=identity_belongs_to_another_account` — never an account switch. (A callback started from `/link/start` uses `?link_error=` instead: the failure key is the one the ORIGIN page renders, and a refusal the landing page cannot show is a silent one.)
          *
-         *     User-actionable failures redirect with an `oauth_error` query code (`access_denied`, `email_conflict`, `email_required`, `account_disabled`, `conflict`, `terms_required` for a first sign-in started without `terms_accepted=1` on an instance that has terms or a privacy policy, and for a provider that does not create accounts `signup_disabled` or `email_domain_not_allowed` — the latter also when the address in an allowed domain is unverified); protocol violations (missing/forged/ expired state, nonce mismatch) are 400.
+         *     User-actionable failures redirect with an `oauth_error` query code (`access_denied`, `email_conflict`, `email_required`, `account_disabled`, `conflict`, `terms_required` for a first sign-in started without `terms_accepted=1` on an instance that has terms or a privacy policy, `age_required` for one started without `age_attestation=1` while `registration_minimum_age` is above 0, and for a provider that does not create accounts `signup_disabled` or `email_domain_not_allowed` — the latter also when the address in an allowed domain is unverified); protocol violations (missing/forged/ expired state, nonce mismatch) are 400.
          */
         get: operations["completeOAuth"];
         put?: never;
@@ -957,7 +957,7 @@ export interface paths {
         };
         /**
          * ATProto identity-login callback
-         * @description The redirect target the authorization server sends the browser back to. Verifies the signed attempt cookie against the returned `state`, enforces the RFC 9207 `iss`, the token `sub` (which must equal the DID resolved at start), and the `atproto` scope, then logs in: a known identity signs its account in, otherwise a new passwordless account is created (username derived from the handle). The session is always issued in cookie mode — the rotating refresh token is set as the httpOnly `vidra_refresh` cookie and the SPA obtains an access token via POST /api/v1/auth/refresh with credentials — and the browser is redirected (302) to the validated `return_to` with `?oauth=1`. User-actionable failures redirect with an `oauth_error` query code (`access_denied`, `atproto_identity_mismatch`, `atproto_upstream`, `account_disabled`, `conflict`, `terms_required` for a first sign-in started without `terms_accepted`); protocol violations (missing/forged/expired state, missing code) are 400.
+         * @description The redirect target the authorization server sends the browser back to. Verifies the signed attempt cookie against the returned `state`, enforces the RFC 9207 `iss`, the token `sub` (which must equal the DID resolved at start), and the `atproto` scope, then logs in: a known identity signs its account in, otherwise a new passwordless account is created (username derived from the handle). The session is always issued in cookie mode — the rotating refresh token is set as the httpOnly `vidra_refresh` cookie and the SPA obtains an access token via POST /api/v1/auth/refresh with credentials — and the browser is redirected (302) to the validated `return_to` with `?oauth=1`. User-actionable failures redirect with an `oauth_error` query code (`access_denied`, `atproto_identity_mismatch`, `atproto_upstream`, `account_disabled`, `conflict`, `terms_required` for a first sign-in started without `terms_accepted`, `age_required` for one started without `age_attestation`); protocol violations (missing/forged/expired state, missing code) are 400.
          */
         get: operations["completeATProtoLogin"];
         put?: never;
@@ -14346,6 +14346,8 @@ export interface operations {
                 return_to?: string;
                 /** @description `1` when the person ticked "I accept the terms of service and the privacy policy" on the signup form. Carried in the signed attempt state and consulted only if the sign-in turns out to create an account: on an instance with `terms_url` or `privacy_url` set, a first sign-in without it creates nothing and returns `oauth_error=terms_required`. An existing account is never asked. */
                 terms_accepted?: "1";
+                /** @description `1` when the person ticked "I am at least N years old" on the signup form. Carried in the signed attempt state and consulted only if the sign-in turns out to create an account: while the instance's `registration_minimum_age` is above 0, a first sign-in without it creates nothing and returns `oauth_error=age_required`. An existing account is never asked. */
+                age_attestation?: "1";
             };
             header?: never;
             path: {
@@ -14548,6 +14550,8 @@ export interface operations {
                     return_to?: string;
                     /** @description The signup form's tick ("I accept the terms of service and the privacy policy"). Consulted only if the handle turns out to be a first sign-in: on an instance with `terms_url` or `privacy_url` set, that sign-in creates nothing without it and the callback returns `oauth_error=terms_required`. An existing account is never asked. */
                     terms_accepted?: boolean;
+                    /** @description The signup form's "I am at least N years old" tick. Consulted only if the handle turns out to be a first sign-in: while the instance's `registration_minimum_age` is above 0, that sign-in creates nothing without it and the callback returns `oauth_error=age_required`. An existing account is never asked. */
+                    age_attestation?: boolean;
                 };
             };
         };

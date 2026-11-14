@@ -260,4 +260,12 @@ describe("LoginForm (provider sign-up refused for want of the terms)", () => {
       expect(routerReplace).toHaveBeenCalledWith("/signup?oauth_error=terms_required"),
     );
   });
+
+  it("sends a refusal for want of the age there too", async () => {
+    getInstanceMock.mockResolvedValue({ oauth_providers: ["google"], atproto_login: false });
+    render(<LoginForm oauthError="age_required" />);
+    await waitFor(() =>
+      expect(routerReplace).toHaveBeenCalledWith("/signup?oauth_error=age_required"),
+    );
+  });
 });

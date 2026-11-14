@@ -235,4 +235,21 @@ describe("SignupForm (terms and privacy policy)", () => {
     render(<SignupForm oauthError="terms_required" />);
     expect(await screen.findByText(/accept the terms of service and the privacy policy below/i)).toBeTruthy();
   });
+
+  // A provider sign-up skipped the age before: only the terms tick travelled.
+  it("carries the age tick on the provider buttons, and only once it is ticked", async () => {
+    getInstanceMock.mockResolvedValue(instanceDoc({ registration_minimum_age: 18, oauth_providers: ["google"] }));
+    render(<SignupForm />);
+    const box = await screen.findByRole("checkbox", { name: "I am at least 18 years old" });
+    const provider = () => screen.getByRole("link", { name: "Continue with Google" }).getAttribute("href") ?? "";
+    expect(provider()).not.toContain("age_attestation");
+    fireEvent.click(box);
+    expect(provider()).toContain("age_attestation=1");
+  });
+
+  it("explains a provider sign-up refused for want of the age", async () => {
+    getInstanceMock.mockResolvedValue(instanceDoc({ registration_minimum_age: 18 }));
+    render(<SignupForm oauthError="age_required" />);
+    expect(await screen.findByText(/confirm your age below/i)).toBeTruthy();
+  });
 });
