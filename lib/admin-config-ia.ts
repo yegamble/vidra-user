@@ -680,6 +680,14 @@ export const META: Record<string, SettingMeta> = {
     section: "analytics",
     parent: "analytics_google_enabled",
   },
+  analytics_google_consent_required: {
+    label: "Require visitor consent",
+    help: "On (default): visitors are asked before analytics loads. Off: visitors are measured without being asked, and you are responsible for whether that is lawful where your visitors are (EU/UK ePrivacy and GDPR generally require consent). Do-Not-Track and Global Privacy Control are still honoured.",
+    control: "toggle",
+    page: "general",
+    section: "analytics",
+    parent: "analytics_google_enabled",
+  },
   // GENERAL / Administrators & contact (server section "contact")
   contact_email: {
     label: "Admin email",

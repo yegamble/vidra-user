@@ -95,3 +95,38 @@ it("does not reset an active visit during StrictMode replay or unchanged rerende
   mocks.sync.mockClear(); view.rerender(<StrictMode><GoogleAnalytics {...props} /></StrictMode>);
   expect(mocks.sync).not.toHaveBeenCalled();
 });
+const open = { ...props, consentRequired: false };
+it("with consent not required: no banner and analytics starts without a choice", () => {
+  render(<GoogleAnalytics {...open} />);
+  expect(screen.queryByRole("region")).toBeNull(); expect(screen.queryByRole("button")).toBeNull();
+  expect(mocks.sync).toHaveBeenLastCalledWith(props.measurementId, "/", props.nonce);
+});
+it("consent required (explicit or default) still holds analytics until accepted", () => {
+  render(<GoogleAnalytics {...props} consentRequired />);
+  expect(screen.getByRole("region", { name: "Optional analytics" })).toBeTruthy();
+  expect(mocks.sync.mock.calls.every(call => call[0] === null)).toBe(true);
+});
+it("with consent not required: a previously stored decline is still respected", () => {
+  localStorage.setItem(key, "denied"); render(<GoogleAnalytics {...open} />);
+  expect(screen.queryByRole("button")).toBeNull();
+  expect(mocks.sync.mock.calls.every(call => call[0] === null)).toBe(true);
+});
+it("with consent not required: unreadable storage stays off", () => {
+  vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new Error("blocked"); });
+  render(<GoogleAnalytics {...open} />);
+  expect(mocks.sync.mock.calls.every(call => call[0] === null)).toBe(true);
+});
+it.each([["doNotTrack", "1"], ["globalPrivacyControl", true]])("with consent not required: %s still suppresses analytics", (name, value) => {
+  Object.defineProperty(navigator, name, { configurable: true, value });
+  render(<GoogleAnalytics {...open} />);
+  expect(mocks.sync.mock.calls.every(call => call[0] === null)).toBe(true);
+});
+it.each([[false, "G-TEST1234", "/"], [true, "UA-1234", "/"], [true, "G-TEST1234", "/messages/private"]] as const)("with consent not required: disabled, invalid or private stays off (%s, %s, %s)", (enabled, measurementId, pathname) => {
+  mocks.pathname = pathname;
+  render(<GoogleAnalytics {...open} enabled={enabled} measurementId={measurementId} />);
+  expect(mocks.sync.mock.calls.every(call => call[0] === null)).toBe(true);
+});
+it("renders nothing and starts nothing on the server when consent is not required", () => {
+  expect(renderToString(<GoogleAnalytics {...open} />)).toBe("");
+  expect(mocks.sync).not.toHaveBeenCalled();
+});

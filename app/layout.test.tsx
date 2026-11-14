@@ -95,6 +95,10 @@ describe("RootLayout", () => {
     expect(findElement(confirmed, InstanceAnalytics).props.analytics).toBe(analytics);
     expect(findElement(confirmed, InstanceCustomization).props.scripts).toBe(true);
 
+    // Consent not being required never bypasses the age hold-back.
+    const optedOut = { ...instance, analytics: { ...analytics, google_consent_required: false } } as InstanceConfigSnapshot;
+    expect(findElement(await renderWith(optedOut), InstanceAnalytics)).toBeNull();
+
     // A confirmation of a lower age than the instance now asks for does not count.
     expect(findElement(await renderWith(instance, undefined, "16"), AgeGate).props.pending).toBe(true);
     // With the gate off nothing is held back.
