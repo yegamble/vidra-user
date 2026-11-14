@@ -33,7 +33,7 @@ export function InstanceAnalytics({ analytics, nonce }: { analytics: Analytics; 
   const enabled = current?.google_enabled === true;
   return (
     <div className="mx-4 my-3 empty:hidden sm:mx-6">
-      <GoogleAnalytics enabled={enabled} measurementId={enabled ? current.google_measurement_id : ""} nonce={nonce} />
+      <GoogleAnalytics enabled={enabled} measurementId={enabled ? current.google_measurement_id : ""} nonce={nonce} consentRequired={current?.google_consent_required !== false} />
     </div>
   );
 }

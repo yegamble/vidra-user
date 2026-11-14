@@ -666,7 +666,7 @@ const URL_IMPORTS_WARN: NonNullable<SettingMeta["warn"]> = {
 export const META: Record<string, SettingMeta> = {
   analytics_google_enabled: {
     label: "Enable Google Analytics",
-    help: "Load GA4 only after visitors accept optional analytics. Off by default; a valid Measurement ID is required.",
+    help: "Turn on Google Analytics 4 measurement. Off by default; a valid Measurement ID is required. Whether visitors are asked first is controlled by the Require visitor consent setting below.",
     control: "toggle",
     page: "general",
     section: "analytics",
@@ -676,6 +676,14 @@ export const META: Record<string, SettingMeta> = {
     help: "Enter the G-… ID from Admin → Data streams → Web. Turn off Enhanced Measurement in that stream to avoid automatic events and duplicate pageviews. The app sends fixed page categories with no URL identifiers or search terms.",
     placeholder: "G-XXXXXXXXXX",
     control: "text",
+    page: "general",
+    section: "analytics",
+    parent: "analytics_google_enabled",
+  },
+  analytics_google_consent_required: {
+    label: "Require visitor consent",
+    help: "On (default): visitors are asked before analytics loads. Off: visitors are measured without being asked, and you are responsible for whether that is lawful where your visitors are (EU/UK ePrivacy and GDPR generally require consent). Do-Not-Track and Global Privacy Control are still honoured.",
+    control: "toggle",
     page: "general",
     section: "analytics",
     parent: "analytics_google_enabled",

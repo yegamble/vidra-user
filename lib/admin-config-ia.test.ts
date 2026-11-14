@@ -102,6 +102,7 @@ const SERVER_REGISTRY: Array<[string, ConfigPageId, string]> = [
   ["default_player_autoplay", "customization", "player"],
   ["analytics_google_enabled", "general", "analytics"],
   ["analytics_google_measurement_id", "general", "analytics"],
+  ["analytics_google_consent_required", "general", "analytics"],
   ["player_vast_enabled", "vod", "advertising"],
   ["player_vast_tag_url", "vod", "advertising"],
   ["player_vast_midroll_tag_url", "vod", "advertising"],
@@ -273,6 +274,9 @@ describe("placementFor", () => {
     expect(META.analytics_google_enabled.control).toBe("toggle");
     expect(META.analytics_google_measurement_id.parent).toBe("analytics_google_enabled");
     expect(META.analytics_google_measurement_id.help).toContain("Enhanced Measurement");
+    expect(META.analytics_google_consent_required.control).toBe("toggle");
+    expect(META.analytics_google_consent_required.parent).toBe("analytics_google_enabled");
+    expect(META.analytics_google_consent_required.help).toContain("responsible");
   });
 
   it("groups the VAST controls under Advertising with independent placements", () => {

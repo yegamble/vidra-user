@@ -35,10 +35,13 @@ function consentStore() {
 }
 const serverSnapshot = () => undefined;
 
-export function GoogleAnalytics({ enabled, measurementId, nonce }: { enabled: boolean; measurementId: string; nonce: string }) {
+/** consentRequired=false (admin opt-out): no unprompted banner and analytics counts as granted, but
+ * DNT/GPC, route eligibility and an earlier stored "denied" still suppress it. */
+export function GoogleAnalytics({ enabled, measurementId, nonce, consentRequired = true }: { enabled: boolean; measurementId: string; nonce: string; consentRequired?: boolean }) {
   const pathname = usePathname() ?? "";
   const store = useMemo(() => consentStore(), []);
-  const choice = useSyncExternalStore(store.subscribe, store.snapshot, serverSnapshot);
+  const stored = useSyncExternalStore(store.subscribe, store.snapshot, serverSnapshot);
+  const choice = consentRequired || stored === undefined ? stored : stored === "denied" ? "denied" : "granted";
   const privacyBlocked = choice !== undefined && (navigator.doNotTrack === "1" || (navigator as Navigator & { globalPrivacyControl?: boolean }).globalPrivacyControl === true);
   const eligible = enabled && /^G-[A-Z0-9]{4,20}$/.test(measurementId) && analyticsPage(pathname) !== null && !privacyBlocked;
   useEffect(() => {
@@ -49,5 +52,8 @@ export function GoogleAnalytics({ enabled, measurementId, nonce }: { enabled: bo
     if (next === "denied") syncGoogleAnalytics(null, pathname, nonce);
     if (!store.write(next)) syncGoogleAnalytics(null, pathname, nonce);
   };
-  return choice === undefined || !eligible ? null : <AnalyticsConsent choice={choice} onChange={change} />;
+  // Consent off: never prompt, but keep the preferences button for a visitor who already chose,
+  // so an earlier Accept can still be withdrawn and an earlier Decline reversed.
+  if (choice === undefined || !eligible || (!consentRequired && stored == null)) return null;
+  return <AnalyticsConsent choice={consentRequired ? choice : stored ?? null} onChange={change} />;
 }
