@@ -1,8 +1,9 @@
 import type { Metadata, Viewport } from "next";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import Script from "next/script";
 import "./globals.css";
 
+import { AgeGate } from "@/components/AgeGate";
 import { AuthProvider } from "@/components/auth/AuthProvider";
 import { ContentPreferencesBootstrap } from "@/components/auth/ContentPreferencesBootstrap";
 import { PlayerSettingsBootstrap } from "@/components/auth/PlayerSettingsBootstrap";
@@ -17,6 +18,7 @@ import { InstanceCustomization } from "@/components/InstanceCustomization";
 import { Sidebar } from "@/components/Sidebar";
 import { SoftwareBrandProvider } from "@/components/SoftwareBrandProvider";
 import { ToastProvider } from "@/components/ui";
+import { AGE_GATE_COOKIE, ageGateMinimum, ageGatePending } from "@/lib/age-gate";
 import { getI18n } from "@/lib/i18n/locale.server";
 import { getInstanceConfig } from "@/lib/instance-config.server";
 import { buildRootMetadata } from "@/lib/layout-metadata";
@@ -38,6 +40,9 @@ import { buildThemeBootstrapScript } from "@/lib/theme-bootstrap";
 //                       branding.hide_software_name, lib/software-brand.ts)
 //   - locale          → lib/i18n/locale.server.ts → <html lang dir> +
 //                       components/I18nProvider.tsx (per-request locale)
+//   - age gate        → lib/age-gate.ts + components/AgeGate.tsx: while a
+//                       visitor has not confirmed the minimum age, the page,
+//                       the custom script, ads and analytics are held back
 
 // EVERY PAGE UNDER THIS LAYOUT RENDERS PER REQUEST.
 //
@@ -90,6 +95,7 @@ export default async function RootLayout({
   // without it. Next stamps its own scripts; these are the ones we emit.
   const nonce = (await headers()).get("x-nonce") ?? undefined;
   const { locale, dir, messages, t } = await getI18n();
+  const ageGate = ageGatePending(instance, (await cookies()).get(AGE_GATE_COOKIE)?.value);
   return (
     <html lang={locale} dir={dir} className="h-full antialiased" suppressHydrationWarning>
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
@@ -107,12 +113,12 @@ export default async function RootLayout({
             __html: buildThemeBootstrapScript(instance?.defaults?.theme),
           }}
         />
-        <InstanceCustomization instance={instance} nonce={nonce} />
+        <InstanceCustomization instance={instance} nonce={nonce} scripts={!ageGate} />
         <a href="#main-content" className="skip-link">
           {t("a11y.skipToContent")}
         </a>
         {/* Three providers, one indent: all are context with no markup. */}
-        <I18nProvider locale={locale} messages={messages}><SoftwareBrandProvider hidden={hideSoftwareName(instance)}><InstanceAdsProvider ads={instance ? instance.ads ?? null : undefined}>
+        <I18nProvider locale={locale} messages={messages}><SoftwareBrandProvider hidden={hideSoftwareName(instance)}><InstanceAdsProvider ads={ageGate ? null : instance ? instance.ads ?? null : undefined}>
           <AuthProvider>
             <SecureMessagingBootstrap />
             <PlayerSettingsBootstrap />
@@ -133,8 +139,12 @@ export default async function RootLayout({
                   className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-clip focus:outline-none"
                 >
                   <InstanceBanner instance={instance} nonce={nonce} />
-                  <InstanceAnalytics analytics={instance ? instance.analytics ?? null : undefined} nonce={nonce ?? ""} />
-                  {children}
+                  {ageGate ? null : (
+                    <InstanceAnalytics analytics={instance ? instance.analytics ?? null : undefined} nonce={nonce ?? ""} />
+                  )}
+                  <AgeGate pending={ageGate} minimumAge={ageGateMinimum(instance)}>
+                    {children}
+                  </AgeGate>
                 </div>
               </div>
               <BottomTabBar />
