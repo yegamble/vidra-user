@@ -1070,6 +1070,13 @@ export const META: Record<string, SettingMeta> = {
     page: "general",
     section: "moderation",
   },
+  age_gate_enabled: {
+    label: "Ask visitors to confirm their age",
+    help: "Visitors without an account must confirm they are at least the minimum age (Sign-up › Minimum age) before any page or embed shows; ads and the custom script wait until they do. Self-declared, not age verification: it does not stop direct API or media requests, and search engines see the age page. Needs a minimum age above 0.",
+    control: "toggle",
+    page: "general",
+    section: "moderation",
+  },
   quarantine_new_uploads: {
     label: "Quarantine new uploads",
     help: "Hold new uploads for moderator review before they publish.",
@@ -1168,13 +1175,14 @@ export const META: Record<string, SettingMeta> = {
     section: "signup",
     parent: "registration_enabled",
   },
+  // Not a child of registration_enabled: the age gate asks visitors for this
+  // age while signups are closed too.
   registration_minimum_age: {
     label: "Minimum age",
-    help: 'Signup requires ticking "I am at least N years old" — an attestation, no birthdate is collected. 0 = disabled; otherwise 1–150.',
+    help: 'Every signup, including through a sign-in provider, requires ticking "I am at least N years old" — an attestation, no birthdate is collected. The age gate (Moderation) asks visitors for the same age. 0 = disabled; otherwise 1–150.',
     control: "number",
     page: "general",
     section: "signup",
-    parent: "registration_enabled",
   },
   new_user_history_enabled: {
     label: "Watch history for new accounts",

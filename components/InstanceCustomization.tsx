@@ -29,13 +29,15 @@ const HEX_HASH = /^[0-9a-f]{8,128}$/i;
 
 // nonce: under the enforced nonce + 'strict-dynamic' CSP a parser-inserted
 // <script src> runs only with it; CSP3 browsers ignore the API-origin allowlist.
-type Props = { instance: InstanceConfigSnapshot | null; nonce?: string };
-export function InstanceCustomization({ instance, nonce }: Props) {
+// scripts=false leaves the custom script out (the age gate holds it back until
+// a visitor confirms); the stylesheet and accent still apply.
+type Props = { instance: InstanceConfigSnapshot | null; nonce?: string; scripts?: boolean };
+export function InstanceCustomization({ instance, nonce, scripts = true }: Props) {
   const customization = instance?.customization;
   const cssHash = customization?.css_hash;
   const jsHash = customization?.js_hash;
   const css = cssHash && HEX_HASH.test(cssHash) ? cssHash : null;
-  const js = jsHash && HEX_HASH.test(jsHash) ? jsHash : null;
+  const js = scripts && jsHash && HEX_HASH.test(jsHash) ? jsHash : null;
   const accentCss = buildAccentOverrideCss(customization?.primary_color ?? "");
   if (!css && !js && !accentCss) return null;
   return (

@@ -75,6 +75,7 @@ const SERVER_REGISTRY: Array<[string, ConfigPageId, string]> = [
   ["instance_is_sensitive", "general", "moderation"],
   ["sensitive_content_policy", "general", "moderation"],
   ["sensitive_anonymous_access", "general", "moderation"],
+  ["age_gate_enabled", "general", "moderation"],
   ["instance_categories", "general", "identity"],
   ["instance_custom_categories", "general", "identity"],
   ["moderator_languages", "general", "identity"],
@@ -1171,5 +1172,13 @@ describe("unlabeled server keys", () => {
       expect(META[key], key).toBeDefined();
       expect(META[key].help, `${key} help`).toBeTruthy();
     }
+  });
+});
+
+describe("age gate placement", () => {
+  it("keeps the minimum age editable while signups are closed, and never calls the gate verification", () => {
+    expect(META.registration_minimum_age.parent).toBeUndefined();
+    expect(META.age_gate_enabled.control).toBe("toggle");
+    expect(META.age_gate_enabled.help).toMatch(/not age verification/);
   });
 });

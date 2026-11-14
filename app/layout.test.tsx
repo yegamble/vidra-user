@@ -2,7 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { InstanceConfigSnapshot } from "@/lib/instance-config.server";
 
-const mocks = vi.hoisted(() => ({ getInstanceConfig: vi.fn(), localeCookie: undefined as string | undefined }));
+const mocks = vi.hoisted(() => ({
+  getInstanceConfig: vi.fn(),
+  localeCookie: undefined as string | undefined,
+  ageCookie: undefined as string | undefined,
+}));
 
 vi.mock("@/lib/instance-config.server", () => ({
   getInstanceConfig: mocks.getInstanceConfig,
@@ -13,11 +17,16 @@ vi.mock("next/headers", () => ({
   headers: async () => new Headers({ "x-nonce": "n0nce" }),
   cookies: async () => ({
     get: (name: string) =>
-      name === "vidra_locale" && mocks.localeCookie ? { name, value: mocks.localeCookie } : undefined,
+      name === "vidra_locale" && mocks.localeCookie
+        ? { name, value: mocks.localeCookie }
+        : name === "vidra_age_ok" && mocks.ageCookie
+          ? { name, value: mocks.ageCookie }
+          : undefined,
   }),
 }));
 
 import RootLayout, { dynamic } from "./layout";
+import { AgeGate } from "@/components/AgeGate";
 import Script from "next/script";
 
 import { I18nProvider } from "@/components/I18nProvider";
@@ -46,9 +55,10 @@ function findElement(node: any, type: unknown): any {
   return findElement(node.props?.children, type);
 }
 
-async function renderWith(instance: InstanceConfigSnapshot | null, localeCookie?: string) {
+async function renderWith(instance: InstanceConfigSnapshot | null, localeCookie?: string, ageCookie?: string) {
   mocks.getInstanceConfig.mockResolvedValue(instance);
   mocks.localeCookie = localeCookie;
+  mocks.ageCookie = ageCookie;
   return RootLayout({ children: null });
 }
 
@@ -66,6 +76,29 @@ describe("RootLayout", () => {
     expect(known.props.ads).toBe(ads);
     expect(findElement(await renderWith(null), InstanceAdsProvider).props.ads).toBeUndefined();
     expect(findElement(await renderWith({} as InstanceConfigSnapshot), InstanceAdsProvider).props.ads).toBeNull();
+  });
+
+  it("holds the page, custom script, ads and analytics back until a visitor confirms the age", async () => {
+    const ads = { enabled: true, vast_tag_url: "https://ads.example/pre.xml" };
+    const analytics = { google_enabled: true, google_measurement_id: "G-TEST1234" };
+    const instance = { age_gate_enabled: true, registration_minimum_age: 18, ads, analytics } as InstanceConfigSnapshot;
+
+    const gated = await renderWith(instance);
+    expect(findElement(gated, AgeGate).props).toMatchObject({ pending: true, minimumAge: 18 });
+    expect(findElement(gated, InstanceAdsProvider).props.ads).toBeNull();
+    expect(findElement(gated, InstanceAnalytics)).toBeNull();
+    expect(findElement(gated, InstanceCustomization).props.scripts).toBe(false);
+
+    const confirmed = await renderWith(instance, undefined, "18");
+    expect(findElement(confirmed, AgeGate).props.pending).toBe(false);
+    expect(findElement(confirmed, InstanceAdsProvider).props.ads).toBe(ads);
+    expect(findElement(confirmed, InstanceAnalytics).props.analytics).toBe(analytics);
+    expect(findElement(confirmed, InstanceCustomization).props.scripts).toBe(true);
+
+    // A confirmation of a lower age than the instance now asks for does not count.
+    expect(findElement(await renderWith(instance, undefined, "16"), AgeGate).props.pending).toBe(true);
+    // With the gate off nothing is held back.
+    expect(findElement(await renderWith({ ads } as InstanceConfigSnapshot), AgeGate).props.pending).toBe(false);
   });
 
   it("suppresses intentional hydration differences on both document elements", async () => {
@@ -94,7 +127,9 @@ describe("RootLayout", () => {
     expect(content.props.children).toHaveLength(3);
     expect(content.props.children[0].type).toBe(InstanceBanner);
     expect(content.props.children[1].type).toBe(InstanceAnalytics);
-    expect(content.props.children[2]).toBe(page);
+    // The page itself sits inside the age gate, which passes it through when off.
+    expect(content.props.children[2].type).toBe(AgeGate);
+    expect(content.props.children[2].props.children).toBe(page);
   });
 });
 
