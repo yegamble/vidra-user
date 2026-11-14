@@ -481,15 +481,22 @@ export const authApi = {
  * ("/..."); the callback lands the session server-side in cookie mode and
  * redirects the browser there (with ?oauth_error=<code> on failure).
  */
-export function oauthBeginUrl(provider: string, returnTo?: string, termsAccepted = false): string {
+export function oauthBeginUrl(provider: string, returnTo?: string, ticks: SignupTicks = {}): string {
   const base = `${apiBaseUrl}/api/v1/auth/oauth/${encodeURIComponent(provider)}`;
   const query: string[] = [];
   if (returnTo) query.push(`return_to=${encodeURIComponent(returnTo)}`);
-  // The signup form's tick. The backend seals it into the attempt and reads it
-  // only if this sign-in turns out to create an account.
-  if (termsAccepted) query.push("terms_accepted=1");
+  // The signup form's ticks. The backend seals them into the attempt and reads
+  // them only if this sign-in turns out to create an account.
+  if (ticks.termsAccepted) query.push("terms_accepted=1");
+  if (ticks.ageAttested) query.push("age_attestation=1");
   return query.length > 0 ? `${base}?${query.join("&")}` : base;
 }
+
+/**
+ * The signup form's two ticks, carried into a provider flow: "I accept the
+ * terms of service and the privacy policy" and "I am at least N years old".
+ */
+export type SignupTicks = { termsAccepted?: boolean; ageAttested?: boolean };
 
 /**
  * POST /api/v1/auth/atproto/start — begin the ATProto (Bluesky / any PDS)
@@ -506,11 +513,16 @@ export function oauthBeginUrl(provider: string, returnTo?: string, termsAccepted
 export function beginATProtoLogin(
   handle: string,
   returnTo: string,
-  termsAccepted = false,
+  ticks: SignupTicks = {},
 ): Promise<{ authorization_url: string }> {
   return apiRequest<{ authorization_url: string }>("/api/v1/auth/atproto/start", {
     method: "POST",
-    body: { handle, return_to: returnTo, ...(termsAccepted ? { terms_accepted: true } : {}) },
+    body: {
+      handle,
+      return_to: returnTo,
+      ...(ticks.termsAccepted ? { terms_accepted: true } : {}),
+      ...(ticks.ageAttested ? { age_attestation: true } : {}),
+    },
     credentials: "include",
     retryOn401: false,
   });

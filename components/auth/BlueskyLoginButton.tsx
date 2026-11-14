@@ -22,11 +22,13 @@ export function BlueskyLoginButton({
   enabled,
   returnTo,
   termsAccepted = false,
+  ageAttested = false,
 }: {
   enabled: boolean;
   returnTo: string;
-  /** The signup form's tick, carried to the ATProto flow. */
+  /** The signup form's ticks, carried to the ATProto flow. */
   termsAccepted?: boolean;
+  ageAttested?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [handle, setHandle] = useState("");
@@ -60,10 +62,10 @@ export function BlueskyLoginButton({
     setError(null);
     setSubmitting(true);
     try {
-      // The tick travels only when it was given: a sign-in from the login page
-      // says nothing about terms, and an existing account is never asked.
-      const { authorization_url } = termsAccepted
-        ? await beginATProtoLogin(trimmed, returnTo, true)
+      // The ticks travel only when given: a sign-in from the login page says
+      // nothing about terms or age, and an existing account is never asked.
+      const { authorization_url } = termsAccepted || ageAttested
+        ? await beginATProtoLogin(trimmed, returnTo, { termsAccepted, ageAttested })
         : await beginATProtoLogin(trimmed, returnTo);
       // Top-level navigation ONLY: the begin call sealed the httpOnly attempt
       // cookie and this hands the browser off to the authorization server.

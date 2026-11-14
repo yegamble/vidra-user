@@ -404,8 +404,19 @@ export function SignupForm({
           ATProto callback appends ?oauth=1 to a BARE return_to itself, so the
           Bluesky button passes "/signup" (not "/signup?oauth=1"). */}
       {providers.length === 0 && atprotoEnabled ? <AuthOrDivider /> : null}
-      <OAuthButtons providers={providers} details={providerDetails} returnTo="/signup?oauth=1" termsAccepted={termsAccepted} />
-      <BlueskyLoginButton enabled={atprotoEnabled} returnTo="/signup" termsAccepted={termsAccepted} />
+      <OAuthButtons
+        providers={providers}
+        details={providerDetails}
+        returnTo="/signup?oauth=1"
+        termsAccepted={termsAccepted}
+        ageAttested={minimumAge > 0 && ageAttested}
+      />
+      <BlueskyLoginButton
+        enabled={atprotoEnabled}
+        returnTo="/signup"
+        termsAccepted={termsAccepted}
+        ageAttested={minimumAge > 0 && ageAttested}
+      />
 
       <p className="text-center text-subhead text-fg-muted">
         Already have an account?{" "}

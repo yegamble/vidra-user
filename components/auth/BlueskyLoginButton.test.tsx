@@ -110,7 +110,23 @@ describe("BlueskyLoginButton (signup terms)", () => {
     fireEvent.change(expand(), { target: { value: "alice.bsky.social" } });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await waitFor(() =>
-      expect(beginATProtoLoginMock).toHaveBeenCalledWith("alice.bsky.social", "/signup", true),
+      expect(beginATProtoLoginMock).toHaveBeenCalledWith("alice.bsky.social", "/signup", {
+        termsAccepted: true,
+        ageAttested: false,
+      }),
+    );
+  });
+
+  it("carries the signup form's age tick to the start request", async () => {
+    beginATProtoLoginMock.mockResolvedValue({ authorization_url: "https://pds.example/authorize" });
+    render(<BlueskyLoginButton enabled returnTo="/signup" ageAttested />);
+    fireEvent.change(expand(), { target: { value: "alice.bsky.social" } });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await waitFor(() =>
+      expect(beginATProtoLoginMock).toHaveBeenCalledWith("alice.bsky.social", "/signup", {
+        termsAccepted: false,
+        ageAttested: true,
+      }),
     );
   });
 });
