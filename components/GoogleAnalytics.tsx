@@ -35,8 +35,8 @@ function consentStore() {
 }
 const serverSnapshot = () => undefined;
 
-/** consentRequired=false (admin opt-out): no banner and analytics counts as granted, but DNT/GPC,
- * route eligibility and an earlier stored "denied" still suppress it. */
+/** consentRequired=false (admin opt-out): no unprompted banner and analytics counts as granted, but
+ * DNT/GPC, route eligibility and an earlier stored "denied" still suppress it. */
 export function GoogleAnalytics({ enabled, measurementId, nonce, consentRequired = true }: { enabled: boolean; measurementId: string; nonce: string; consentRequired?: boolean }) {
   const pathname = usePathname() ?? "";
   const store = useMemo(() => consentStore(), []);
@@ -52,5 +52,8 @@ export function GoogleAnalytics({ enabled, measurementId, nonce, consentRequired
     if (next === "denied") syncGoogleAnalytics(null, pathname, nonce);
     if (!store.write(next)) syncGoogleAnalytics(null, pathname, nonce);
   };
-  return choice === undefined || !eligible || !consentRequired ? null : <AnalyticsConsent choice={choice} onChange={change} />;
+  // Consent off: never prompt, but keep the preferences button for a visitor who already chose,
+  // so an earlier Accept can still be withdrawn and an earlier Decline reversed.
+  if (choice === undefined || !eligible || (!consentRequired && stored == null)) return null;
+  return <AnalyticsConsent choice={consentRequired ? choice : stored ?? null} onChange={change} />;
 }

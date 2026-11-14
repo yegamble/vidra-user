@@ -106,10 +106,44 @@ it("consent required (explicit or default) still holds analytics until accepted"
   expect(screen.getByRole("region", { name: "Optional analytics" })).toBeTruthy();
   expect(mocks.sync.mock.calls.every(call => call[0] === null)).toBe(true);
 });
-it("with consent not required: a previously stored decline is still respected", () => {
+it("with consent not required: a previously stored decline is respected and can be reversed", () => {
   localStorage.setItem(key, "denied"); render(<GoogleAnalytics {...open} />);
-  expect(screen.queryByRole("button")).toBeNull();
+  expect(screen.queryByRole("region")).toBeNull();
+  expect(screen.getByRole("button", { name: "Analytics preferences" })).toBeTruthy();
   expect(mocks.sync.mock.calls.every(call => call[0] === null)).toBe(true);
+  choose("Accept");
+  expect(localStorage.getItem(key)).toBe("granted");
+  expect(mocks.sync).toHaveBeenLastCalledWith(props.measurementId, "/", props.nonce);
+});
+it("with consent not required: a stored accept keeps the preferences button and can be withdrawn", () => {
+  localStorage.setItem(key, "granted"); render(<GoogleAnalytics {...open} />);
+  expect(screen.queryByRole("region")).toBeNull();
+  expect(mocks.sync).toHaveBeenLastCalledWith(props.measurementId, "/", props.nonce);
+  choose("Decline");
+  expect(localStorage.getItem(key)).toBe("denied");
+  expect(mocks.sync).toHaveBeenLastCalledWith(null, "/", props.nonce);
+});
+it("with consent not required: never writes storage by itself", () => {
+  const write = vi.spyOn(Storage.prototype, "setItem");
+  render(<GoogleAnalytics {...open} />);
+  expect(write).not.toHaveBeenCalled(); expect(localStorage.getItem(key)).toBeNull();
+});
+it("flipping consentRequired false to true with nothing stored shows the banner and stops measuring", () => {
+  const view = render(<GoogleAnalytics {...open} />);
+  expect(mocks.sync).toHaveBeenLastCalledWith(props.measurementId, "/", props.nonce);
+  expect(screen.queryByRole("region")).toBeNull();
+  view.rerender(<GoogleAnalytics {...props} consentRequired />);
+  expect(screen.getByRole("region", { name: "Optional analytics" })).toBeTruthy();
+  expect(mocks.sync).toHaveBeenLastCalledWith(null, "/", props.nonce);
+});
+it("with consent not required: no id-bearing sync happens before storage has been read", () => {
+  const order: string[] = [];
+  const read = Storage.prototype.getItem;
+  vi.spyOn(Storage.prototype, "getItem").mockImplementation(function (this: Storage, name) { order.push("read"); return read.call(this, name); });
+  mocks.sync.mockImplementation((id: string | null) => { if (id) order.push("sync"); });
+  render(<GoogleAnalytics {...open} />);
+  expect(order.indexOf("read")).toBeGreaterThanOrEqual(0);
+  expect(order.indexOf("sync")).toBeGreaterThan(order.indexOf("read"));
 });
 it("with consent not required: unreadable storage stays off", () => {
   vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new Error("blocked"); });

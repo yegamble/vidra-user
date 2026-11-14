@@ -666,7 +666,7 @@ const URL_IMPORTS_WARN: NonNullable<SettingMeta["warn"]> = {
 export const META: Record<string, SettingMeta> = {
   analytics_google_enabled: {
     label: "Enable Google Analytics",
-    help: "Load GA4 only after visitors accept optional analytics. Off by default; a valid Measurement ID is required.",
+    help: "Turn on Google Analytics 4 measurement. Off by default; a valid Measurement ID is required. Whether visitors are asked first is controlled by "Require visitor consent" below.",
     control: "toggle",
     page: "general",
     section: "analytics",
