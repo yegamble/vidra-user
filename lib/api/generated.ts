@@ -3424,6 +3424,30 @@ export interface paths {
         patch: operations["updateNotificationPrefs"];
         trace?: never;
     };
+    "/api/v1/notifications/unsubscribe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Where the unsubscribe link lands (never unsubscribes)
+         * @description Mail scanners and link previewers GET every link in a message, so a GET of the unsubscribe URL changes nothing: it redirects to the frontend's notification settings (the token is not carried), or, with no public origin configured, answers a short text saying where to find them.
+         */
+        get: operations["unsubscribeNotificationEmailPage"];
+        put?: never;
+        /**
+         * One-click unsubscribe from notification email (RFC 8058)
+         * @description The target of the `List-Unsubscribe` header on notification email (new video, comment, reply), pressed by a mailbox provider with `List-Unsubscribe-Post: List-Unsubscribe=One-Click`. No session: the signed per-user `token` in the URL is the credential. It turns every email type off through the same preference as PATCH /api/v1/me/notification-prefs, and is idempotent (a repeat does no write). A valid token and an unknown, forged or empty one are indistinguishable: both answer 204 with no body, so it reveals neither which accounts exist nor which tokens verify. It never signs anyone in. It is rate limited per client IP on the large media budget under its own key, so a 429 is still possible under extreme load. Transactional mail (verification, password reset, security notices) carries no such header.
+         */
+        post: operations["unsubscribeNotificationEmail"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/content-preferences": {
         parameters: {
             query?: never;
@@ -9083,7 +9107,7 @@ export interface components {
             visibility: "public" | "unlisted" | "private";
             /**
              * Format: int64
-             * @description Number of public, published videos in the playlist.
+             * @description Number of public, published, not moderator-blocked videos in the playlist. Viewer-independent on list surfaces (the sensitive-content "hide" policy is per viewer), so it may exceed what a viewer sees inside; on GET /playlists/{id} it is the viewer's filtered count and equals `total`.
              */
             video_count: number;
             /** @description Whether an uploaded cover image is available at GET /playlists/{id}/thumbnail. */
@@ -9096,7 +9120,7 @@ export interface components {
         PlaylistListResponse: components["schemas"]["PageMeta"] & {
             playlists: components["schemas"]["Playlist"][];
         };
-        /** @description A playlist's fields plus one page of its ordered public, published video cards. total/limit/offset describe the VIDEOS; the playlist's own video_count is unchanged. */
+        /** @description A playlist's fields plus one page of its ordered public, published video cards. Moderator-blocked videos are never listed, and under the sensitive-content "hide" policy (the instance default, or the signed-in viewer's own override) sensitive videos are left out too, for the playlist's owner as for anyone else. total/limit/offset describe the VIDEOS actually listed for this viewer, and on THIS route video_count equals total (per viewer); everywhere else video_count is viewer-independent and may exceed what a viewer sees inside. */
         PlaylistDetailResponse: components["schemas"]["Playlist"] & components["schemas"]["PageMeta"] & {
             videos: components["schemas"]["Video"][];
         };
@@ -21961,6 +21985,65 @@ export interface operations {
             };
             /** @description Empty update, unknown notification type, or an email switch for a type without email delivery. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    unsubscribeNotificationEmailPage: {
+        parameters: {
+            query?: {
+                token?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No public origin is configured; plain-text pointer to the settings. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            /** @description Redirect to the notification settings page. */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    unsubscribeNotificationEmail: {
+        parameters: {
+            query?: {
+                /** @description The signed token from the email's List-Unsubscribe URL. */
+                token?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Processed (or ignored); the response never says which. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Per-IP rate limit exceeded; the caller should retry. */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
