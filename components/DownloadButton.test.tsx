@@ -166,6 +166,27 @@ describe("DownloadDialog", () => {
     );
   });
 
+  it("labels a portrait rung by its short side, like the quality it was encoded as", async () => {
+    mocks.getVideoDownloads.mockResolvedValueOnce({
+      files: [
+        {
+          kind: "hls",
+          url: "/api/v1/videos/video-1/download/hls/1280",
+          filename: "video-1280p.mp4",
+          content_type: "video/mp4",
+          size_bytes: 95_000_000,
+          width: 720,
+          height: 1280,
+        },
+      ],
+    });
+    renderDialog();
+
+    const radio = await screen.findByRole("radio", { name: /720p/ });
+    expect(radio.parentElement?.textContent).toContain("720×1280");
+    expect(screen.queryByRole("radio", { name: /1280p/ })).toBeNull();
+  });
+
   it("selects and downloads the audio and subtitle groups with the playback token", async () => {
     renderDialog("gate-token");
     const format = await screen.findByRole("combobox", { name: "Download format" });
