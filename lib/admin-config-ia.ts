@@ -1624,7 +1624,7 @@ export const META: Record<string, SettingMeta> = {
   },
   downloads_users_enabled: {
     label: "Signed-in users can download",
-    help: "Let signed-in members download videos whose creator allows it. Moderators and admins can download regardless of this switch.",
+    help: "Let signed-in members download videos whose creator allows it. Off on its own, a member can still sign out and download public videos as a visitor, so turn the logged-out switch off too to stop that. Moderators and admins can download regardless of this switch.",
     control: "toggle",
     page: "vod",
     section: "downloads",
