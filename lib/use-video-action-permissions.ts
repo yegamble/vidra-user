@@ -42,7 +42,7 @@ export function useVideoActionPermissions(video: Video): VideoActionPermissions 
     userId: string;
     ids: ReadonlySet<string>;
   } | null>(null);
-  const [downloadsEnabled, setDownloadsEnabled] = useState(false);
+  const [downloads, setDownloads] = useState<DownloadAudiences>(NO_DOWNLOADS);
 
   useEffect(() => {
     if (!signedIn || !user || privileged || video.remote === true || !video.channel_id) {
@@ -65,10 +65,10 @@ export function useVideoActionPermissions(video: Video): VideoActionPermissions 
     let cancelled = false;
     getInstanceCached()
       .then((instance) => {
-        if (!cancelled) setDownloadsEnabled(instance.features.downloads === true);
+        if (!cancelled) setDownloads(downloadAudiences(instance.features));
       })
       .catch(() => {
-        if (!cancelled) setDownloadsEnabled(false);
+        if (!cancelled) setDownloads(NO_DOWNLOADS);
       });
     return () => {
       cancelled = true;
@@ -86,13 +86,39 @@ export function useVideoActionPermissions(video: Video): VideoActionPermissions 
           ownedChannels?.userId === user.id &&
           !!video.channel_id &&
           ownedChannels.ids.has(video.channel_id))),
-    // Effective download availability (config-parity W9): the instance
-    // downloads feature AND the video's own download_enabled flag — absent
-    // (card payloads don't carry it) is treated as enabled, the server's
-    // layered gate stays authoritative. Moderators/admins bypass both.
+    // Effective download availability (config-parity W9): the instance's
+    // answer for THIS viewer's audience AND the video's own download_enabled
+    // flag — absent (card payloads don't carry it) is treated as enabled, the
+    // server's layered gate stays authoritative. Moderators/admins bypass the
+    // per-video flag, but the instance master switch stops them too.
     canDownload:
       video.remote !== true &&
-      (privileged || (downloadsEnabled && video.download_enabled !== false)),
+      (privileged
+        ? downloads.staff
+        : (signedIn ? downloads.users : downloads.anonymous) &&
+          video.download_enabled !== false),
+  };
+}
+
+type DownloadAudiences = { users: boolean; anonymous: boolean; staff: boolean };
+
+const NO_DOWNLOADS: DownloadAudiences = { users: false, anonymous: false, staff: false };
+
+/**
+ * The instance's download answer per audience. A core that predates the
+ * audience switches reports only `downloads`: there, visitors followed the same
+ * switch as members and staff were never switched off.
+ */
+function downloadAudiences(features: {
+  downloads?: boolean;
+  downloads_anonymous?: boolean;
+  downloads_staff?: boolean;
+}): DownloadAudiences {
+  const users = features.downloads === true;
+  return {
+    users,
+    anonymous: features.downloads_anonymous ?? users,
+    staff: features.downloads_staff ?? true,
   };
 }
 

@@ -347,7 +347,7 @@ export const PAGE_SECTIONS: Record<ConfigPageId, SectionDef[]> = {
     {
       id: "downloads",
       title: "Downloads",
-      description: "Whether viewers can save video files from this instance.",
+      description: "Who can save video files from this instance.",
     },
     {
       // Matches the server metadata's `publish_defaults` section id
@@ -1609,10 +1609,26 @@ export const META: Record<string, SettingMeta> = {
   // VOD / Downloads
   downloads_enabled: {
     label: "Video downloads",
-    help: "Allow regular viewers to download video files. Moderators and admins always retain access.",
+    help: "The master switch for downloading video files. Off stops everyone, moderators and admins included. On, the two switches below decide who may download; moderators and admins always can.",
     control: "toggle",
     page: "vod",
     section: "downloads",
+  },
+  downloads_anonymous_enabled: {
+    label: "Logged-out visitors can download",
+    help: "Let people who are not signed in download videos whose creator allows it. Off hides the download button from visitors and empties podcast feeds, which apps fetch signed out.",
+    control: "toggle",
+    page: "vod",
+    section: "downloads",
+    parent: "downloads_enabled",
+  },
+  downloads_users_enabled: {
+    label: "Signed-in users can download",
+    help: "Let signed-in members download videos whose creator allows it. Moderators and admins can download regardless of this switch.",
+    control: "toggle",
+    page: "vod",
+    section: "downloads",
+    parent: "downloads_enabled",
   },
   // VOD / Publish defaults (config-parity W9: defaults.publish)
   default_video_privacy: {
