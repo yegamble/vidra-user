@@ -54,6 +54,8 @@ const SERVER_REGISTRY: Array<[string, ConfigPageId, string]> = [
   ["live_enabled", "live", "streaming"],
   ["comments_enabled", "vod", "comments"],
   ["downloads_enabled", "vod", "downloads"],
+  ["downloads_anonymous_enabled", "vod", "downloads"],
+  ["downloads_users_enabled", "vod", "downloads"],
   ["instance_short_description", "general", "identity"],
   ["server_country", "general", "identity"],
   ["support_text", "general", "about"],
