@@ -16,15 +16,22 @@ function modeFor(file: VideoDownloadFile): DownloadMode {
   return "video";
 }
 
+// A quality is named by the frame's SHORT side: a portrait 720×1280 rung is the
+// "720p" encode, and calling it 1280p reads as a quality the video never had.
+function quality(file: VideoDownloadFile): number {
+  if (file.width && file.height) return Math.min(file.width, file.height);
+  return file.height ?? 0;
+}
+
 function videoRank(file: VideoDownloadFile): number {
-  if (file.kind === "hls") return 3_000_000 + (file.height ?? 0);
-  if (file.kind === "webm") return 2_000_000 + (file.height ?? 0);
-  return 1_000_000 + (file.height ?? 0);
+  if (file.kind === "hls") return 3_000_000 + quality(file);
+  if (file.kind === "webm") return 2_000_000 + quality(file);
+  return 1_000_000 + quality(file);
 }
 
 function fileTitle(file: VideoDownloadFile): string {
-  if (file.kind === "hls") return file.height ? `${file.height}p` : "HLS video";
-  if (file.kind === "webm") return file.height ? `${file.height}p WebM` : "WebM transcode";
+  if (file.kind === "hls") return quality(file) ? `${quality(file)}p` : "HLS video";
+  if (file.kind === "webm") return quality(file) ? `${quality(file)}p WebM` : "WebM transcode";
   if (file.kind === "original") return "Original file";
   if (file.kind === "audio") return "Audio only";
   return file.label || file.language || "Subtitles";
