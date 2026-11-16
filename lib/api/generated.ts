@@ -2123,7 +2123,7 @@ export interface paths {
         };
         /**
          * List a video's downloadable files
-         * @description Returns metadata for actual single-file downloads: the stored original, an optional progressive VP9/WebM alternate, progressive MP4 remuxes for each ready HLS rung (muxed video+audio plus an optional video-only URL), an audio-only M4A when the source has audio, and WebVTT subtitles. Regular/anonymous callers require the LAYERED download policy (config-parity W9): the instance-wide downloads_enabled setting AND the video's own download_enabled flag (instance gate off means no downloads regardless of the per-video flag), plus ordinary video visibility. The same layered gate guards every /download/* byte route. Moderators/admins bypass both gates and may download any local video for moderation. A visible video with no stored files yet returns an empty list.
+         * @description Returns metadata for actual single-file downloads: the stored original, an optional progressive VP9/WebM alternate, progressive MP4 remuxes for each ready HLS rung (muxed video+audio plus an optional video-only URL), an audio-only M4A when the source has audio, and WebVTT subtitles. A rung with no stored remux (a video imported from PeerTube) is still listed when its variant playlist proves one complete single-file MP4: that object is the download. When the rung's audio lives in a separate audio-only MP4, `url` is a video+audio file built on request (see downloadVideoHLSRendition), `video_only_url` is the video object, and `size_bytes` is the sum of the two objects, which is approximate (the built file differs by container overhead). On a host without ffmpeg such a rung is not listed at all, because its only file has no audio; the audio-only entry is still listed. Regular/anonymous callers require the LAYERED download policy (config-parity W9): the instance-wide downloads_enabled setting AND the video's own download_enabled flag (instance gate off means no downloads regardless of the per-video flag), plus ordinary video visibility. The same layered gate guards every /download/* byte route. Moderators/admins bypass both gates and may download any local video for moderation. A visible video with no stored files yet returns an empty list.
          */
         get: operations["getVideoDownloads"];
         put?: never;
@@ -2184,6 +2184,7 @@ export interface paths {
         /**
          * Download one HLS quality as a progressive MP4
          * @description Serves one transcoded HLS rung remuxed into a single MP4 file. Audio is included in the same file by default; audio=false selects the matching video-only MP4. No video re-encoding occurs during the download.
+         *     A rung with no stored remux (a video imported from PeerTube) falls back to the single complete MP4 its variant playlist names. If that MP4 already carries the audio, it is served as stored (200/206, redirect eligible) and audio=false is 404. If the audio is a separate audio-only MP4, audio=true builds the video+audio file ON REQUEST by stream copy (no re-encode, nothing written to storage): the response is always 200 `video/mp4` with `Cache-Control: no-store`, no Content-Length, no Range support (a Range header is ignored and the full file is sent) and is never redirected. The number of such builds running at once is bounded server-wide, and a single client address may have only one running; when a slot is not available the route answers 503 with code `download_busy` and a Retry-After, without queueing. A build that fails after the 200 was sent ends by severing the connection, so the client sees a failed download rather than a truncated file. A failure before the first byte is a 502. audio=false for that rung serves the video object itself with range support.
          */
         get: operations["downloadVideoHLSRendition"];
         put?: never;
@@ -2203,7 +2204,7 @@ export interface paths {
         };
         /**
          * Download audio only
-         * @description Serves the HLS transcode's audio stream as a single M4A attachment when one exists.
+         * @description Serves the HLS transcode's audio stream as a single M4A attachment when one exists. When Vidra stored no audio remux (a video imported from PeerTube), the audio group's single audio-only MP4 is served as stored, with the same range and redirect behaviour.
          */
         get: operations["downloadVideoAudio"];
         put?: never;
@@ -8128,7 +8129,7 @@ export interface components {
             content_type: string;
             /**
              * Format: int64
-             * @description Stored size in bytes, omitted when the backend cannot determine it.
+             * @description Stored size in bytes, omitted when the backend cannot determine it (a store that can neither stat a path nor report an object's size from its metadata). For an HLS entry whose video+audio file is built on request (an imported video with a separate audio object) it is the sum of the two source objects and approximate: the built file differs by container overhead.
              */
             size_bytes?: number;
             /** @description The upload's original filename (original entries only). */
@@ -18061,6 +18062,25 @@ export interface operations {
             /** @description No visible video or matching packaged rendition. */
             404: {
                 headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The on-request video+audio build failed before producing any bytes. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Every on-request build slot is taken, or this client already has one running (code `download_busy`); retry after the Retry-After delay, or take the video-only file. Also `download_unavailable` when the serving storage cannot supply the build's inputs without spooling objects to disk (such rungs are then not listed). */
+            503: {
+                headers: {
+                    "Retry-After"?: number;
                     [name: string]: unknown;
                 };
                 content: {
