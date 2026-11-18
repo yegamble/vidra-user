@@ -14,7 +14,7 @@ afterEach(cleanup);
 
 it("passes the SSR snapshot and nonce without fetching again", () => {
   render(<InstanceAnalytics analytics={enabled} nonce="request-nonce" />);
-  expect(props()).toEqual({ enabled: true, measurementId: "G-TEST1234", nonce: "request-nonce" });
+  expect(props()).toEqual({ enabled: true, measurementId: "G-TEST1234", nonce: "request-nonce", consentRequired: true });
   expect(mocks.get).not.toHaveBeenCalled();
 });
 it("keeps the runtime mounted with disabled props for older or disabled servers", () => {
@@ -55,4 +55,12 @@ it("ignores bootstrap completion and accepts a fresh SSR configuration", () => {
   expect(mocks.get).not.toHaveBeenCalled();
   view.rerender(<InstanceAnalytics analytics={enabled} nonce="nonce" />);
   expect(props().enabled).toBe(true);
+});
+it("passes consentRequired=false only when the server says so; absent means required", () => {
+  const view = render(<InstanceAnalytics analytics={{ ...enabled, google_consent_required: false }} nonce="nonce" />);
+  expect(props().consentRequired).toBe(false);
+  view.rerender(<InstanceAnalytics analytics={{ ...enabled, google_consent_required: true }} nonce="nonce" />);
+  expect(props().consentRequired).toBe(true);
+  view.rerender(<InstanceAnalytics analytics={enabled} nonce="nonce" />);
+  expect(props().consentRequired).toBe(true);
 });

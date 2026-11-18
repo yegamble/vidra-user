@@ -79,6 +79,12 @@ image are one number on purpose (A39 finding F09, owner ruling 2026-09-08:
 Node 26 everywhere); a bump moves all of them in the same commit or it
 reintroduces the drift.
 
+**Playwright install.** Every lane installs its browser with
+`scripts/ci/install-playwright.sh`, never a bare `playwright install
+--with-deps`: the download is cached per Playwright version, and the
+system-package install waits out and retries a mirror that will not resolve,
+inside a time budget. A mirror that stays down still fails the lane.
+
 **Artifacts.** Every lane uploads its Playwright HTML report, JSON report,
 traces and (on failure) the backend compose log, 14-day retention:
 `frontend-ci-reports`, `playwright-backed-report-local`,

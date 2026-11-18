@@ -19,7 +19,7 @@ import type {
   PeerTubeImportMode,
   PeerTubeImportRun,
 } from "@/lib/api";
-import { formatCount, pluralize, relativeTime } from "@/lib/format";
+import { formatCount, formatDateTime, pluralize, relativeTime } from "@/lib/format";
 
 // Poll cadence for a launched (dry-run or real) import while it is still
 // pending/running — one scheduled read per tick, unmount-safe. Each read counts
@@ -648,6 +648,21 @@ function hasReportGaps(report: PeerTubeImportRun["report"]): boolean {
     Object.values(report?.entities ?? {}).some((counts) => counts.unsupported > 0);
 }
 
+// How new the source was when this run read it. The source is often a restored
+// copy of the live database, and a copy does not move: without this line a run
+// that "imported 0" for that reason looks exactly like a broken importer.
+function SourceFreshness({ report }: { report: PeerTubeImportRun["report"] }) {
+  const at = report?.source_newest_video_at;
+  if (!at) return null;
+  return (
+    <p className="text-sm text-fg-muted">
+      Newest video in the source: <time dateTime={at}>{formatDateTime(at)}</time> (
+      {relativeTime(at)}). A run reads the source as it is at that moment. If the source is a
+      restored copy of the live database, refresh the copy to bring over anything uploaded since.
+    </p>
+  );
+}
+
 function RunPanel({ run, onRetry, retryDisabled }: {
   run: PeerTubeImportRun;
   onRetry: () => void;
@@ -681,6 +696,8 @@ function RunPanel({ run, onRetry, retryDisabled }: {
         ) : null}
         <span className="text-xs text-fg-muted">started {relativeTime(run.created_at)}</span>
       </div>
+
+      <SourceFreshness report={run.report} />
 
       {inFlight ? (
         <div className="flex items-center gap-3" role="status">

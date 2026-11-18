@@ -347,7 +347,7 @@ export const PAGE_SECTIONS: Record<ConfigPageId, SectionDef[]> = {
     {
       id: "downloads",
       title: "Downloads",
-      description: "Whether viewers can save video files from this instance.",
+      description: "Who can save video files from this instance.",
     },
     {
       // Matches the server metadata's `publish_defaults` section id
@@ -666,7 +666,7 @@ const URL_IMPORTS_WARN: NonNullable<SettingMeta["warn"]> = {
 export const META: Record<string, SettingMeta> = {
   analytics_google_enabled: {
     label: "Enable Google Analytics",
-    help: "Load GA4 only after visitors accept optional analytics. Off by default; a valid Measurement ID is required.",
+    help: "Turn on Google Analytics 4 measurement. Off by default; a valid Measurement ID is required. Whether visitors are asked first is controlled by the Require visitor consent setting below.",
     control: "toggle",
     page: "general",
     section: "analytics",
@@ -676,6 +676,14 @@ export const META: Record<string, SettingMeta> = {
     help: "Enter the G-… ID from Admin → Data streams → Web. Turn off Enhanced Measurement in that stream to avoid automatic events and duplicate pageviews. The app sends fixed page categories with no URL identifiers or search terms.",
     placeholder: "G-XXXXXXXXXX",
     control: "text",
+    page: "general",
+    section: "analytics",
+    parent: "analytics_google_enabled",
+  },
+  analytics_google_consent_required: {
+    label: "Require visitor consent",
+    help: "On (default): visitors are asked before analytics loads. Off: visitors are measured without being asked, and you are responsible for whether that is lawful where your visitors are (EU/UK ePrivacy and GDPR generally require consent). Do-Not-Track and Global Privacy Control are still honoured.",
+    control: "toggle",
     page: "general",
     section: "analytics",
     parent: "analytics_google_enabled",
@@ -792,9 +800,25 @@ export const META: Record<string, SettingMeta> = {
     page: "general",
     section: "about",
   },
+  terms_version: {
+    label: "Terms of service version",
+    help: "Your label for the current terms (a date works well). A signup records the label it accepted, so change it whenever the document changes.",
+    placeholder: "2026-11-12",
+    control: "text",
+    page: "general",
+    section: "about",
+  },
   privacy_url: {
     label: "Privacy policy URL",
     placeholder: "https://…",
+    control: "text",
+    page: "general",
+    section: "about",
+  },
+  privacy_version: {
+    label: "Privacy policy version",
+    help: "Your label for the current privacy policy; recorded with each signup like the terms version.",
+    placeholder: "2026-11-12",
     control: "text",
     page: "general",
     section: "about",
@@ -1043,6 +1067,24 @@ export const META: Record<string, SettingMeta> = {
     page: "general",
     section: "moderation",
   },
+  sensitive_anonymous_access: {
+    label: "Sensitive videos for visitors without an account",
+    help: "A sign-in wall, not age verification. “Sign-in required” refuses a sensitive video’s page, poster and stream to anyone who is not signed in, and keeps them off the CDN. It proves an account, not an age. Lists still follow the policy above.",
+    control: "enum-segmented",
+    options: [
+      { value: "open", label: "Open" },
+      { value: "sign_in", label: "Sign-in required" },
+    ],
+    page: "general",
+    section: "moderation",
+  },
+  age_gate_enabled: {
+    label: "Ask visitors to confirm their age",
+    help: "Visitors without an account must confirm they are at least the minimum age (Sign-up › Minimum age) before any page or embed shows; ads and the custom script wait until they do. Self-declared, not age verification: it does not stop direct API or media requests, and search engines see the age page. Needs a minimum age above 0.",
+    control: "toggle",
+    page: "general",
+    section: "moderation",
+  },
   quarantine_new_uploads: {
     label: "Quarantine new uploads",
     help: "Hold new uploads for moderator review before they publish.",
@@ -1141,13 +1183,14 @@ export const META: Record<string, SettingMeta> = {
     section: "signup",
     parent: "registration_enabled",
   },
+  // Not a child of registration_enabled: the age gate asks visitors for this
+  // age while signups are closed too.
   registration_minimum_age: {
     label: "Minimum age",
-    help: 'Signup requires ticking "I am at least N years old" — an attestation, no birthdate is collected. 0 = disabled; otherwise 1–150.',
+    help: 'Every signup, including through a sign-in provider, requires ticking "I am at least N years old" — an attestation, no birthdate is collected. The age gate (Moderation) asks visitors for the same age. 0 = disabled; otherwise 1–150.',
     control: "number",
     page: "general",
     section: "signup",
-    parent: "registration_enabled",
   },
   new_user_history_enabled: {
     label: "Watch history for new accounts",
@@ -1447,6 +1490,22 @@ export const META: Record<string, SettingMeta> = {
     section: "advertising",
     parent: "player_vast_midroll_enabled",
   },
+  player_vast_midroll_offset_percent: {
+    label: "Mid-roll position (percent)",
+    help: "Place the first mid-roll at this percentage (1–100) of the video instead. 0 uses the seconds position.",
+    control: "number",
+    page: "vod",
+    section: "advertising",
+    parent: "player_vast_midroll_enabled",
+  },
+  player_vast_midroll_interval_seconds: {
+    label: "Repeat mid-roll every (seconds)",
+    help: "0 plays one mid-roll. From 60 up, the mid-roll repeats every that many seconds of video after the first position, never in the last 60 seconds. A break that falls inside the ad cooldown is skipped, not delayed.",
+    control: "number",
+    page: "vod",
+    section: "advertising",
+    parent: "player_vast_midroll_enabled",
+  },
   player_vast_postroll_enabled: {
     label: "Post-roll ads",
     help: "Play an ad after a video ends.",
@@ -1462,6 +1521,54 @@ export const META: Record<string, SettingMeta> = {
     page: "vod",
     section: "advertising",
     parent: "player_vast_postroll_enabled",
+  },
+  player_vast_embed_enabled: {
+    label: "Ads in embedded players",
+    help: "Also play ads when a video is embedded on another site. Off requests no ads in embeds.",
+    control: "toggle",
+    page: "vod",
+    section: "advertising",
+    parent: "player_vast_enabled",
+  },
+  player_vast_controls: {
+    label: "Show ad controls",
+    help: "Show the play/pause and mute buttons while an ad plays. Viewers can never seek an ad.",
+    control: "toggle",
+    page: "vod",
+    section: "advertising",
+    parent: "player_vast_enabled",
+  },
+  player_vast_skip_after_seconds: {
+    label: "Skip available after (seconds)",
+    help: "Seconds of an ad (0–300) a viewer must watch before Skip appears. An ad that asks for longer keeps its own delay. 0 removes the skip button.",
+    control: "number",
+    page: "vod",
+    section: "advertising",
+    parent: "player_vast_enabled",
+  },
+  player_vast_skip_countdown: {
+    label: "Skip countdown text",
+    help: "Shown until the ad can be skipped. {seconds} becomes the seconds left. Plain text; empty uses the default.",
+    control: "text",
+    page: "vod",
+    section: "advertising",
+    parent: "player_vast_enabled",
+  },
+  player_vast_skip_label: {
+    label: "Skip button text",
+    help: "Label on the skip button. Plain text; empty uses the default.",
+    control: "text",
+    page: "vod",
+    section: "advertising",
+    parent: "player_vast_enabled",
+  },
+  player_vast_remaining_message: {
+    label: "Time remaining text",
+    help: "Shown while an ad plays. {seconds} becomes the seconds left in the ad. Plain text; empty hides it.",
+    control: "text",
+    page: "vod",
+    section: "advertising",
+    parent: "player_vast_enabled",
   },
   // VOD / Storyboards (config-parity W8).
   storyboards_enabled: {
@@ -1502,10 +1609,26 @@ export const META: Record<string, SettingMeta> = {
   // VOD / Downloads
   downloads_enabled: {
     label: "Video downloads",
-    help: "Allow regular viewers to download video files. Moderators and admins always retain access.",
+    help: "The master switch for downloading video files. Off stops everyone, moderators and admins included. On, the two switches below decide who may download; moderators and admins always can.",
     control: "toggle",
     page: "vod",
     section: "downloads",
+  },
+  downloads_anonymous_enabled: {
+    label: "Logged-out visitors can download",
+    help: "Let people who are not signed in download videos whose creator allows it. Off hides the download button from visitors and empties podcast feeds, which apps fetch signed out.",
+    control: "toggle",
+    page: "vod",
+    section: "downloads",
+    parent: "downloads_enabled",
+  },
+  downloads_users_enabled: {
+    label: "Signed-in users can download",
+    help: "Let signed-in members download videos whose creator allows it. Off on its own, a member can still sign out and download public videos as a visitor, so turn the logged-out switch off too to stop that. Moderators and admins can download regardless of this switch.",
+    control: "toggle",
+    page: "vod",
+    section: "downloads",
+    parent: "downloads_enabled",
   },
   // VOD / Publish defaults (config-parity W9: defaults.publish)
   default_video_privacy: {

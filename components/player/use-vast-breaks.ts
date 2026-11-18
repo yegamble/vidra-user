@@ -4,20 +4,22 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
 import { loadVast } from "@/lib/vast-client";
 import type { VastDocument } from "@/lib/vast";
 import { canPlayVast } from "@/lib/vast-cooldown";
+import { dueBreakSlot } from "@/lib/vast-schedule";
 
 /** Mid/post-rolls retain the content element and its engine at the held position. */
 export function useVastBreaks(
   videoRef: RefObject<HTMLVideoElement | null>, id: string,
   midrollUrl: string | null, midrollAt: number, postrollUrl: string | null,
   minimumDuration = 0, cooldown = 0, offsetPercent = 0, stopAt: number | null = null,
+  intervalSeconds = 0,
 ) {
   const [state, setState] = useState<{ id: string; active: boolean; ad: VastDocument | null }>({ id, active: false, ad: null });
   const finishRef = useRef<() => void>(() => {});
   const finish = useCallback(() => finishRef.current(), []);
-  const config = useRef({ midrollUrl, midrollAt, postrollUrl, minimumDuration, cooldown, offsetPercent, stopAt });
+  const config = useRef({ midrollUrl, midrollAt, postrollUrl, minimumDuration, cooldown, offsetPercent, stopAt, intervalSeconds });
   useEffect(() => {
-    config.current = { midrollUrl, midrollAt, postrollUrl, minimumDuration, cooldown, offsetPercent, stopAt };
-  }, [midrollUrl, midrollAt, postrollUrl, minimumDuration, cooldown, offsetPercent, stopAt]);
+    config.current = { midrollUrl, midrollAt, postrollUrl, minimumDuration, cooldown, offsetPercent, stopAt, intervalSeconds };
+  }, [midrollUrl, midrollAt, postrollUrl, minimumDuration, cooldown, offsetPercent, stopAt, intervalSeconds]);
   useEffect(() => {
     const el = videoRef.current;
     if (!el) return;
@@ -25,7 +27,7 @@ export function useVastBreaks(
     let active = false;
     let placement: "mid" | "post" = "mid";
     let heldAt = 0;
-    let midPlayed = false;
+    let lastSlot = -1;
     let postPlayed = false;
     let resume = true;
     let looping = false;
@@ -69,15 +71,15 @@ export function useVastBreaks(
     };
     const time = (event: Event) => {
       if (active) { hold(event); return; }
-      const { midrollUrl, midrollAt, minimumDuration, cooldown, offsetPercent, stopAt } = config.current;
-      const offset = offsetPercent > 0 ? el.duration * offsetPercent / 100 : midrollAt;
-      // Leave clip boundaries to the embed's ordinary timeupdate listener.
-      if (stopAt !== null && (offset >= stopAt || el.currentTime >= stopAt)) return;
-      if (midrollUrl && !midPlayed && !el.paused && el.duration >= minimumDuration
-        && offset < el.duration && el.currentTime >= offset) {
-        midPlayed = true;
-        if (canPlayVast(cooldown)) start("mid", midrollUrl);
-      }
+      const { midrollUrl, midrollAt, minimumDuration, cooldown, offsetPercent, stopAt, intervalSeconds } = config.current;
+      if (!midrollUrl || el.paused || !(el.duration >= minimumDuration)) return;
+      const first = offsetPercent > 0 ? el.duration * offsetPercent / 100 : midrollAt;
+      // Clip boundaries stay with the embed's ordinary timeupdate listener: no slot at or past stopAt.
+      const slot = dueBreakSlot({ first, interval: intervalSeconds, duration: el.duration, time: el.currentTime, stopAt, lastSlot });
+      if (slot === null) return;
+      // Consumed before the cooldown check: a break inside the cooldown is skipped, not deferred.
+      lastSlot = slot;
+      if (canPlayVast(cooldown)) start("mid", midrollUrl);
     };
     const end = (event: Event) => {
       if (active) { hold(event); return; }

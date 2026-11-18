@@ -2,9 +2,11 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { loadVast } from "@/lib/vast-client";
+import { canPlayVast } from "@/lib/vast-cooldown";
 import { useVastBreaks } from "./use-vast-breaks";
 
 vi.mock("@/lib/vast-client", () => ({ loadVast: vi.fn() }));
+vi.mock("@/lib/vast-cooldown", () => ({ canPlayVast: vi.fn(() => true) }));
 afterEach(() => vi.restoreAllMocks());
 
 function setup(offsetPercent = 0, stopAt: number | null = null) {
@@ -151,4 +153,75 @@ it("still requests a mid-roll before the clip stop", () => {
   act(() => { el.currentTime = 30; el.dispatchEvent(new Event("timeupdate")); });
   expect(result.current.active).toBe(true);
   expect(loadVast).toHaveBeenCalledExactlyOnceWith("https://ads.test/mid", expect.any(AbortSignal));
+});
+
+function repeating(interval = 900, cooldown = 0) {
+  vi.mocked(loadVast).mockClear().mockResolvedValue(null);
+  const el = document.createElement("video");
+  Object.defineProperty(el, "paused", { configurable: true, value: false });
+  Object.defineProperty(el, "duration", { configurable: true, value: 3600 });
+  vi.spyOn(el, "pause").mockImplementation(() => {});
+  vi.spyOn(el, "play").mockResolvedValue();
+  const ref = { current: el };
+  const hook = renderHook(() => useVastBreaks(ref, "long", "https://ads.test/mid", 300, null, 0, cooldown, 0, null, interval));
+  const playTo = async (time: number) => { await act(async () => { el.currentTime = time; el.dispatchEvent(new Event("timeupdate")); }); };
+  return { el, playTo, ...hook };
+}
+
+it("requests the mid-roll tag again at every interval after the first position", async () => {
+  const { playTo } = repeating();
+  await playTo(299);
+  expect(loadVast).not.toHaveBeenCalled();
+  await playTo(300);
+  expect(loadVast).toHaveBeenCalledTimes(1);
+  await playTo(1199);
+  expect(loadVast).toHaveBeenCalledTimes(1);
+  await playTo(1200);
+  expect(loadVast).toHaveBeenCalledTimes(2);
+  await playTo(2100);
+  expect(loadVast).toHaveBeenCalledTimes(3);
+  await playTo(2100);
+  expect(loadVast).toHaveBeenCalledTimes(3);
+});
+
+it("keeps a single mid-roll when the interval is 0", async () => {
+  const { playTo } = repeating(0);
+  await playTo(300);
+  await playTo(1200);
+  await playTo(3000);
+  expect(loadVast).toHaveBeenCalledTimes(1);
+});
+
+it("skips a break inside the cooldown instead of deferring it, and plays the next one", async () => {
+  vi.mocked(canPlayVast).mockReturnValueOnce(false);
+  const { playTo, result } = repeating(900, 300);
+  await playTo(300);
+  expect(canPlayVast).toHaveBeenLastCalledWith(300);
+  expect(loadVast).not.toHaveBeenCalled();
+  await playTo(600);
+  expect(loadVast).not.toHaveBeenCalled();
+  expect(result.current.active).toBe(false);
+  await playTo(1200);
+  expect(loadVast).toHaveBeenCalledTimes(1);
+});
+
+it("plays one break after a seek past several points and none after seeking back", async () => {
+  const { playTo } = repeating();
+  await playTo(2500);
+  expect(loadVast).toHaveBeenCalledTimes(1);
+  await playTo(400);
+  await playTo(1300);
+  await playTo(2600);
+  expect(loadVast).toHaveBeenCalledTimes(1);
+  await playTo(3000);
+  expect(loadVast).toHaveBeenCalledTimes(2);
+});
+
+it("places no repeat inside the last 60 seconds", async () => {
+  const { el, playTo } = repeating();
+  Object.defineProperty(el, "duration", { configurable: true, value: 3050 });
+  await playTo(2100);
+  expect(loadVast).toHaveBeenCalledTimes(1);
+  await playTo(3040);
+  expect(loadVast).toHaveBeenCalledTimes(1);
 });

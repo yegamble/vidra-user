@@ -86,6 +86,12 @@ export function PrerollAd({ ad, onDone, onStart, initialVolume, initialMuted, sh
     for (const [event, fraction] of [["firstQuartile", 0.25], ["midpoint", 0.5], ["thirdQuartile", 0.75]] as const) {
       if (time >= ad.duration * fraction) track(event);
     }
+    (ad.progress ?? []).forEach((beacon, index) => {
+      const key = `progress:${index}`;
+      if (sent.current.has(key) || time < (beacon.percent ? ad.duration * beacon.at / 100 : beacon.at)) return;
+      sent.current.add(key);
+      trackVast([beacon.url]);
+    });
   }
   function togglePlay() { if (paused) play(); else videoRef.current?.pause(); }
   const skipAt = skipAfterSeconds === undefined || !Number.isFinite(skipAfterSeconds) ? ad.skipAfter

@@ -43,6 +43,8 @@ const SERVER_REGISTRY: Array<[string, ConfigPageId, string]> = [
   ["instance_description", "general", "identity"],
   ["terms_url", "general", "about"],
   ["privacy_url", "general", "about"],
+  ["terms_version", "general", "about"],
+  ["privacy_version", "general", "about"],
   ["contact_email", "general", "contact"],
   ["registration_enabled", "general", "signup"],
   ["registration_require_approval", "general", "signup"],
@@ -52,6 +54,8 @@ const SERVER_REGISTRY: Array<[string, ConfigPageId, string]> = [
   ["live_enabled", "live", "streaming"],
   ["comments_enabled", "vod", "comments"],
   ["downloads_enabled", "vod", "downloads"],
+  ["downloads_anonymous_enabled", "vod", "downloads"],
+  ["downloads_users_enabled", "vod", "downloads"],
   ["instance_short_description", "general", "identity"],
   ["server_country", "general", "identity"],
   ["support_text", "general", "about"],
@@ -72,6 +76,8 @@ const SERVER_REGISTRY: Array<[string, ConfigPageId, string]> = [
   ["report_email_alerts_enabled", "general", "contact"],
   ["instance_is_sensitive", "general", "moderation"],
   ["sensitive_content_policy", "general", "moderation"],
+  ["sensitive_anonymous_access", "general", "moderation"],
+  ["age_gate_enabled", "general", "moderation"],
   ["instance_categories", "general", "identity"],
   ["instance_custom_categories", "general", "identity"],
   ["moderator_languages", "general", "identity"],
@@ -98,6 +104,7 @@ const SERVER_REGISTRY: Array<[string, ConfigPageId, string]> = [
   ["default_player_autoplay", "customization", "player"],
   ["analytics_google_enabled", "general", "analytics"],
   ["analytics_google_measurement_id", "general", "analytics"],
+  ["analytics_google_consent_required", "general", "analytics"],
   ["player_vast_enabled", "vod", "advertising"],
   ["player_vast_tag_url", "vod", "advertising"],
   ["player_vast_midroll_tag_url", "vod", "advertising"],
@@ -108,6 +115,14 @@ const SERVER_REGISTRY: Array<[string, ConfigPageId, string]> = [
   ["player_vast_postroll_enabled", "vod", "advertising"],
   ["player_vast_midroll_min_duration_seconds", "vod", "advertising"],
   ["player_vast_cooldown_seconds", "vod", "advertising"],
+  ["player_vast_embed_enabled", "vod", "advertising"],
+  ["player_vast_controls", "vod", "advertising"],
+  ["player_vast_skip_after_seconds", "vod", "advertising"],
+  ["player_vast_midroll_offset_percent", "vod", "advertising"],
+  ["player_vast_midroll_interval_seconds", "vod", "advertising"],
+  ["player_vast_skip_countdown", "vod", "advertising"],
+  ["player_vast_skip_label", "vod", "advertising"],
+  ["player_vast_remaining_message", "vod", "advertising"],
   ["email_subject_prefix", "customization", "email"],
   ["email_body_signature", "customization", "email"],
   ["social_meta_twitter_username", "general", "social"],
@@ -261,6 +276,9 @@ describe("placementFor", () => {
     expect(META.analytics_google_enabled.control).toBe("toggle");
     expect(META.analytics_google_measurement_id.parent).toBe("analytics_google_enabled");
     expect(META.analytics_google_measurement_id.help).toContain("Enhanced Measurement");
+    expect(META.analytics_google_consent_required.control).toBe("toggle");
+    expect(META.analytics_google_consent_required.parent).toBe("analytics_google_enabled");
+    expect(META.analytics_google_consent_required.help).toContain("responsible");
   });
 
   it("groups the VAST controls under Advertising with independent placements", () => {
@@ -290,6 +308,29 @@ describe("placementFor", () => {
     }
     expect(META.player_vast_cooldown_seconds.parent).toBe("player_vast_enabled");
     expect(META.player_vast_cooldown_seconds.help).toMatch(/0.*cooldown/);
+    expect(keys).toHaveLength(18);
+    for (const [key, control, parent] of [
+      ["player_vast_embed_enabled", "toggle", "player_vast_enabled"],
+      ["player_vast_controls", "toggle", "player_vast_enabled"],
+      ["player_vast_skip_after_seconds", "number", "player_vast_enabled"],
+      ["player_vast_skip_countdown", "text", "player_vast_enabled"],
+      ["player_vast_skip_label", "text", "player_vast_enabled"],
+      ["player_vast_remaining_message", "text", "player_vast_enabled"],
+      ["player_vast_midroll_offset_percent", "number", "player_vast_midroll_enabled"],
+      ["player_vast_midroll_interval_seconds", "number", "player_vast_midroll_enabled"],
+    ]) {
+      expect(META[key]?.control, key).toBe(control);
+      expect(META[key]?.parent, key).toBe(parent);
+      expect(META[key]?.label, key).toBeTruthy();
+    }
+    expect(META.player_vast_skip_after_seconds.help).toMatch(/0 .*skip/i);
+    expect(META.player_vast_midroll_offset_percent.help).toMatch(/0 uses the seconds position/);
+    expect(META.player_vast_midroll_interval_seconds.help).toMatch(/0 .*one mid-roll/);
+    expect(META.player_vast_midroll_interval_seconds.help).toMatch(/60 seconds/);
+    expect(META.player_vast_midroll_interval_seconds.help).toMatch(/cooldown.*skipped/);
+    for (const key of ["player_vast_skip_countdown", "player_vast_remaining_message"]) {
+      expect(META[key].help, key).toContain("{seconds}");
+    }
   });
 
   it("server page/section metadata wins over the client map", () => {
@@ -1137,5 +1178,13 @@ describe("unlabeled server keys", () => {
       expect(META[key], key).toBeDefined();
       expect(META[key].help, `${key} help`).toBeTruthy();
     }
+  });
+});
+
+describe("age gate placement", () => {
+  it("keeps the minimum age editable while signups are closed, and never calls the gate verification", () => {
+    expect(META.registration_minimum_age.parent).toBeUndefined();
+    expect(META.age_gate_enabled.control).toBe("toggle");
+    expect(META.age_gate_enabled.help).toMatch(/not age verification/);
   });
 });

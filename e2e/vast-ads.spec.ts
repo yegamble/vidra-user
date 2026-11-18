@@ -32,7 +32,7 @@ async function media(route: Route) {
     body: body.subarray(start, end + 1) });
 }
 
-async function fixture(page: Page, origin: string, enabled: boolean, cooldown = 0) {
+async function fixture(page: Page, origin: string, enabled: boolean, cooldown = 0, ads: Record<string, unknown> = {}) {
   const requests = { tags: [] as string[], beacons: [] as string[], privateHeaders: [] as string[], content: 0, telemetry: 0 };
   await page.context().addCookies([{ name: "vast_private", value: "not-for-ads", url: origin }]);
   await page.addInitScript(() => {
@@ -67,7 +67,7 @@ async function fixture(page: Page, origin: string, enabled: boolean, cooldown = 
         midroll_tag_url: enabled ? `${origin}/__vast/mid.xml` : "", midroll_offset_seconds: 1,
         postroll_tag_url: enabled ? `${origin}/__vast/post.xml` : "", midroll_min_duration_seconds: 0, cooldown_seconds: cooldown,
         skip_after_seconds: 1, controls: true, embed_enabled: true, midroll_offset_percent: 0,
-        skip_countdown: "Skip in {seconds}…", skip_label: "Skip ad", remaining_message: "This ad will end in {seconds}" },
+        skip_countdown: "Skip in {seconds}…", skip_label: "Skip ad", remaining_message: "This ad will end in {seconds}", ...ads },
     } });
     if (/\/auth\/(refresh|me|session)$/.test(path)) return route.fulfill({ status: 401, json: { error: { code: "unauthorized" } } });
     if (/\/videos\/v[12]$/.test(path)) return route.fulfill({ json: clip(path.endsWith("v1") ? "v1" : "v2") });
@@ -243,3 +243,77 @@ for (const variant of ["watch", "embed"] as const) {
     expect(requests.privateHeaders).toEqual([]);
   });
 }
+
+// The fixture clip is about a second long, so long-form schedules are driven the
+// way the tests above drive placements: synthetic position + the real event.
+// Position and duration are pinned on the content element; it loops so the real
+// media underneath never ends on its own.
+async function longForm(content: ReturnType<Page["locator"]>, duration: number) {
+  await content.evaluate((el: HTMLVideoElement, seconds) => {
+    let at = 0;
+    Object.defineProperty(el, "duration", { configurable: true, get: () => seconds });
+    Object.defineProperty(el, "currentTime", { configurable: true, get: () => at, set: (value: number) => { at = value; } });
+    el.loop = true;
+  }, duration);
+  return async (time: number) => content.evaluate((el: HTMLVideoElement, value) => {
+    el.currentTime = value;
+    el.dispatchEvent(new Event("timeupdate"));
+    return el.paused;
+  }, time);
+}
+
+test("watch: a percent mid-roll fires at that share of the video, not at the seconds offset", async ({ page, baseURL }) => {
+  const origin = new URL(baseURL!).origin;
+  const requests = await fixture(page, origin, true, 0,
+    { vast_tag_url: "", postroll_tag_url: "", midroll_offset_seconds: 30, midroll_offset_percent: 50 });
+  const scope = await open(page, "watch");
+  const content = scope.getByTestId("video-player").locator(":scope > video");
+  const region = scope.getByRole("region", { name: "Advertisement", exact: true });
+  const playTo = await longForm(content, 1000);
+  await scope.getByTestId("player-controls").getByRole("button", { name: "Play", exact: true }).click();
+  await expect.poll(() => content.evaluate((el: HTMLVideoElement) => !el.paused)).toBe(true);
+  // A break pauses content synchronously, so "still playing" means no break began.
+  expect(await playTo(30)).toBe(false);
+  expect(await playTo(499)).toBe(false);
+  expect(requests.tags).toEqual([]);
+  expect(await playTo(500)).toBe(true);
+  await expect(region.locator("video")).toHaveAttribute("src", /\/__vast\/media\/mid\.mp4$/);
+  expect(requests.tags).toEqual(["mid"]);
+  expect(requests.privateHeaders).toEqual([]);
+});
+
+test("watch: mid-rolls repeat on the interval, once per seek, and never in the last minute", async ({ page, baseURL }) => {
+  const origin = new URL(baseURL!).origin;
+  const requests = await fixture(page, origin, true, 0,
+    { postroll_tag_url: "", midroll_offset_seconds: 300, midroll_interval_seconds: 900 });
+  const scope = await open(page, "watch");
+  const content = scope.getByTestId("video-player").locator(":scope > video");
+  const region = scope.getByRole("region", { name: "Advertisement", exact: true });
+  // Points at 300, 1200, 2100, 3000 and 3900; the last sits inside the final 60 s.
+  const playTo = await longForm(content, 3950);
+  const finishAd = async (placement: Placement, total: number) => {
+    await expect.poll(() => requests.tags.length).toBe(total);
+    await expect(region.locator("video")).toHaveAttribute("src", new RegExp(`/__vast/media/${placement}\\.mp4$`));
+    await region.locator("video").evaluate(el => el.dispatchEvent(new Event("ended")));
+    await expect(region).toHaveCount(0);
+    await expect.poll(() => content.evaluate((el: HTMLVideoElement) => !el.paused)).toBe(true);
+  };
+  await scope.getByTestId("player-controls").getByRole("button", { name: "Play", exact: true }).click();
+  await finishAd("pre", 1);
+  expect(await playTo(299)).toBe(false);
+  expect(await playTo(300)).toBe(true);
+  await finishAd("mid", 2);
+  expect(await content.evaluate((el: HTMLVideoElement) => el.currentTime)).toBe(300); // resumed where it was held
+  expect(await playTo(1199)).toBe(false);
+  expect(await playTo(1200)).toBe(true);
+  await finishAd("mid", 3);
+  expect(requests.tags).toEqual(["pre", "mid", "mid"]);
+  // A jump past 2100 and 3000 plays one break, and going back replays none.
+  expect(await playTo(3100)).toBe(true);
+  await finishAd("mid", 4);
+  expect(await playTo(2200)).toBe(false);
+  expect(await playTo(3200)).toBe(false);
+  expect(await playTo(3940)).toBe(false); // 3900 is inside the last minute
+  expect(requests.tags).toEqual(["pre", "mid", "mid", "mid"]);
+  expect(requests.privateHeaders).toEqual([]);
+});

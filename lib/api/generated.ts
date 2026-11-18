@@ -897,7 +897,7 @@ export interface paths {
          *
          *     Two callbacks do NOT end in a session. When the resolved account has two-factor enabled, no session is issued: the challenge token is set as the httpOnly `vidra_mfa_pending` cookie and the redirect carries `?mfa=required`, to be finished at POST /api/v1/auth/mfa/challenge. And when a session is ALREADY signed in in this browser, the callback is treated as a request to connect that identity to THAT account (`?link=<provider>`), or refused with `?oauth_error=identity_belongs_to_another_account` — never an account switch. (A callback started from `/link/start` uses `?link_error=` instead: the failure key is the one the ORIGIN page renders, and a refusal the landing page cannot show is a silent one.)
          *
-         *     User-actionable failures redirect with an `oauth_error` query code (`access_denied`, `email_conflict`, `email_required`, `account_disabled`, `conflict`, and for a provider that does not create accounts `signup_disabled` or `email_domain_not_allowed` — the latter also when the address in an allowed domain is unverified); protocol violations (missing/forged/ expired state, nonce mismatch) are 400.
+         *     User-actionable failures redirect with an `oauth_error` query code (`access_denied`, `email_conflict`, `email_required`, `account_disabled`, `conflict`, `terms_required` for a first sign-in started without `terms_accepted=1` on an instance that has terms or a privacy policy, `age_required` for one started without `age_attestation=1` while `registration_minimum_age` is above 0, and for a provider that does not create accounts `signup_disabled` or `email_domain_not_allowed` — the latter also when the address in an allowed domain is unverified); protocol violations (missing/forged/ expired state, nonce mismatch) are 400.
          */
         get: operations["completeOAuth"];
         put?: never;
@@ -957,7 +957,7 @@ export interface paths {
         };
         /**
          * ATProto identity-login callback
-         * @description The redirect target the authorization server sends the browser back to. Verifies the signed attempt cookie against the returned `state`, enforces the RFC 9207 `iss`, the token `sub` (which must equal the DID resolved at start), and the `atproto` scope, then logs in: a known identity signs its account in, otherwise a new passwordless account is created (username derived from the handle). The session is always issued in cookie mode — the rotating refresh token is set as the httpOnly `vidra_refresh` cookie and the SPA obtains an access token via POST /api/v1/auth/refresh with credentials — and the browser is redirected (302) to the validated `return_to` with `?oauth=1`. User-actionable failures redirect with an `oauth_error` query code (`access_denied`, `atproto_identity_mismatch`, `atproto_upstream`, `account_disabled`, `conflict`); protocol violations (missing/forged/expired state, missing code) are 400.
+         * @description The redirect target the authorization server sends the browser back to. Verifies the signed attempt cookie against the returned `state`, enforces the RFC 9207 `iss`, the token `sub` (which must equal the DID resolved at start), and the `atproto` scope, then logs in: a known identity signs its account in, otherwise a new passwordless account is created (username derived from the handle). The session is always issued in cookie mode — the rotating refresh token is set as the httpOnly `vidra_refresh` cookie and the SPA obtains an access token via POST /api/v1/auth/refresh with credentials — and the browser is redirected (302) to the validated `return_to` with `?oauth=1`. User-actionable failures redirect with an `oauth_error` query code (`access_denied`, `atproto_identity_mismatch`, `atproto_upstream`, `account_disabled`, `conflict`, `terms_required` for a first sign-in started without `terms_accepted`, `age_required` for one started without `age_attestation`); protocol violations (missing/forged/expired state, missing code) are 400.
          */
         get: operations["completeATProtoLogin"];
         put?: never;
@@ -2123,7 +2123,7 @@ export interface paths {
         };
         /**
          * List a video's downloadable files
-         * @description Returns metadata for actual single-file downloads: the stored original, an optional progressive VP9/WebM alternate, progressive MP4 remuxes for each ready HLS rung (muxed video+audio plus an optional video-only URL), an audio-only M4A when the source has audio, and WebVTT subtitles. Regular/anonymous callers require the LAYERED download policy (config-parity W9): the instance-wide downloads_enabled setting AND the video's own download_enabled flag (instance gate off means no downloads regardless of the per-video flag), plus ordinary video visibility. The same layered gate guards every /download/* byte route. Moderators/admins bypass both gates and may download any local video for moderation. A visible video with no stored files yet returns an empty list.
+         * @description Returns metadata for actual single-file downloads: the stored original, an optional progressive VP9/WebM alternate, progressive MP4 remuxes for each ready HLS rung (muxed video+audio plus an optional video-only URL), an audio-only M4A when the source has audio, and WebVTT subtitles. A rung with no stored remux (a video imported from PeerTube) is still listed when its variant playlist proves one complete single-file MP4: that object is the download. When the rung's audio lives in a separate audio-only MP4, `url` is a video+audio file built on request (see downloadVideoHLSRendition), `video_only_url` is the video object, and `size_bytes` is the sum of the two objects, which is approximate (the built file differs by container overhead). On a host without ffmpeg such a rung is not listed at all, because its only file has no audio; the audio-only entry is still listed. The download policy is LAYERED: the instance-wide downloads_enabled setting off means no downloads for anyone, moderators and admins included. With it on, a logged-out visitor also needs downloads_anonymous_enabled and a signed-in regular user downloads_users_enabled, and both need the video's own download_enabled flag (config-parity W9), plus ordinary video visibility. Moderators/admins are subject to downloads_enabled only and may otherwise download any local video for moderation. The same layered gate guards every /download/* byte route. A visible video with no stored files yet returns an empty list.
          */
         get: operations["getVideoDownloads"];
         put?: never;
@@ -2184,6 +2184,7 @@ export interface paths {
         /**
          * Download one HLS quality as a progressive MP4
          * @description Serves one transcoded HLS rung remuxed into a single MP4 file. Audio is included in the same file by default; audio=false selects the matching video-only MP4. No video re-encoding occurs during the download.
+         *     A rung with no stored remux (a video imported from PeerTube) falls back to the single complete MP4 its variant playlist names. If that MP4 already carries the audio, it is served as stored (200/206, redirect eligible) and audio=false is 404. If the audio is a separate audio-only MP4, audio=true builds the video+audio file ON REQUEST by stream copy (no re-encode, nothing written to storage): the response is always 200 `video/mp4` with `Cache-Control: no-store`, no Content-Length, no Range support (a Range header is ignored and the full file is sent) and is never redirected. The number of such builds running at once is bounded server-wide, and a single client address may have only one running; when a slot is not available the route answers 503 with code `download_busy` and a Retry-After, without queueing. A build that fails after the 200 was sent ends by severing the connection, so the client sees a failed download rather than a truncated file. A failure before the first byte is a 502. audio=false for that rung serves the video object itself with range support.
          */
         get: operations["downloadVideoHLSRendition"];
         put?: never;
@@ -2203,7 +2204,7 @@ export interface paths {
         };
         /**
          * Download audio only
-         * @description Serves the HLS transcode's audio stream as a single M4A attachment when one exists.
+         * @description Serves the HLS transcode's audio stream as a single M4A attachment when one exists. When Vidra stored no audio remux (a video imported from PeerTube), the audio group's single audio-only MP4 is served as stored, with the same range and redirect behaviour.
          */
         get: operations["downloadVideoAudio"];
         put?: never;
@@ -3422,6 +3423,30 @@ export interface paths {
          * @description Applies a partial preference update: only the types present in the body are changed, in `prefs` (in-app) and/or `email`. Disabling a type suppresses new notifications of that type at creation time (existing notifications are unaffected). Email rides the in-app notification: it is queued only when that notification is created, so an in-app type that is off sends no email either, and it is delivered in the background, only to a verified address, while the instance has mail configured. An unknown type, or an email switch for a type without email delivery, is 422 and nothing is written. Returns the full updated maps.
          */
         patch: operations["updateNotificationPrefs"];
+        trace?: never;
+    };
+    "/api/v1/notifications/unsubscribe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Where the unsubscribe link lands (never unsubscribes)
+         * @description Mail scanners and link previewers GET every link in a message, so a GET of the unsubscribe URL changes nothing: it redirects to the frontend's notification settings (the token is not carried), or, with no public origin configured, answers a short text saying where to find them.
+         */
+        get: operations["unsubscribeNotificationEmailPage"];
+        put?: never;
+        /**
+         * One-click unsubscribe from notification email (RFC 8058)
+         * @description The target of the `List-Unsubscribe` header on notification email (new video, comment, reply), pressed by a mailbox provider with `List-Unsubscribe-Post: List-Unsubscribe=One-Click`. No session: the signed per-user `token` in the URL is the credential. It turns every email type off through the same preference as PATCH /api/v1/me/notification-prefs, and is idempotent (a repeat does no write). A valid token and an unknown, forged or empty one are indistinguishable: both answer 204 with no body, so it reveals neither which accounts exist nor which tokens verify. It never signs anyone in. It is rate limited per client IP on the large media budget under its own key, so a 429 is still possible under extreme load. Transactional mail (verification, password reset, security notices) carries no such header.
+         */
+        post: operations["unsubscribeNotificationEmail"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/me/content-preferences": {
@@ -5845,7 +5870,7 @@ export interface paths {
         };
         /**
          * Get effective instance settings (admin)
-         * @description Returns every runtime-mutable instance setting's EFFECTIVE value together with its config default and whether the database currently overrides it. This is the DB-backed overlay (fix_plan P10) on top of the static config: the instance name/description and legal-contact metadata, the PeerTube platform-information fields (links, markdown bodies, default language, categories, moderator languages, sensitive-content policy), the registration gates (registration_enabled, registration_require_approval), the upload quarantine gate (quarantine_new_uploads), and the feature toggles (uploads_enabled, imports_enabled, live_enabled, comments_enabled, downloads_enabled). Downloads default to enabled and are controlled only by this runtime setting (there is no env/config counterpart). Boot-time-only secrets and infrastructure (database DSN, KEKs, JWT secret, storage backend) are NOT represented here — they stay in config. Player advertising is opt-in: player_vast_enabled defaults false and player_vast_tag_url defaults empty. The public tag URL is fetched only by browsers; it must be absolute HTTP(S), at most 2000 bytes, without whitespace, credentials, or fragments. An empty string clears the tag. player_vast_midroll_tag_url and player_vast_postroll_tag_url follow the same URL rules and default empty. player_vast_midroll_offset_seconds is an integer from 1 to 86400, default 300 (five minutes into content). Independent player_vast_preroll_enabled, player_vast_midroll_enabled, and player_vast_postroll_enabled switches default true beneath the disabled master toggle. Disabled placements expose empty public tag URLs. player_vast_midroll_min_duration_seconds (default 600) and player_vast_cooldown_seconds (default 300) range from 0 to 86400; zero removes the respective minimum. Cooldown covers all video ad breaks across video changes and is enforced by clients. player_vast_embed_enabled and player_vast_controls default true. player_vast_skip_after_seconds defaults 5 (0–300; zero disables skipping). player_vast_midroll_offset_percent defaults 0 (0–100; zero uses seconds, positive values use content-duration percentage). Plain-text settings player_vast_skip_countdown (default "Skip in {seconds}…", max 200 bytes), player_vast_skip_label (default "Skip ad", max 80 bytes), and player_vast_remaining_message (default "This ad will end in {seconds}", max 200 bytes) are public text, never HTML. The countdown and remaining message support {seconds} substitution; empty labels/countdown allow client fallback and an empty remaining message hides it. Google Analytics is opt-in: analytics_google_enabled defaults false, analytics_google_measurement_id defaults empty and must match ^G-[A-Z0-9]{4,20}$ when set. It is a public GA4 browser identifier, not a secret or server-fetched resource. Empty clears the ID. Restricted to admins.
+         * @description Returns every runtime-mutable instance setting's EFFECTIVE value together with its config default and whether the database currently overrides it. This is the DB-backed overlay (fix_plan P10) on top of the static config: the instance name/description and legal-contact metadata, the PeerTube platform-information fields (links, markdown bodies, default language, categories, moderator languages, sensitive-content policy), the registration gates (registration_enabled, registration_require_approval), the upload quarantine gate (quarantine_new_uploads), and the feature toggles (uploads_enabled, imports_enabled, live_enabled, comments_enabled, downloads_enabled, and under it the audience switches downloads_anonymous_enabled for logged-out visitors and downloads_users_enabled for signed-in regular users; moderators and admins are subject to downloads_enabled only). Downloads default to enabled for every audience and are controlled only by these runtime settings (there is no env/config counterpart). Boot-time-only secrets and infrastructure (database DSN, KEKs, JWT secret, storage backend) are NOT represented here — they stay in config. Player advertising is opt-in: player_vast_enabled defaults false and player_vast_tag_url defaults empty. The public tag URL is fetched only by browsers; it must be absolute HTTP(S), at most 2000 bytes, without whitespace, credentials, or fragments. An empty string clears the tag. player_vast_midroll_tag_url and player_vast_postroll_tag_url follow the same URL rules and default empty. player_vast_midroll_offset_seconds is an integer from 1 to 86400, default 300 (five minutes into content). Independent player_vast_preroll_enabled, player_vast_midroll_enabled, and player_vast_postroll_enabled switches default true beneath the disabled master toggle. Disabled placements expose empty public tag URLs. player_vast_midroll_min_duration_seconds (default 600) and player_vast_cooldown_seconds (default 300) range from 0 to 86400; zero removes the respective minimum. Cooldown covers all video ad breaks across video changes and is enforced by clients. player_vast_embed_enabled and player_vast_controls default true. player_vast_skip_after_seconds defaults 5 (0–300; zero disables skipping). player_vast_midroll_offset_percent defaults 0 (0–100; zero uses seconds, positive values use content-duration percentage). player_vast_midroll_interval_seconds defaults 0 (one midroll); 60–86400 repeats the midroll every that many seconds of content after the first position, and values 1–59 are rejected. Plain-text settings player_vast_skip_countdown (default "Skip in {seconds}…", max 200 bytes), player_vast_skip_label (default "Skip ad", max 80 bytes), and player_vast_remaining_message (default "This ad will end in {seconds}", max 200 bytes) are public text, never HTML. The countdown and remaining message support {seconds} substitution; empty labels/countdown allow client fallback and an empty remaining message hides it. Google Analytics is opt-in: analytics_google_enabled defaults false, analytics_google_measurement_id defaults empty and must match ^G-[A-Z0-9]{4,20}$ when set. It is a public GA4 browser identifier, not a secret or server-fetched resource. Empty clears the ID. analytics_google_consent_required defaults true (visitors are asked before GA4 loads); false makes the frontend load GA4 without asking, still honouring Do-Not-Track and Global Privacy Control. Restricted to admins.
          */
         get: operations["getInstanceSettings"];
         put?: never;
@@ -5855,7 +5880,7 @@ export interface paths {
         head?: never;
         /**
          * Update instance settings (admin)
-         * @description Applies a partial, per-key-validated update to the instance-settings overlay and returns the full effective document. The body is a flat JSON object of setting key → new value: a boolean for the toggle keys (registration_enabled, registration_require_approval, quarantine_new_uploads, uploads_enabled, imports_enabled, live_enabled, comments_enabled, downloads_enabled, contact_form_enabled, instance_is_sensitive, the config-parity W8 feature toggles import_http_enabled, channel_sync_enabled, storyboards_enabled, video_card_previews_enabled, video_card_previews_default_enabled, transcription_enabled, auto_transcribe_new_uploads (default false; on queues the same auto-caption job as POST /videos/{id}/captions/auto for each video as it publishes, only while transcription is effectively available, never duplicating a job or an existing caption), user_import_enabled, user_export_enabled, and the config-parity W10 VOD knobs transcoding_enabled, transcoding_original_resolution, upload_additional_extensions_enabled, the config-parity W11 live knobs live_allow_replay and live_default_save_replay, and the config-parity W12 federation policy gates federation_accept_remote_comments (default true; off drops inbound remote comments at the ActivityPub inbox after the blocked-domain check — never retroactively), federation_allow_channel_followers (default true; off answers inbound channel Follows with a Reject, existing followers untouched), federation_follower_approval (default false; on holds new channel Follows PENDING in GET /api/v1/admin/federation/follower-requests — a vidra deviation applying PeerTube's instance-follower approval to CHANNEL followers, since vidra has no instance-level AP actor), and federation_auto_follow_back (default false; on follows an accepted follower back FROM THE FOLLOWED CHANNEL'S ACTOR, respecting the domain blocklist and never duplicating an existing follow/follow-back edge — note the content of followed-back actors then federates in, so moderation becomes reactive, as in PeerTube). Every federation_* key governs the ActivityPub inbox ONLY: the ATProto integration is outbound cross-posting with no inbound path, so these gates are explicitly out of scope for it. The config-parity W13 remote-URI search gates ride here too: search_remote_uri_users (default true) and search_remote_uri_anonymous (default false) let logged-in / anonymous callers resolve URL- and handle-shaped search queries to remote content through the SSRF-guarded federation fetcher — both effective only while federation is enabled — and the config-parity W7 sign-up keys registration_require_email_verification (default false; effective only while the deployment has an outbound mail path, see features.mail; holds NEW registrations sessionless until the emailed link is confirmed — accounts created while the gate was off are never retroactively locked) and new_user_history_enabled (default true; seeds the per-user watch-history preference at account creation only)), an integer for the int-kind limits (including the W8 keys channel_sync_max_per_user, channel_sync_interval_minutes (5..10080, default CHANNEL_SYNC_INTERVAL in whole minutes; the re-list cadence and backoff base, read at each reschedule so a change applies without a restart), channel_sync_batch (1..100, default CHANNEL_SYNC_BATCH; the newest uploads one sync pass imports, read at the start of each pass), channel_sync_cooldown_minutes (1..1440, default CHANNEL_SYNC_COOLDOWN in whole minutes; the minimum spacing between manual sync-now triggers, read per request so a change applies without a restart), channel_sync_backoff_max_hours (1..720, default CHANNEL_SYNC_BACKOFF_MAX in whole hours; the cap on the exponential backoff of a failing sync, read at each failure so a change applies without a restart), user_export_expiration_hours, user_export_max_quota_bytes, max_channels_per_user — 0 always means unlimited/never — the W10 keys transcoding_max_fps (0 = no cap, else 24..240), transcoding_threads (0 = ffmpeg default, else 1..64), and transcoding_concurrency / import_jobs_concurrency (1..16, read per worker tick so changes apply without a restart), and the W11 live limits live_max_instance_lives / live_max_user_lives (0..10000, 0 = unlimited, enforced at the RTMP publish callback) and live_max_duration_secs (0 = no limit, else 60..2592000, enforced by the duration watchdog), live_recording_retention_hours (0..8760, default LIVE_RECORDING_RETENTION in whole hours rounded up; 0 = delete a session recording as soon as its replay is published and sweep nothing, else the hourly sweep deletes recordings older than that many hours. This setting DELETES FILES: lowering it, or raising it from 0, makes the next sweep delete every recording older than the new window, including recordings kept as the only copy of a failed or replay-disabled broadcast; read at every use, no restart), audit_log_retention_days (0..36500, default AUDIT_LOG_RETENTION in whole days rounded up; 0 = keep the audit trail forever. The env value is a FLOOR: the effective window is max(setting, env), so this setting can only keep the trail LONGER, and a value below the floor is a 422 naming it. When AUDIT_LOG_RETENTION=0 the trail is already kept forever and only 0 is accepted, so the setting has no effect. Read by every hourly sweep, no restart; changes are audited old -> new), and the W7 sign-up limits registration_user_limit (0 = unlimited; signup refuses and GET /api/v1/instance reports registration_enabled=false with reason user_limit_reached once the account count reaches it — the count is approximate under concurrent signups), registration_minimum_age (0 = off, else 1..150; signup then requires the age_attestation flag — no birthdate is collected), and default_user_daily_quota_bytes (0 = unlimited; a ROLLING trailing-24h upload window enforced at the upload gates with 422 daily_quota_exceeded)), a string for the text/markdown/link keys and enum keys such as sensitive_content_policy, and an array of strings for list keys (instance_categories, moderator_languages, and transcoding_resolutions — a non-empty, duplicate-free subset of the canonical ladder rungs 2160/1440/1080/720/480/360/240/144). A null value clears that override (resets the key to its config default). Only the keys present are changed. An unknown key, a type mismatch, or a content-invalid value (e.g. a malformed URL/email, an empty instance_name, an unknown taxonomy id, or an enum value outside its options) is 422 with field errors and nothing is written. Restricted to admins; audited (admin.instance.update, changed key names only). Changes take effect immediately (the overlay cache reloads), so subsequent GET /api/v1/instance, GET /api/v1/instance/about, POST /api/v1/instance/contact, public sensitive-content filtering, and the upload/import/live/comment/download/ registration gates reflect them. Google Analytics uses the boolean analytics_google_enabled and string analytics_google_measurement_id (empty or ^G-[A-Z0-9]{4,20}$).
+         * @description Applies a partial, per-key-validated update to the instance-settings overlay and returns the full effective document. The body is a flat JSON object of setting key → new value: a boolean for the toggle keys (registration_enabled, registration_require_approval, quarantine_new_uploads, uploads_enabled, imports_enabled, live_enabled, comments_enabled, downloads_enabled, downloads_anonymous_enabled, downloads_users_enabled, contact_form_enabled, instance_is_sensitive, age_gate_enabled (default false; a batch that would leave it on while registration_minimum_age is 0 — switching it on without an age, or clearing the age while it is on — is a 422 on the key it changes), the config-parity W8 feature toggles import_http_enabled, channel_sync_enabled, storyboards_enabled, video_card_previews_enabled, video_card_previews_default_enabled, transcription_enabled, auto_transcribe_new_uploads (default false; on queues the same auto-caption job as POST /videos/{id}/captions/auto for each video as it publishes, only while transcription is effectively available, never duplicating a job or an existing caption), user_import_enabled, user_export_enabled, and the config-parity W10 VOD knobs transcoding_enabled, transcoding_original_resolution, upload_additional_extensions_enabled, the config-parity W11 live knobs live_allow_replay and live_default_save_replay, and the config-parity W12 federation policy gates federation_accept_remote_comments (default true; off drops inbound remote comments at the ActivityPub inbox after the blocked-domain check — never retroactively), federation_allow_channel_followers (default true; off answers inbound channel Follows with a Reject, existing followers untouched), federation_follower_approval (default false; on holds new channel Follows PENDING in GET /api/v1/admin/federation/follower-requests — a vidra deviation applying PeerTube's instance-follower approval to CHANNEL followers, since vidra has no instance-level AP actor), and federation_auto_follow_back (default false; on follows an accepted follower back FROM THE FOLLOWED CHANNEL'S ACTOR, respecting the domain blocklist and never duplicating an existing follow/follow-back edge — note the content of followed-back actors then federates in, so moderation becomes reactive, as in PeerTube). Every federation_* key governs the ActivityPub inbox ONLY: the ATProto integration is outbound cross-posting with no inbound path, so these gates are explicitly out of scope for it. The config-parity W13 remote-URI search gates ride here too: search_remote_uri_users (default true) and search_remote_uri_anonymous (default false) let logged-in / anonymous callers resolve URL- and handle-shaped search queries to remote content through the SSRF-guarded federation fetcher — both effective only while federation is enabled — and the config-parity W7 sign-up keys registration_require_email_verification (default false; effective only while the deployment has an outbound mail path, see features.mail; holds NEW registrations sessionless until the emailed link is confirmed — accounts created while the gate was off are never retroactively locked) and new_user_history_enabled (default true; seeds the per-user watch-history preference at account creation only)), an integer for the int-kind limits (including the W8 keys channel_sync_max_per_user, channel_sync_interval_minutes (5..10080, default CHANNEL_SYNC_INTERVAL in whole minutes; the re-list cadence and backoff base, read at each reschedule so a change applies without a restart), channel_sync_batch (1..100, default CHANNEL_SYNC_BATCH; the newest uploads one sync pass imports, read at the start of each pass), channel_sync_cooldown_minutes (1..1440, default CHANNEL_SYNC_COOLDOWN in whole minutes; the minimum spacing between manual sync-now triggers, read per request so a change applies without a restart), channel_sync_backoff_max_hours (1..720, default CHANNEL_SYNC_BACKOFF_MAX in whole hours; the cap on the exponential backoff of a failing sync, read at each failure so a change applies without a restart), user_export_expiration_hours, user_export_max_quota_bytes, max_channels_per_user — 0 always means unlimited/never — the W10 keys transcoding_max_fps (0 = no cap, else 24..240), transcoding_threads (0 = ffmpeg default, else 1..64), and transcoding_concurrency / import_jobs_concurrency (1..16, read per worker tick so changes apply without a restart), and the W11 live limits live_max_instance_lives / live_max_user_lives (0..10000, 0 = unlimited, enforced at the RTMP publish callback) and live_max_duration_secs (0 = no limit, else 60..2592000, enforced by the duration watchdog), live_recording_retention_hours (0..8760, default LIVE_RECORDING_RETENTION in whole hours rounded up; 0 = delete a session recording as soon as its replay is published and sweep nothing, else the hourly sweep deletes recordings older than that many hours. This setting DELETES FILES: lowering it, or raising it from 0, makes the next sweep delete every recording older than the new window, including recordings kept as the only copy of a failed or replay-disabled broadcast; read at every use, no restart), audit_log_retention_days (0..36500, default AUDIT_LOG_RETENTION in whole days rounded up; 0 = keep the audit trail forever. The env value is a FLOOR: the effective window is max(setting, env), so this setting can only keep the trail LONGER, and a value below the floor is a 422 naming it. When AUDIT_LOG_RETENTION=0 the trail is already kept forever and only 0 is accepted, so the setting has no effect. Read by every hourly sweep, no restart; changes are audited old -> new), and the W7 sign-up limits registration_user_limit (0 = unlimited; signup refuses and GET /api/v1/instance reports registration_enabled=false with reason user_limit_reached once the account count reaches it — the count is approximate under concurrent signups), registration_minimum_age (0 = off, else 1..150; every signup path then requires the age_attestation flag — no birthdate is collected — and it is the age age_gate_enabled asks visitors to confirm), and default_user_daily_quota_bytes (0 = unlimited; a ROLLING trailing-24h upload window enforced at the upload gates with 422 daily_quota_exceeded)), a string for the text/markdown/link keys and enum keys such as sensitive_content_policy, and an array of strings for list keys (instance_categories, moderator_languages, and transcoding_resolutions — a non-empty, duplicate-free subset of the canonical ladder rungs 2160/1440/1080/720/480/360/240/144). A null value clears that override (resets the key to its config default). Only the keys present are changed. An unknown key, a type mismatch, or a content-invalid value (e.g. a malformed URL/email, an empty instance_name, an unknown taxonomy id, or an enum value outside its options) is 422 with field errors and nothing is written. Restricted to admins; audited (admin.instance.update, changed key names only). Changes take effect immediately (the overlay cache reloads), so subsequent GET /api/v1/instance, GET /api/v1/instance/about, POST /api/v1/instance/contact, public sensitive-content filtering, and the upload/import/live/comment/download/ registration gates reflect them. Google Analytics uses the boolean analytics_google_enabled and string analytics_google_measurement_id (empty or ^G-[A-Z0-9]{4,20}$), plus the boolean analytics_google_consent_required (default true).
          */
         patch: operations["updateInstanceSettings"];
         trace?: never;
@@ -6941,6 +6966,13 @@ export interface components {
              * @enum {string}
              */
             sensitive_content_policy: "hide" | "warn" | "blur" | "display";
+            /**
+             * @description Whether a visitor without an account may open a video flagged sensitive. `open` (the default) changes nothing. With `sign_in`, every read of such a video by a caller without a session — the detail document, the embed policy, captions, chapters, the download list and every media route — answers 401 `sign_in_required`, and its bytes are no longer handed to a CDN or a presigned redirect. A sign-in wall, not age verification: it proves an account, not an age. Lists and search keep following `sensitive_content_policy`.
+             * @enum {string}
+             */
+            sensitive_anonymous_access?: "open" | "sign_in";
+            /** @description Whether the frontend asks a visitor without an account to confirm they are at least `registration_minimum_age` before it shows any page or embed: the `age_gate_enabled` setting AND a minimum age above 0. Self-declared and enforced in the browser: no API or media request is refused, so it is not age verification. */
+            age_gate_enabled?: boolean;
             /** @description EFFECTIVE contact-form availability: the admin toggle is on AND an effective contact email is set AND the deployment has an outbound mail path. POST /api/v1/instance/contact answers 409 whenever this is false. */
             contact_form_enabled: boolean;
             /** @description Operator social/link row; each value is "" when unset. */
@@ -6994,6 +7026,10 @@ export interface components {
             terms_url: string;
             /** @description Link to the instance privacy policy; may be empty. */
             privacy_url: string;
+            /** @description The operator's label for the document behind `terms_url` (for example a date). A signup records the label it accepted. Empty when the operator has set none. */
+            terms_version?: string;
+            /** @description The operator's label for the document behind `privacy_url`; same rules as `terms_version`. */
+            privacy_version?: string;
             /** @description Operator contact email; may be empty. */
             contact_email: string;
             /** @description Effective feature toggles (the DB-backed instance-settings overlay over static config). The frontend disables the matching affordances in lock-step with the backend's enforcement. The config-parity W8 flags (import_http, channel_sync, storyboards, transcription, user_import, user_export) and the W10 transcoding flag report EFFECTIVE availability — the runtime admin setting AND, where one exists, the deployment's boot capability (yt-dlp resolver, Whisper endpoint, ffmpeg/ffprobe). video_card_previews is the global half of the hover-preview gate; video_card_previews_default_enabled is the preference inherited by users who have never explicitly chosen. Signed-in clients must still require both the global gate and the effective video_card_previews_enabled player preference. The mail flag is pure boot capability (an outbound mail path exists). */
@@ -7006,8 +7042,12 @@ export interface components {
                 live: boolean;
                 /** @description Whether posting comments is allowed. */
                 comments: boolean;
-                /** @description Whether regular users may download video media. Moderators and admins retain download access when this operator toggle is off. */
+                /** @description Whether a signed-in regular user may download video media: the `downloads_enabled` master switch AND `downloads_users_enabled`. */
                 downloads: boolean;
+                /** @description Whether a logged-out visitor may download video media: the `downloads_enabled` master switch AND `downloads_anonymous_enabled`. */
+                downloads_anonymous: boolean;
+                /** @description Whether a moderator or admin may download video media: the `downloads_enabled` master switch alone. Staff are not subject to the two audience switches or the per-video flag, but the master switch off stops them too. */
+                downloads_staff: boolean;
                 /** @description Whether 1:1 direct messaging is available (messaging_enabled, default true, AND the messaging service wired at boot). While false EVERY /conversations, /messages, /me/messaging-prefs and /attachments route answers 403 feature_disabled, so a client MUST hide the messaging affordances rather than offer controls that fail. */
                 messaging: boolean;
                 /** @description Whether the end-to-end-encrypted variant of direct messaging is available (messaging_e2ee_enabled, default true, AND messaging above — the E2EE device directory and envelope store exist only to serve conversations, so turning messaging off turns this off with it). While false the /e2ee/** routes answer 403 feature_disabled and no NEW encrypted conversation or envelope is accepted; existing encrypted conversations stay readable. This flag is the authoritative E2EE availability signal — do not infer it by probing GET /e2ee/devices, which cannot tell an operator policy decision from a transport failure. */
@@ -7092,6 +7132,8 @@ export interface components {
                 google_enabled: boolean;
                 /** @description Public GA4 measurement ID; empty when disabled, unconfigured or invalid. The saved admin setting is retained when disabled. */
                 google_measurement_id: string;
+                /** @description False only when the admin turned off analytics_google_consent_required and analytics is active; clients then load GA4 without a consent prompt (still honouring Do-Not-Track and Global Privacy Control). True otherwise; absent on older servers means true. */
+                google_consent_required?: boolean;
             };
             /** @description Optional browser VAST placement configuration. Absent on older servers; clients treat absence as disabled. Tag URLs are public configuration, never server-fetched or secret. Ad failures must resume normal content. */
             ads?: {
@@ -7141,6 +7183,12 @@ export interface components {
                  * @default 0
                  */
                 midroll_offset_percent: number;
+                /**
+                 * Format: int64
+                 * @description Zero plays a single midroll. A value from 60 to 86400 repeats the midroll every that many seconds of content after the first position; clients place none in the last 60 seconds and skip a break that falls inside cooldown_seconds. Never 1–59. Absent on older servers means 0.
+                 * @default 0
+                 */
+                midroll_interval_seconds: number;
                 /**
                  * @description Plain text, at most 200 bytes, never HTML; {seconds} is substituted by clients. Empty or absent uses the default countdown.
                  * @default Skip in {seconds}…
@@ -7680,6 +7728,8 @@ export interface components {
             height?: number | null;
             /** @description Whether a poster image is available at GET /videos/{id}/thumbnail. Present on the detail endpoint; omitted on list/feed views. */
             has_thumbnail?: boolean;
+            /** @description Present (true) on a LISTED sensitive video for a caller without a session while the instance's `sensitive_anonymous_access` is `sign_in`: opening it answers 401 `sign_in_required`, and its poster is withheld (`has_thumbnail` is false on that card). Absent otherwise. Whether a sensitive video is listed at all is still `sensitive_content_policy`'s decision. */
+            sign_in_required?: boolean;
             /** @description Whether a seek-preview storyboard is available at GET /videos/{id}/storyboard.jpg (+ the .vtt map). Present on the detail endpoint; omitted on list/feed views. */
             has_storyboard?: boolean;
             /** @description Whether the video has seek-bar chapters at GET /videos/{id}/chapters. Present on the detail endpoint; omitted on list/feed views. Lets the player fetch chapters only when they exist. */
@@ -8083,7 +8133,7 @@ export interface components {
             content_type: string;
             /**
              * Format: int64
-             * @description Stored size in bytes, omitted when the backend cannot determine it.
+             * @description Stored size in bytes, omitted when the backend cannot determine it (a store that can neither stat a path nor report an object's size from its metadata). For an HLS entry whose video+audio file is built on request (an imported video with a separate audio object) it is the sum of the two source objects and approximate: the built file differs by container overhead.
              */
             size_bytes?: number;
             /** @description The upload's original filename (original entries only). */
@@ -9062,7 +9112,7 @@ export interface components {
             visibility: "public" | "unlisted" | "private";
             /**
              * Format: int64
-             * @description Number of public, published videos in the playlist.
+             * @description Number of public, published, not moderator-blocked videos in the playlist. Viewer-independent on list surfaces (the sensitive-content "hide" policy is per viewer), so it may exceed what a viewer sees inside; on GET /playlists/{id} it is the viewer's filtered count and equals `total`.
              */
             video_count: number;
             /** @description Whether an uploaded cover image is available at GET /playlists/{id}/thumbnail. */
@@ -9075,7 +9125,7 @@ export interface components {
         PlaylistListResponse: components["schemas"]["PageMeta"] & {
             playlists: components["schemas"]["Playlist"][];
         };
-        /** @description A playlist's fields plus one page of its ordered public, published video cards. total/limit/offset describe the VIDEOS; the playlist's own video_count is unchanged. */
+        /** @description A playlist's fields plus one page of its ordered public, published video cards. Moderator-blocked videos are never listed, and under the sensitive-content "hide" policy (the instance default, or the signed-in viewer's own override) sensitive videos are left out too, for the playlist's owner as for anyone else. total/limit/offset describe the VIDEOS actually listed for this viewer, and on THIS route video_count equals total (per viewer); everywhere else video_count is viewer-independent and may exceed what a viewer sees inside. */
         PlaylistDetailResponse: components["schemas"]["Playlist"] & components["schemas"]["PageMeta"] & {
             videos: components["schemas"]["Video"][];
         };
@@ -9875,6 +9925,21 @@ export interface components {
             notification_prefs?: {
                 type: string;
                 enabled: boolean;
+            }[];
+            /** @description What the account holder accepted and when: the instance's terms and privacy policy (with the operator's version label and the URL as they were at the time) and the age attestation. Export only — an import never creates a consent. */
+            consents?: {
+                /** @enum {string} */
+                document: "terms" | "privacy" | "age";
+                /** @description The operator's label for the document; may be empty. */
+                version: string;
+                /** @description Where the document lived; empty for `age`. */
+                url: string;
+                /** @description The age attested; `age` entries only. */
+                minimum_age?: number;
+                /** @enum {string} */
+                source: "signup" | "approval" | "oidc" | "atproto" | "reaccept";
+                /** Format: date-time */
+                accepted_at: string;
             }[];
             /** @description Owned channels (metadata only; not re-created by import). */
             channels?: {
@@ -11479,6 +11544,11 @@ export interface components {
             conflict_policy: string;
             /** @description Whether this run was allowed to update rows the import already owns where the source and this instance had diverged. Recorded on the report because "why did that title change?" is asked long afterwards. */
             source_authoritative?: boolean;
+            /**
+             * Format: date-time
+             * @description When the newest local video in the source was created, as this run read it. The source is often a restored copy of the live database, which does not move between runs: a run that imports nothing beside a date days old means the copy needs refreshing. Absent on reports written before this field existed and when the source has no local video.
+             */
+            source_newest_video_at?: string;
             /** @description Per-entity-kind counts, keyed by entity kind (category_taxonomy, user, user_suspension, user_mfa_hold, user_quota_unlimited, channel, actor_avatar, actor_banner, video, video_sensitive, video_block, video_file, hls_playlist, video_no_media, thumbnail, storyboard, caption, tag, view_count, video_original_date, chapter, rating, rendition, comment, playlist, playlist_item, follow, remote_follower, watch_history). remote_follower counts accepted follows of a local channel by a remote actor, carried only when the channel's actor id here is the one followed and no block refuses the follower; an ACCOUNT follow is unsupported (followers are per channel). watch_history restores local-video resume positions and timestamps in batches; remote history is unsupported. Existing or cleared destination history is preserved even in source-authoritative mode. New accounts retain the source history-enabled preference when available. video_no_media counts VIDEOS that land with NOTHING to play — no web-video file and no streaming playlist. It is the only count here that reports an absence, and it exists because the absence is otherwise invisible: such a video is inserted, counted as an imported video, and discovered when somebody presses play. Copy mode carries flat local HLS dependencies; nested/external references need conversion. Reference-mode counts do not verify that referenced objects exist. It stays 0 for a metadata-only run (media_mode none, or no destination store), where nothing to play is what was asked for. user_suspension counts USERS whose source suspension (user.blocked) was carried onto is_active, video_sensitive counts VIDEOS the source flagged nsfw, and video_block counts VIDEOS the source had BLACKLISTED (moderator-removed there, carried into video_blocks so they are removed here too); all three count only what was CARRIED, never the whole family. user_mfa_hold counts USERS imported inactive because the source has TOTP enrolled for them (user.otpSecret): the secret cannot be carried, so the account is held until an administrator reactivates it for re-enrollment here; a suspended user is counted under user_suspension only. user_quota_unlimited counts USERS the import CREATED and therefore gave an unlimited storage quota (storage_quota_bytes = 0): a migrated creator's back-catalogue is already stored and usage is recomputed live from video_files, so inheriting the instance default would put anyone with a larger catalogue over quota on their first upload after cutover. Quotas on migrated accounts are a deliberate admin action afterwards; the import states this once, at creation, and never on a re-run. view_count counts VIDEOS whose view total was carried, never views: the source records one lifetime number per video and no daily breakdown, so the total is applied as a delta to the video's counter and no per-day rows are invented. category_taxonomy is the INSTANCE's category list, so it is 0 or 1: 1 when the source replaces the stock taxonomy (a categories plugin) and the setting is the import's to write, 0 for the majority of sources, which run the stock list and get no override written. actor_avatar and actor_banner count the source's account and channel profile images, which are FETCHED over HTTP from the source instance rather than read from its object store (no PeerTube configuration puts them there), and which are never written over an image this instance already has. thumbnail and storyboard count VIDEOS whose poster and seek-preview sprite sheet were carried, and they follow the same rules: PeerTube keeps neither in object storage either, so both are read from a mounted source media root when there is one and fetched over HTTP otherwise, and neither is written over an asset this instance already holds. A storyboard is carried as its sprite sheet AND a WebVTT map synthesised from the source's grid geometry, because PeerTube stores no map of its own; expect a source to have fewer storyboards than videos, since it generates none for a video shorter than three seconds. */
             entities: {
                 [key: string]: components["schemas"]["PeerTubeImportCounts"];
@@ -11766,6 +11836,8 @@ export interface components {
         };
         InstanceSettingsResponse: {
             settings: components["schemas"]["InstanceSetting"][];
+            /** @description Present only on a PATCH whose change leaves something for the operator to do by hand. Today: switching `sensitive_anonymous_access` to `sign_in` on an instance with a CDN wired answers with an instruction to purge the CDN zone, because copies cached before the switch stay public until then. (The same switch is REFUSED with a 422 on `sensitive_anonymous_access` while CDN delivery is on and no purge endpoint is configured.) */
+            notices?: string[];
         };
         /** @description One rejected setting: the key that would fail and the message the PATCH's 422 would carry for it. Identical in shape to the field errors in ErrorResponse, so a client renders both the same way. */
         SettingValidationIssue: {
@@ -12103,6 +12175,8 @@ export interface components {
             note?: string;
             /** @description PeerTube-style minimum-age attestation ("I am at least N years old"). Required (true) while the instance's registration_minimum_age setting is active (GET /api/v1/instance reports the threshold); no birthdate is collected. Missing/false while active is a 422 field error on `age_attestation`. */
             age_attestation?: boolean;
+            /** @description "I accept the terms of service and the privacy policy." Required (true) while the instance has `terms_url` or `privacy_url` set (GET /api/v1/instance reports both, with the operator's version labels); missing/false while either is set is a 422 field error on `terms_accepted`. What was accepted — each document's URL and version label, and the time — is recorded with the account and is part of its data export. Ignored when neither document is configured. */
+            terms_accepted?: boolean;
             /**
              * @description Opt the new session into cookie mode (browser clients): the rotating refresh token is set as an httpOnly `vidra_refresh` cookie (Path=/api/v1/auth, SameSite=Lax, Secure on https instances, Max-Age = the refresh TTL) and omitted from the response body.
              * @default false
@@ -14303,6 +14377,10 @@ export interface operations {
             query?: {
                 /** @description Where to send the browser after the flow completes. Must be a same-origin relative path (`/...`); absolute URLs and `//...` are rejected. Defaults to `/`. */
                 return_to?: string;
+                /** @description `1` when the person ticked "I accept the terms of service and the privacy policy" on the signup form. Carried in the signed attempt state and consulted only if the sign-in turns out to create an account: on an instance with `terms_url` or `privacy_url` set, a first sign-in without it creates nothing and returns `oauth_error=terms_required`. An existing account is never asked. */
+                terms_accepted?: "1";
+                /** @description `1` when the person ticked "I am at least N years old" on the signup form. Carried in the signed attempt state and consulted only if the sign-in turns out to create an account: while the instance's `registration_minimum_age` is above 0, a first sign-in without it creates nothing and returns `oauth_error=age_required`. An existing account is never asked. */
+                age_attestation?: "1";
             };
             header?: never;
             path: {
@@ -14503,6 +14581,10 @@ export interface operations {
                     handle: string;
                     /** @description Same-origin relative path to return to after login (`/...`); absolute URLs and `//...` are rejected. Defaults to `/`. */
                     return_to?: string;
+                    /** @description The signup form's tick ("I accept the terms of service and the privacy policy"). Consulted only if the handle turns out to be a first sign-in: on an instance with `terms_url` or `privacy_url` set, that sign-in creates nothing without it and the callback returns `oauth_error=terms_required`. An existing account is never asked. */
+                    terms_accepted?: boolean;
+                    /** @description The signup form's "I am at least N years old" tick. Consulted only if the handle turns out to be a first sign-in: while the instance's `registration_minimum_age` is above 0, that sign-in creates nothing without it and the callback returns `oauth_error=age_required`. An existing account is never asked. */
+                    age_attestation?: boolean;
                 };
             };
         };
@@ -17770,7 +17852,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Downloads are disabled for this non-privileged caller — by the instance downloads_enabled setting or this video's download_enabled flag (code "feature_disabled"). */
+            /** @description Downloads are disabled for this caller — by the instance downloads_enabled setting (everyone), the caller's audience switch or this video's download_enabled flag (regular and logged-out callers) (code "feature_disabled"). */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -17836,7 +17918,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Downloads are disabled for this non-privileged caller — by the instance downloads_enabled setting or this video's download_enabled flag (code "feature_disabled"). */
+            /** @description Downloads are disabled for this caller — by the instance downloads_enabled setting (everyone), the caller's audience switch or this video's download_enabled flag (regular and logged-out callers) (code "feature_disabled"). */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -17902,7 +17984,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Downloads are disabled for this non-privileged caller — by the instance downloads_enabled setting or this video's download_enabled flag (code "feature_disabled"). */
+            /** @description Downloads are disabled for this caller — by the instance downloads_enabled setting (everyone), the caller's audience switch or this video's download_enabled flag (regular and logged-out callers) (code "feature_disabled"). */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -17972,7 +18054,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Downloads are disabled for this non-privileged caller — by the instance downloads_enabled setting or this video's download_enabled flag (code "feature_disabled"). */
+            /** @description Downloads are disabled for this caller — by the instance downloads_enabled setting (everyone), the caller's audience switch or this video's download_enabled flag (regular and logged-out callers) (code "feature_disabled"). */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -17984,6 +18066,25 @@ export interface operations {
             /** @description No visible video or matching packaged rendition. */
             404: {
                 headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The on-request video+audio build failed before producing any bytes. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Every on-request build slot is taken, or this client already has one running (code `download_busy`); retry after the Retry-After delay, or take the video-only file. Also `download_unavailable` when the serving storage cannot supply the build's inputs without spooling objects to disk (such rungs are then not listed). */
+            503: {
+                headers: {
+                    "Retry-After"?: number;
                     [name: string]: unknown;
                 };
                 content: {
@@ -18038,7 +18139,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Downloads are disabled for this non-privileged caller — by the instance downloads_enabled setting or this video's download_enabled flag (code "feature_disabled"). */
+            /** @description Downloads are disabled for this caller — by the instance downloads_enabled setting (everyone), the caller's audience switch or this video's download_enabled flag (regular and logged-out callers) (code "feature_disabled"). */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -18088,7 +18189,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Downloads are disabled for this non-privileged caller — by the instance downloads_enabled setting or this video's download_enabled flag (code "feature_disabled"). */
+            /** @description Downloads are disabled for this caller — by the instance downloads_enabled setting (everyone), the caller's audience switch or this video's download_enabled flag (regular and logged-out callers) (code "feature_disabled"). */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -21908,6 +22009,65 @@ export interface operations {
             };
             /** @description Empty update, unknown notification type, or an email switch for a type without email delivery. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    unsubscribeNotificationEmailPage: {
+        parameters: {
+            query?: {
+                token?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No public origin is configured; plain-text pointer to the settings. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            /** @description Redirect to the notification settings page. */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    unsubscribeNotificationEmail: {
+        parameters: {
+            query?: {
+                /** @description The signed token from the email's List-Unsubscribe URL. */
+                token?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Processed (or ignored); the response never says which. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Per-IP rate limit exceeded; the caller should retry. */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -258,3 +258,28 @@ describe("duration", () => {
     expect(presentation({ duration_seconds: undefined }).duration).toBeNull();
   });
 });
+
+
+// A listed sensitive video behind the sign-in wall (core marks the card): no
+// poster request and no hover preview — both routes answer 401 — and the card
+// says why it is a placeholder.
+describe("a card behind the sensitive sign-in wall", () => {
+  it("has no poster, no preview, and is flagged", () => {
+    const p = presentation({ is_sensitive: true, sign_in_required: true, has_thumbnail: false });
+    expect(p.signInRequired).toBe(true);
+    expect(p.posterSrc).toBeNull();
+    expect(p.previewEligible).toBe(false);
+    expect(p.previewSrc).toBeNull();
+  });
+
+  it("never requests a poster for a flagged card, whatever has_thumbnail says", () => {
+    expect(presentation({ sign_in_required: true, has_thumbnail: true }).posterSrc).toBeNull();
+  });
+
+  it("leaves an ordinary card alone", () => {
+    const p = presentation();
+    expect(p.signInRequired).toBe(false);
+    expect(p.posterSrc).not.toBeNull();
+    expect(p.previewEligible).toBe(true);
+  });
+});

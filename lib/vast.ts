@@ -8,6 +8,8 @@ export interface VastDocument {
   errors: string[];
   tracking: Record<string, string[]>;
   clickTracking: string[];
+  /** `progress` beacons: `at` is seconds, or a percentage of the played ad when `percent`. */
+  progress?: { url: string; at: number; percent: boolean }[];
 }
 
 const children = (node: Element | undefined, name: string): Element[] =>
@@ -50,10 +52,19 @@ function urls(node: Element | undefined, name: string, baseUrl: string): string[
 function metadata(body: Element, linear: Element | undefined, baseUrl: string): VastDocument {
   const duration = clock(text(child(linear, "Duration"))) ?? 0;
   const tracking: Record<string, string[]> = Object.create(null);
+  const progress: NonNullable<VastDocument["progress"]> = [];
   for (const element of children(child(linear, "TrackingEvents"), "Tracking")) {
     const event = element.getAttribute("event")?.trim();
     const url = httpUrl(text(element), baseUrl);
-    if (event && url && !["__proto__", "constructor", "prototype"].includes(event)) (tracking[event] ??= []).push(url);
+    if (!event || !url) continue;
+    if (event === "progress") {
+      // Kept apart from the named events: it fires at its own offset, which a wrapper without a duration can still declare.
+      const offset = element.getAttribute("offset")?.trim() ?? "";
+      const percent = /^\d+(?:\.\d+)?%$/.test(offset);
+      const at = percent ? Number(offset.slice(0, -1)) : clock(offset);
+      if (at !== null && Number.isFinite(at) && (!percent || at <= 100)) progress.push({ url, at, percent });
+    }
+    else if (!["__proto__", "constructor", "prototype"].includes(event)) (tracking[event] ??= []).push(url);
   }
   const clicks = child(linear, "VideoClicks");
   return {
@@ -62,6 +73,7 @@ function metadata(body: Element, linear: Element | undefined, baseUrl: string): 
     impressions: urls(body, "Impression", baseUrl), errors: urls(body, "Error", baseUrl), tracking,
     clickThrough: urls(clicks, "ClickThrough", baseUrl)[0],
     clickTracking: urls(clicks, "ClickTracking", baseUrl),
+    ...(progress.length ? { progress } : {}),
   };
 }
 

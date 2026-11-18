@@ -41,6 +41,15 @@ describe("InstanceCustomization", () => {
     expect(stylesheet()).toBeNull();
   });
 
+  it("leaves the custom script out while the age gate holds it back, keeping the stylesheet", () => {
+    const { container } = render(
+      // A hash no other test uses: React remembers a hoisted stylesheet by href.
+      <InstanceCustomization instance={snapshot({ css_hash: "c".repeat(64), js_hash: HASH })} scripts={false} />,
+    );
+    expect(script(container)).toBeNull();
+    expect(stylesheet()).not.toBeNull();
+  });
+
   it("renders nothing while no hash or color is set", () => {
     const { container } = render(
       <InstanceCustomization instance={snapshot({ css_hash: "", js_hash: "", primary_color: "" })} />,

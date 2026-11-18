@@ -245,10 +245,16 @@ vidra-user is free software licensed under the [GNU Affero General Public Licens
 
 Google Analytics is optional and disabled by default. In **Admin → Configuration
 → General → Analytics**, enter your GA4 web stream's `G-…` Measurement ID and
-enable Google Analytics. No API secret is needed. Visitors must accept the
-analytics preference before the Google tag loads; they can change their choice
-using **Analytics preferences** on supported browsing pages. This browser-local
-choice is separate from account history and creator statistics.
+enable Google Analytics. No API secret is needed. By default
+(`analytics_google_consent_required` on, "Require visitor consent" in the same
+section) visitors must accept the analytics preference before the Google tag
+loads. If an admin turns that setting off, no banner is shown and visitors are
+measured without being asked; the operator is then responsible for whether that
+is lawful where their visitors are (EU/UK ePrivacy/GDPR generally require
+consent). Do-Not-Track and Global Privacy Control are honoured either way, and
+a visitor who has already made a choice can change it using **Analytics
+preferences** on supported browsing pages. This browser-local choice is
+separate from account history and creator statistics.
 
 **Turn off Enhanced Measurement in the GA4 web stream before enabling this
 integration.** The application sends manual pageviews; automatic page/history,

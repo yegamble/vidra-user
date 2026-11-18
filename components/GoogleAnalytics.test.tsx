@@ -95,3 +95,72 @@ it("does not reset an active visit during StrictMode replay or unchanged rerende
   mocks.sync.mockClear(); view.rerender(<StrictMode><GoogleAnalytics {...props} /></StrictMode>);
   expect(mocks.sync).not.toHaveBeenCalled();
 });
+const open = { ...props, consentRequired: false };
+it("with consent not required: no banner and analytics starts without a choice", () => {
+  render(<GoogleAnalytics {...open} />);
+  expect(screen.queryByRole("region")).toBeNull(); expect(screen.queryByRole("button")).toBeNull();
+  expect(mocks.sync).toHaveBeenLastCalledWith(props.measurementId, "/", props.nonce);
+});
+it("consent required (explicit or default) still holds analytics until accepted", () => {
+  render(<GoogleAnalytics {...props} consentRequired />);
+  expect(screen.getByRole("region", { name: "Optional analytics" })).toBeTruthy();
+  expect(mocks.sync.mock.calls.every(call => call[0] === null)).toBe(true);
+});
+it("with consent not required: a previously stored decline is respected and can be reversed", () => {
+  localStorage.setItem(key, "denied"); render(<GoogleAnalytics {...open} />);
+  expect(screen.queryByRole("region")).toBeNull();
+  expect(screen.getByRole("button", { name: "Analytics preferences" })).toBeTruthy();
+  expect(mocks.sync.mock.calls.every(call => call[0] === null)).toBe(true);
+  choose("Accept");
+  expect(localStorage.getItem(key)).toBe("granted");
+  expect(mocks.sync).toHaveBeenLastCalledWith(props.measurementId, "/", props.nonce);
+});
+it("with consent not required: a stored accept keeps the preferences button and can be withdrawn", () => {
+  localStorage.setItem(key, "granted"); render(<GoogleAnalytics {...open} />);
+  expect(screen.queryByRole("region")).toBeNull();
+  expect(mocks.sync).toHaveBeenLastCalledWith(props.measurementId, "/", props.nonce);
+  choose("Decline");
+  expect(localStorage.getItem(key)).toBe("denied");
+  expect(mocks.sync).toHaveBeenLastCalledWith(null, "/", props.nonce);
+});
+it("with consent not required: never writes storage by itself", () => {
+  const write = vi.spyOn(Storage.prototype, "setItem");
+  render(<GoogleAnalytics {...open} />);
+  expect(write).not.toHaveBeenCalled(); expect(localStorage.getItem(key)).toBeNull();
+});
+it("flipping consentRequired false to true with nothing stored shows the banner and stops measuring", () => {
+  const view = render(<GoogleAnalytics {...open} />);
+  expect(mocks.sync).toHaveBeenLastCalledWith(props.measurementId, "/", props.nonce);
+  expect(screen.queryByRole("region")).toBeNull();
+  view.rerender(<GoogleAnalytics {...props} consentRequired />);
+  expect(screen.getByRole("region", { name: "Optional analytics" })).toBeTruthy();
+  expect(mocks.sync).toHaveBeenLastCalledWith(null, "/", props.nonce);
+});
+it("with consent not required: no id-bearing sync happens before storage has been read", () => {
+  const order: string[] = [];
+  const read = Storage.prototype.getItem;
+  vi.spyOn(Storage.prototype, "getItem").mockImplementation(function (this: Storage, name) { order.push("read"); return read.call(this, name); });
+  mocks.sync.mockImplementation((id: string | null) => { if (id) order.push("sync"); });
+  render(<GoogleAnalytics {...open} />);
+  expect(order.indexOf("read")).toBeGreaterThanOrEqual(0);
+  expect(order.indexOf("sync")).toBeGreaterThan(order.indexOf("read"));
+});
+it("with consent not required: unreadable storage stays off", () => {
+  vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new Error("blocked"); });
+  render(<GoogleAnalytics {...open} />);
+  expect(mocks.sync.mock.calls.every(call => call[0] === null)).toBe(true);
+});
+it.each([["doNotTrack", "1"], ["globalPrivacyControl", true]])("with consent not required: %s still suppresses analytics", (name, value) => {
+  Object.defineProperty(navigator, name, { configurable: true, value });
+  render(<GoogleAnalytics {...open} />);
+  expect(mocks.sync.mock.calls.every(call => call[0] === null)).toBe(true);
+});
+it.each([[false, "G-TEST1234", "/"], [true, "UA-1234", "/"], [true, "G-TEST1234", "/messages/private"]] as const)("with consent not required: disabled, invalid or private stays off (%s, %s, %s)", (enabled, measurementId, pathname) => {
+  mocks.pathname = pathname;
+  render(<GoogleAnalytics {...open} enabled={enabled} measurementId={measurementId} />);
+  expect(mocks.sync.mock.calls.every(call => call[0] === null)).toBe(true);
+});
+it("renders nothing and starts nothing on the server when consent is not required", () => {
+  expect(renderToString(<GoogleAnalytics {...open} />)).toBe("");
+  expect(mocks.sync).not.toHaveBeenCalled();
+});

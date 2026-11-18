@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { getAccessToken, setAccessToken } from "./auth-store";
-import { authApi, oauthBeginUrl } from "./auth";
+import { authApi, beginATProtoLogin, oauthBeginUrl } from "./auth";
 import { ApiError, apiRequest } from "./client";
 
 const session = {
@@ -271,6 +271,24 @@ describe("authApi + auth-store", () => {
     expect(oauthBeginUrl("google", "/login?oauth=1")).toBe(
       "http://localhost:8080/api/v1/auth/oauth/google?return_to=%2Flogin%3Foauth%3D1",
     );
+  });
+
+  it("oauthBeginUrl carries each signup tick only when it was given", () => {
+    expect(oauthBeginUrl("google", "/signup", { termsAccepted: true, ageAttested: true })).toBe(
+      "http://localhost:8080/api/v1/auth/oauth/google?return_to=%2Fsignup&terms_accepted=1&age_attestation=1",
+    );
+    expect(oauthBeginUrl("google", undefined, { ageAttested: true })).toBe(
+      "http://localhost:8080/api/v1/auth/oauth/google?age_attestation=1",
+    );
+  });
+
+  it("beginATProtoLogin sends the age tick in the start body only when it was given", async () => {
+    fetchMock.mockImplementation(async () => new Response(JSON.stringify({ authorization_url: "https://pds.example/a" }), { status: 200 }));
+    await beginATProtoLogin("alice.bsky.social", "/signup", { ageAttested: true });
+    await beginATProtoLogin("alice.bsky.social", "/login");
+    const bodies = fetchMock.mock.calls.map(([, init]) => JSON.parse((init as RequestInit).body as string));
+    expect(bodies[0]).toEqual({ handle: "alice.bsky.social", return_to: "/signup", age_attestation: true });
+    expect(bodies[1]).toEqual({ handle: "alice.bsky.social", return_to: "/login" });
   });
 
   it("deleteAccount DELETEs /auth/me with the password confirmation in the body", async () => {

@@ -70,6 +70,7 @@ export function VideoCard({
     previewEligible,
     previewSrc,
     posterSrc,
+    signInRequired,
     duration,
   } = useVideoCardPresentation(video);
   const watchHref = playlistId ? `${baseWatchHref}?playlist=${encodeURIComponent(playlistId)}` : baseWatchHref;
@@ -122,8 +123,16 @@ export function VideoCard({
             blurSensitive && "scale-110 blur-2xl",
           )}
           fallback={
-            <div className="media-placeholder absolute inset-0">
-              <span className="sr-only">No preview</span>
+            <div className="media-placeholder absolute inset-0 flex items-center justify-center">
+              {signInRequired ? (
+                // Not a missing poster: the instance asks for an account before
+                // showing sensitive videos, and this visitor has none.
+                <span className="rounded-full bg-black/55 px-3 py-1 text-[12px] font-semibold leading-none text-white/90">
+                  Sign in to watch
+                </span>
+              ) : (
+                <span className="sr-only">No preview</span>
+              )}
             </div>
           }
           overlay={

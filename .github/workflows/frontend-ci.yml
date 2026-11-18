@@ -48,8 +48,24 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # A FLAKY PACKAGE MIRROR MUST NOT FAIL THE LANE BEFORE A TEST RUNS
+      # (2026-11-11: an hour of DNS failures for the Ubuntu mirrors on Azure
+      # runners turned every lane red with nothing executed). The browser is
+      # cached per Playwright version; the system-package install is waited out
+      # and retried inside a time budget, and is NOT cached, so a mirror that
+      # stays down still fails the lane. See scripts/ci/install-playwright.sh.
+      - name: Read the Playwright version (cache key)
+        id: playwright
+        run: echo "version=$(node -p "require('./node_modules/@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache the Playwright browser
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}-chromium
+
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
+        run: bash scripts/ci/install-playwright.sh chromium
 
       # CI=true (set by Actions) also switches vitest to emit JUnit alongside the
       # default reporter — see vitest.config.ts.
