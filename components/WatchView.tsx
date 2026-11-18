@@ -24,6 +24,7 @@ import { SupportButton } from "@/components/SupportButton";
 import { UserText } from "@/components/UserText";
 import { WatchActions } from "@/components/watch/WatchActions";
 import { WatchSignInProvider } from "@/components/watch/WatchSignInPrompt";
+import { WatchSignInRequired } from "@/components/watch/WatchSignInRequired";
 import type { PlaybackDelivery } from "@/lib/use-playback-engine";
 import { useAmbientMode } from "@/lib/player-ambient";
 import { usePlaybackBeacon } from "@/lib/use-playback-beacon";
@@ -37,7 +38,6 @@ import { WATCH_CONTENT, WATCH_THEATER_INSET } from "@/components/watch/layout";
 import { WatchChannelCard } from "@/components/watch/WatchChannelCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
-import { SignInGate } from "@/components/SignInGate";
 import { WatchSkeleton } from "@/components/watch/WatchSkeleton";
 import {
   ApiError,
@@ -406,9 +406,7 @@ export function WatchView({
   if (status === "signin") {
     return (
       <div className={WATCH_CONTENT}>
-        <SignInGate title={t("watch.signIn.title")}>
-          {t("watch.signIn.body")}
-        </SignInGate>
+        <WatchSignInRequired />
       </div>
     );
   }

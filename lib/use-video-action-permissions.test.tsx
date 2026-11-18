@@ -98,30 +98,80 @@ describe("useVideoActionPermissions", () => {
 
   it("lets a moderator download even when the per-video flag is off", async () => {
     mocks.session = { status: "authed", user: { id: "mod-1", role: "moderator" } };
+    mocks.getInstanceCached.mockResolvedValue({
+      features: { downloads: true, downloads_anonymous: true, downloads_staff: true },
+    });
     const { result } = renderHook(() =>
       useVideoActionPermissions(video("channel-1", { download_enabled: false })),
     );
 
-    expect(result.current.canDownload).toBe(true);
-    await waitFor(() => expect(mocks.getInstanceCached).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(result.current.canDownload).toBe(true));
   });
 
   it.each(["moderator", "admin"] as const)(
-    "lets a %s manage and download local videos even when downloads are disabled",
+    "lets a %s manage and download local videos when both audience switches are off",
     async (role) => {
       mocks.session = { status: "authed", user: { id: `${role}-1`, role } };
+      mocks.getInstanceCached.mockResolvedValue({
+        features: { downloads: false, downloads_anonymous: false, downloads_staff: true },
+      });
       const { result } = renderHook(() => useVideoActionPermissions(video()));
 
+      await waitFor(() => expect(result.current.canDownload).toBe(true));
       expect(result.current).toEqual({
         signedIn: true,
         privileged: true,
         canManage: true,
         canDownload: true,
       });
-      await waitFor(() => expect(mocks.getInstanceCached).toHaveBeenCalledTimes(1));
       expect(mocks.getMyChannels).not.toHaveBeenCalled();
     },
   );
+
+  it.each(["moderator", "admin"] as const)(
+    "hides the download from a %s when the instance master switch is off",
+    async (role) => {
+      mocks.session = { status: "authed", user: { id: `${role}-1`, role } };
+      mocks.getInstanceCached.mockResolvedValue({
+        features: { downloads: false, downloads_anonymous: false, downloads_staff: false },
+      });
+      const { result } = renderHook(() => useVideoActionPermissions(video()));
+
+      await waitFor(() => expect(mocks.getInstanceCached).toHaveBeenCalledTimes(1));
+      await act(async () => Promise.resolve());
+      expect(result.current.canDownload).toBe(false);
+      expect(result.current.canManage).toBe(true);
+    },
+  );
+
+  it("follows the logged-out switch for a visitor and the signed-in switch for a member", async () => {
+    mocks.getInstanceCached.mockResolvedValue({
+      features: { downloads: true, downloads_anonymous: false, downloads_staff: true },
+    });
+    const member = renderHook(() => useVideoActionPermissions(video()));
+    await waitFor(() => expect(member.result.current.canDownload).toBe(true));
+    member.unmount();
+
+    mocks.session = { status: "anon", user: null };
+    const visitor = renderHook(() => useVideoActionPermissions(video()));
+    await waitFor(() => expect(mocks.getInstanceCached).toHaveBeenCalledTimes(2));
+    await act(async () => Promise.resolve());
+    expect(visitor.result.current.canDownload).toBe(false);
+  });
+
+  it("reads a core without the audience flags as before: one switch, staff never off", async () => {
+    mocks.getInstanceCached.mockResolvedValue({ features: { downloads: false } });
+    mocks.session = { status: "authed", user: { id: "mod-1", role: "moderator" } };
+    const staff = renderHook(() => useVideoActionPermissions(video()));
+    await waitFor(() => expect(staff.result.current.canDownload).toBe(true));
+    staff.unmount();
+
+    mocks.getInstanceCached.mockResolvedValue({ features: { downloads: true } });
+    mocks.session = { status: "anon", user: null };
+    const visitor = renderHook(() => useVideoActionPermissions(video()));
+    await waitFor(() => expect(visitor.result.current.canDownload).toBe(true));
+  });
+
 
   it("grants the owner capability used by both Manage and Delete", async () => {
     mocks.getMyChannels.mockResolvedValue({ channels: [{ id: "owned-channel" }] });

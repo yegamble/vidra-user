@@ -561,6 +561,33 @@ describe("AdminPeerTubeImportView — report and history", () => {
     expect(cells).toEqual(["9", "7", "5", "2", "0", "0"]);
   });
 
+  // "imported 0" reads as a broken importer when the source is a restored copy
+  // nobody refreshed; the date of its newest video is what tells the two apart.
+  it("says how new the source was when the run read it", async () => {
+    mocks.listPeerTubeImports.mockResolvedValue({
+      runs: [run({
+        report: {
+          ...report({ video: counts({ skipped: 15508 }) }),
+          source_newest_video_at: "2026-11-06T15:06:00Z",
+        },
+      })],
+    });
+    render(<AdminPeerTubeImportView />);
+    const panel = await screen.findByRole("region", { name: "Import run" });
+    const line = within(panel).getByText(/Newest video in the source/);
+    expect(line.querySelector("time")?.getAttribute("datetime")).toBe("2026-11-06T15:06:00Z");
+    expect(line.textContent).toMatch(/refresh/i);
+  });
+
+  it("says nothing about the source's age when the report does not carry it", async () => {
+    mocks.listPeerTubeImports.mockResolvedValue({
+      runs: [run({ report: report({ video: counts({ imported: 3 }) }) })],
+    });
+    render(<AdminPeerTubeImportView />);
+    const panel = await screen.findByRole("region", { name: "Import run" });
+    expect(within(panel).queryByText(/Newest video in the source/)).toBeNull();
+  });
+
   it("lists the run history newest-first and switches the report on select", async () => {
     const older = run({
       id: "bbbbbbbb-0000-0000-0000-000000000002",
