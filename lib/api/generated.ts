@@ -5745,7 +5745,7 @@ export interface paths {
         };
         /**
          * Durable job-queue status (admin)
-         * @description Returns an operations snapshot of every durable background-work queue (transcode_jobs, federation_deliveries, import_jobs, caption_jobs, account_exports, upload_sessions, storage_migrations, cdn_purge_jobs): per-queue depth counts by state (pending/running/done/failed) plus the age of the oldest still-pending item (a stuck-worker signal), and a merged recent-failures list. This is the backend contract behind the admin jobs page. Failures carry only id/error/attempts — never a source URL, inbox URL, storage key, or any argument. No separate worker heartbeat store exists: a healthy worker keeps pending/oldest_pending_age low, and dead-lettered rows surface in failed + recent_failures. Restricted to admins.
+         * @description Returns an operations snapshot of every durable background-work queue (transcode_jobs, federation_deliveries, import_jobs, caption_jobs, account_exports, upload_sessions, storage_migrations, cdn_purge_jobs, media_ipfs_pins, federation_outbox_crawls): per-queue depth counts by state (pending/running/done/failed) plus the age of the oldest still-pending item (a stuck-worker signal), and a merged recent-failures list. This is the backend contract behind the admin jobs page. Failures carry only id/error/attempts — never a source URL, inbox URL, storage key, or any argument. No separate worker heartbeat store exists: a healthy worker keeps pending/oldest_pending_age low, and dead-lettered rows surface in failed + recent_failures. Restricted to admins.
          */
         get: operations["listJobs"];
         put?: never;
@@ -11438,7 +11438,7 @@ export interface components {
             /** @description Newest-first, merged across queues, capped. */
             recent_failures: components["schemas"]["JobFailure"][];
         };
-        /** @description One queue's normalised depth. For upload_sessions (no retry model), pending=active, done=completed, failed=cancelled, running=0. For storage_migrations the unit is the OBJECT being moved, not the campaign: pending=not yet copied, running=copying, done=verified or source-deleted, failed=dead-lettered. */
+        /** @description One queue's normalised depth. For upload_sessions (no retry model), pending=active, done=completed, failed=cancelled, running=0. For storage_migrations the unit is the OBJECT being moved, not the campaign: pending=not yet copied, running=copying, done=verified or source-deleted, failed=dead-lettered. media_ipfs_pins and federation_outbox_crawls have no running state (a claimed row stays pending under its lease), so running=0, and they contribute no recent_failures: their failed count is the dead-letter signal. */
         QueueStatus: {
             /** @example transcode_jobs */
             queue: string;
