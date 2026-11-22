@@ -7091,6 +7091,11 @@ export interface components {
                 name: string;
                 display_name: string;
             }[];
+            /**
+             * Format: uri
+             * @description Default PDS for new cross-post connections when the instance enables ATProto.
+             */
+            atproto_pds_url?: string;
             /** @description Whether ATProto identity login (Bluesky / any self-hosted PDS) is enabled (ATPROTO_LOGIN_ENABLED). When true, render a "sign in with a handle" affordance that POSTs to /api/v1/auth/atproto/start. Independent of oauth_providers above. */
             atproto_login?: boolean;
             /** @description Whether ActivityPub federation is enabled on this instance (gates remote-content surfaces such as remote follows and remote videos). */
@@ -8606,7 +8611,7 @@ export interface components {
              */
             app_password: string;
             /**
-             * @description Optional PDS base URL; defaults to https://bsky.social. Must be an https, public origin.
+             * @description Optional public HTTPS PDS origin. New links use the instance default. Reconnecting an existing link uses its saved PDS.
              * @example https://bsky.social
              */
             pds_url?: string;

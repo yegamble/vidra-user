@@ -75,3 +75,10 @@ describe("ConnectionsView cross-posting copy", () => {
     expect(document.body.textContent).not.toMatch(/vidra/i);
   });
 });
+
+it("shows the instance PDS before a creator enters an app password", async () => {
+  mocks.getATProtoAccount.mockRejectedValue(new mocks.FakeApiError(404));
+  render(<ConnectionsView defaultPDS="https://pds.video.example" />);
+  const field = await screen.findByRole("textbox", { name: "Personal Data Server" });
+  expect((field as HTMLInputElement).value).toBe("https://pds.video.example");
+});

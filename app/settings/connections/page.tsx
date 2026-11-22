@@ -8,7 +8,8 @@ import { hideSoftwareName, platformLabel } from "@/lib/software-brand";
 // subject is the software, which a white-labelled instance may not name
 // (branding.hide_software_name). It sits mid-sentence, hence sentenceStart: false.
 export default async function ConnectionsPage() {
-  const label = platformLabel(hideSoftwareName(await getInstanceConfig()), {
+  const instance = await getInstanceConfig();
+  const label = platformLabel(hideSoftwareName(instance), {
     sentenceStart: false,
   });
   return (
@@ -23,7 +24,7 @@ export default async function ConnectionsPage() {
           </>
         }
       />
-      <ConnectionsView />
+      <ConnectionsView defaultPDS={instance?.atproto_pds_url} />
     </main>
   );
 }
