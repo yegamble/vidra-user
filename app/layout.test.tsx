@@ -4,6 +4,7 @@ import type { InstanceConfigSnapshot } from "@/lib/instance-config.server";
 
 const mocks = vi.hoisted(() => ({
   getInstanceConfig: vi.fn(),
+  getSitePageMenu: vi.fn().mockResolvedValue([]),
   localeCookie: undefined as string | undefined,
   ageCookie: undefined as string | undefined,
 }));
@@ -13,6 +14,8 @@ vi.mock("@/lib/instance-config.server", () => ({
   INSTANCE_CONFIG_REVALIDATE_SECONDS: 60,
 }));
 // proxy.ts sets x-nonce per request; the enforced CSP blocks scripts without it.
+vi.mock("@/lib/site-pages.server", () => ({ getSitePageMenu: mocks.getSitePageMenu }));
+
 vi.mock("next/headers", () => ({
   headers: async () => new Headers({ "x-nonce": "n0nce" }),
   cookies: async () => ({
@@ -26,6 +29,7 @@ vi.mock("next/headers", () => ({
 }));
 
 import RootLayout, { dynamic } from "./layout";
+import { SitePageMenu } from "@/components/SitePageMenu";
 import { AgeGate } from "@/components/AgeGate";
 import Script from "next/script";
 
@@ -124,6 +128,8 @@ describe("RootLayout", () => {
   });
 
   it("places announcements above page content inside the column beside the sidebar", async () => {
+    const pages = [{ slug: "privacy", title: "Privacy", menu_label: "" }];
+    mocks.getSitePageMenu.mockResolvedValueOnce(pages);
     const page = <main>Page content</main>;
     const html = await RootLayout({ children: page });
     const [, content] = findElement(html, "div").props.children;
@@ -133,7 +139,10 @@ describe("RootLayout", () => {
     expect(content.props.children[1].type).toBe(InstanceAnalytics);
     // The page itself sits inside the age gate, which passes it through when off.
     expect(content.props.children[2].type).toBe(AgeGate);
-    expect(content.props.children[2].props.children).toBe(page);
+    const [gatedPage, menu] = content.props.children[2].props.children;
+    expect(gatedPage).toBe(page);
+    expect(menu.type).toBe(SitePageMenu);
+    expect(menu.props.pages).toEqual(pages);
   });
 });
 
