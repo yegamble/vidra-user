@@ -86,6 +86,7 @@ test("links a Bluesky account and shows the connected status", async ({ page }) 
   await expect(autoPost).toBeVisible();
   await expect(autoPost).toBeChecked();
 
+  await page.getByLabel("Personal Data Server").fill(linkedStatus.pds_url);
   await page.getByLabel("Bluesky handle").fill("alice.bsky.social");
   await page.getByLabel("App password").fill("abcd-abcd-abcd-abcd");
 
@@ -96,6 +97,7 @@ test("links a Bluesky account and shows the connected status", async ({ page }) 
   await put;
 
   expect(putBody).toEqual({
+    pds_url: linkedStatus.pds_url,
     handle: "alice.bsky.social",
     app_password: "abcd-abcd-abcd-abcd",
     auto_post: true,
@@ -128,6 +130,7 @@ test("surfaces a bad-credential error honestly", async ({ page }) => {
 
   await gotoConnections(page);
 
+  await page.getByLabel("Personal Data Server").fill(linkedStatus.pds_url);
   await page.getByLabel("Bluesky handle").fill("alice.bsky.social");
   await page.getByLabel("App password").fill("wrong-pass-word-here");
   await page.getByRole("button", { name: "Connect Bluesky" }).click();
@@ -179,6 +182,7 @@ test("toggles auto-posting on a linked account (re-auth via app password)", asyn
   await put;
 
   expect(putBody).toEqual({
+    pds_url: linkedStatus.pds_url,
     handle: "alice.bsky.social",
     app_password: "abcd-abcd-abcd-abcd",
     auto_post: false,
