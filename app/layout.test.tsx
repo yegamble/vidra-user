@@ -67,6 +67,16 @@ async function renderWith(instance: InstanceConfigSnapshot | null, localeCookie?
 }
 
 describe("RootLayout", () => {
+  it("passes the instance's configured page slugs to the age gate", async () => {
+    vi.stubEnv("AGE_GATE_PUBLIC_PAGE_SLUGS", "privacy-policy, dmca, ");
+    try {
+      const gate = findElement(await renderWith(null), AgeGate);
+      expect(gate.props.publicPageSlugs).toEqual(["privacy-policy", "dmca"]);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("seeds analytics and its nonce, distinguishing unavailable and older servers", async () => {
     const analytics = { google_enabled: true, google_measurement_id: "G-TEST1234" };
     expect(findElement(await renderWith({ analytics } as InstanceConfigSnapshot), InstanceAnalytics).props).toMatchObject({ analytics, nonce: "n0nce" });

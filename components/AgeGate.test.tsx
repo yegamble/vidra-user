@@ -42,6 +42,15 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("AgeGate", () => {
+  it("shows a configured policy without recording age confirmation, then gates the next video", () => {
+    navigation.reset("/p/privacy-policy");
+    render(<AgeGate pending minimumAge={18} publicPageSlugs={["privacy-policy"]}>Policy text</AgeGate>);
+    expect(screen.getByText("Policy text")).toBeTruthy();
+    act(() => navigationMock.useRouter().push("/videos/abc"));
+    expect(screen.getByRole("heading", { name: "Confirm your age" })).toBeTruthy();
+    expect(mocks.remember).not.toHaveBeenCalled();
+  });
+
   it("shows the page when the server found nothing to ask", () => {
     renderGate(false);
     expect(page()).not.toBeNull();
