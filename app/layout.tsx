@@ -15,6 +15,8 @@ import { InstanceAdsProvider } from "@/components/InstanceAdsProvider";
 import { InstanceBanner } from "@/components/InstanceBanner";
 import { InstanceAnalytics } from "@/components/InstanceAnalytics";
 import { InstanceCustomization } from "@/components/InstanceCustomization";
+import { SitePageMenu } from "@/components/SitePageMenu";
+import { getSitePageMenu } from "@/lib/site-pages.server";
 import { Sidebar } from "@/components/Sidebar";
 import { SoftwareBrandProvider } from "@/components/SoftwareBrandProvider";
 import { ToastProvider } from "@/components/ui";
@@ -90,7 +92,7 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const instance = await getInstanceConfig();
+  const [instance, pageMenu] = await Promise.all([getInstanceConfig(), getSitePageMenu()]);
   // Per-request CSP nonce from proxy.ts; the enforced policy runs no script
   // without it. Next stamps its own scripts; these are the ones we emit.
   const nonce = (await headers()).get("x-nonce") ?? undefined;
@@ -144,6 +146,7 @@ export default async function RootLayout({
                   )}
                   <AgeGate pending={ageGate} minimumAge={ageGateMinimum(instance)}>
                     {children}
+                    <SitePageMenu pages={pageMenu} />
                   </AgeGate>
                 </div>
               </div>

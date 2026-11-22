@@ -81,7 +81,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-async function show(section: "vidra" | "technical" | "network", hidden: boolean) {
+async function show(section: "home" | "vidra" | "technical" | "network", hidden: boolean) {
   mocks.getInstanceCached.mockResolvedValue(instance(hidden));
   render(<InstanceAboutView section={section} />);
   // The identity hero is the settled-snapshot milestone (the skeleton renders
@@ -92,6 +92,12 @@ async function show(section: "vidra" | "technical" | "network", hidden: boolean)
 }
 
 describe("About tabs", () => {
+  it("resolves description links to the terms heading", async () => {
+    mocks.getInstanceAbout.mockResolvedValue({ ...about, terms: "Published terms." });
+    await show("home", false);
+    expect(screen.getByRole("heading", { name: "Terms" }).id).toBe("terms");
+  });
+
   it("offers the software tab while the software name is shown", async () => {
     await show("vidra", false);
     const nav = screen.getByRole("navigation", { name: "About categories" });

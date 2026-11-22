@@ -448,7 +448,7 @@ function GeneralSection({
 
         {hasTermsBlock ? (
           <div className="flex flex-col gap-3 border-t border-border-subtle pt-6">
-            <h2 className="text-lg font-bold tracking-tight text-fg">Terms</h2>
+            <h2 id="terms" className="scroll-mt-20 text-lg font-bold tracking-tight text-fg">Terms</h2>
             {about.terms ? <Markdown>{about.terms}</Markdown> : null}
             {instance.terms_url || instance.privacy_url ? (
               <ul className="flex flex-col gap-2 text-sm">
