@@ -183,6 +183,12 @@ export const ADMIN_NAV: readonly AdminNavItem[] = [
     group: "more",
   },
   {
+    href: "/admin/pages",
+    label: "Pages",
+    description: "Publish custom pages and choose their order in the site menu.",
+    group: "more",
+  },
+  {
     href: "/admin/media",
     label: "Media storage",
     description: "Garbage-collect stored media objects with no database reference.",
