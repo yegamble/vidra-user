@@ -36,8 +36,10 @@ export function ageGatePending(instance: GateInstance, cookieValue: string | und
 // carries the instance's terms.
 const EXEMPT = ["/about", "/login", "/signup", "/reset-password", "/verify-email", "/email-change", "/setup"];
 
-export function ageGateExempt(pathname: string | null): boolean {
+export function ageGateExempt(pathname: string | null, publicPageSlugs: readonly string[] = []): boolean {
   if (!pathname) return false;
+  const page = /^\/p\/([a-z0-9]+(?:-[a-z0-9]+)*)$/.exec(pathname);
+  if (page) return publicPageSlugs.includes(page[1]);
   return EXEMPT.some((path) => pathname === path || pathname.startsWith(`${path}/`));
 }
 

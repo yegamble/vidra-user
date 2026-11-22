@@ -31,10 +31,12 @@ import {
 export function AgeGate({
   pending,
   minimumAge,
+  publicPageSlugs,
   children,
 }: {
   pending: boolean;
   minimumAge: number;
+  publicPageSlugs?: readonly string[];
   children: ReactNode;
 }) {
   const t = useT();
@@ -52,7 +54,7 @@ export function AgeGate({
     if (pending && minimumAge > 0 && authed) rememberAgeConfirmation(minimumAge);
   }, [pending, minimumAge, authed]);
 
-  if (!gated || ageGateExempt(pathname)) return <>{children}</>;
+  if (!gated || ageGateExempt(pathname, publicPageSlugs)) return <>{children}</>;
 
   function enter() {
     if (!rememberAgeConfirmation(minimumAge) || !reloadForAgeGate()) setPassed(true);

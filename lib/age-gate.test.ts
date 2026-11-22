@@ -50,6 +50,16 @@ describe("age gate", () => {
     }
   });
 
+  it("lets visitors read only explicitly configured custom page slugs", () => {
+    const slugs = ["copyright", "privacy-policy", "*", "../videos", "notes/more"];
+    expect(ageGateExempt("/p/copyright", slugs)).toBe(true);
+    expect(ageGateExempt("/p/privacy-policy", slugs)).toBe(true);
+    expect(ageGateExempt("/p/copyright")).toBe(false);
+    for (const path of ["/p/private", "/p/copyright/extra", "/p/notes/more", "/videos", "/"]) {
+      expect(ageGateExempt(path, slugs), path).toBe(false);
+    }
+  });
+
   it("stores the confirmed age in a cookie the server can read", () => {
     expect(rememberAgeConfirmation(18)).toBe(true);
     expect(document.cookie).toContain(`${AGE_GATE_COOKIE}=18`);

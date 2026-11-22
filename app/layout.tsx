@@ -98,6 +98,8 @@ export default async function RootLayout({
   const nonce = (await headers()).get("x-nonce") ?? undefined;
   const { locale, dir, messages, t } = await getI18n();
   const ageGate = ageGatePending(instance, (await cookies()).get(AGE_GATE_COOKIE)?.value);
+  const publicPageSlugs = (process.env.AGE_GATE_PUBLIC_PAGE_SLUGS ?? "")
+    .split(",").map(slug => slug.trim()).filter(Boolean);
   return (
     <html lang={locale} dir={dir} className="h-full antialiased" suppressHydrationWarning>
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
@@ -144,7 +146,7 @@ export default async function RootLayout({
                   {ageGate ? null : (
                     <InstanceAnalytics analytics={instance ? instance.analytics ?? null : undefined} nonce={nonce ?? ""} />
                   )}
-                  <AgeGate pending={ageGate} minimumAge={ageGateMinimum(instance)}>
+                  <AgeGate pending={ageGate} minimumAge={ageGateMinimum(instance)} publicPageSlugs={publicPageSlugs}>
                     {children}
                     <SitePageMenu pages={pageMenu} />
                   </AgeGate>
