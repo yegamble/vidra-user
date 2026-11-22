@@ -34,7 +34,7 @@ type Phase = "loading" | "error" | "disabled" | "ready";
 // (ATProto, P11 extension) — outbound cross-posting only. Session-gated like the
 // rest of settings (the session lives in memory; a hard reload lands here signed
 // out until the refresh cookie restores it).
-export function ConnectionsView() {
+export function ConnectionsView({ defaultPDS = "" }: { defaultPDS?: string } = {}) {
   const { status } = useSession();
 
   if (status !== "authed") {
@@ -48,13 +48,13 @@ export function ConnectionsView() {
     );
   }
 
-  return <BlueskySection />;
+  return <BlueskySection defaultPDS={defaultPDS} />;
 }
 
 // BlueskySection owns the loaded ATProto link state. GET /me/atproto answers
 // 200 (linked), 404 (not linked → show the connect form), or 503 (the extension
 // is disabled on this instance → an honest not-available state, no form).
-function BlueskySection() {
+function BlueskySection({ defaultPDS }: { defaultPDS: string }) {
   // Two sentences name the software as the actor doing the cross-posting; a
   // white-labelled instance may not name it (branding.hide_software_name).
   // BOTH land mid-sentence — after "so" and after an em dash — so the neutral
@@ -127,7 +127,7 @@ function BlueskySection() {
           onDisabled={() => setPhase("disabled")}
         />
       ) : (
-        <BlueskyConnect onLinked={setAccount} onDisabled={() => setPhase("disabled")} />
+        <BlueskyConnect initialPDS={defaultPDS} onLinked={setAccount} onDisabled={() => setPhase("disabled")} />
       )}
     </section>
   );
@@ -180,6 +180,7 @@ function AppPasswordHelp() {
 // current status; the app password is always re-entered (the backend never
 // returns it and re-verifies on every write).
 function BlueskyConnect({
+  initialPDS,
   initialHandle = "",
   initialAutoPost = true,
   reconnect = false,
@@ -187,6 +188,7 @@ function BlueskyConnect({
   onDisabled,
   onCancel,
 }: {
+  initialPDS: string;
   initialHandle?: string;
   initialAutoPost?: boolean;
   reconnect?: boolean;
@@ -196,7 +198,7 @@ function BlueskyConnect({
 }) {
   const [handle, setHandle] = useState(initialHandle);
   const [appPassword, setAppPassword] = useState("");
-  const [pds, setPds] = useState("");
+  const [pds, setPds] = useState(initialPDS);
   const [autoPost, setAutoPost] = useState(initialAutoPost);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -210,13 +212,17 @@ function BlueskyConnect({
       setError("Enter your Bluesky app password.");
       return;
     }
+    if (!pds.trim()) {
+      setError("Enter the HTTPS address of the Personal Data Server for your account.");
+      return;
+    }
     setSubmitting(true);
     setError(null);
     const body: ATProtoLinkRequest = {
       handle: handle.trim(),
       app_password: appPassword.trim(),
       auto_post: autoPost,
-      ...(pds.trim() ? { pds_url: pds.trim() } : {}),
+      pds_url: pds.trim(),
     };
     try {
       const status = await api.linkATProtoAccount(body);
@@ -246,6 +252,31 @@ function BlueskyConnect({
           {error}
         </Alert>
       ) : null}
+
+      <div className="flex flex-col gap-1">
+        <label htmlFor="atproto-pds" className="text-sm font-medium text-fg">
+          Personal Data Server
+        </label>
+        <input
+          id="atproto-pds"
+          type="url"
+          spellCheck={false}
+          autoComplete="off"
+          required
+          maxLength={2000}
+          value={pds}
+          placeholder="https://pds.example.org"
+          onChange={(e) => {
+            setPds(e.target.value);
+            setError(null);
+          }}
+          aria-describedby="atproto-pds-help"
+          className={INPUT}
+        />
+        <span id="atproto-pds-help" className="text-xs text-fg-muted">
+          Your app password is sent to this server. Use the address that hosts your account.
+        </span>
+      </div>
 
       <div className="flex flex-col gap-1">
         <label htmlFor="atproto-handle" className="text-sm font-medium text-fg">
@@ -304,33 +335,7 @@ function BlueskyConnect({
         </div>
       </div>
 
-      <details className="text-sm text-fg-muted">
-        <summary className="cursor-pointer select-none font-medium text-fg">
-          Advanced: custom PDS
-        </summary>
-        <div className="mt-2 flex flex-col gap-1">
-          <label htmlFor="atproto-pds" className="text-sm font-medium text-fg">
-            PDS URL <span className="font-normal text-fg-muted">(optional)</span>
-          </label>
-          <input
-            id="atproto-pds"
-            type="url"
-            spellCheck={false}
-            autoComplete="off"
-            maxLength={2000}
-            value={pds}
-            placeholder="https://bsky.social"
-            onChange={(e) => {
-              setPds(e.target.value);
-              setError(null);
-            }}
-            className={INPUT}
-          />
-          <span className="text-xs text-fg-muted">
-            Leave blank for the default (bsky.social). Must be an https, public address.
-          </span>
-        </div>
-      </details>
+
 
       <div className="flex flex-wrap gap-2">
         <button type="submit" disabled={submitting} className={PRIMARY_BTN}>
@@ -379,6 +384,7 @@ function BlueskyStatus({
         </p>
         <BlueskyConnect
           reconnect
+          initialPDS={account.pds_url}
           initialHandle={account.handle}
           initialAutoPost={account.auto_post}
           onLinked={(status) => {
@@ -467,6 +473,7 @@ function AutoPostControl({
     try {
       const status = await api.linkATProtoAccount({
         handle: account.handle,
+        pds_url: account.pds_url,
         app_password: appPassword.trim(),
         auto_post: autoPost,
       });
