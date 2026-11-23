@@ -25,6 +25,9 @@ const nextConfig: NextConfig = {
       // the proxy sends them to vidra-core.)
       { source: "/c/:handle([^@/]+)", destination: "/channels/:handle", permanent: false },
       { source: "/a/:name([^@/]+)", destination: "/users/:name", permanent: false },
+      // The canonical channel page already opens on its Videos tab.
+      { source: "/c/:handle([^@/]+)/videos", destination: "/channels/:handle", permanent: false },
+      { source: "/channels/:handle([^@/]+)/videos", destination: "/channels/:handle", permanent: false },
       // NOTE: /videos/watch/:id is NOT handled here any more. It moved to
       // app/videos/watch/[id]/route.ts, because a static rewrite cannot do what
       // that path now needs: the uuid in it may be this instance's own id OR the
