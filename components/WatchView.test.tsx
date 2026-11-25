@@ -277,3 +277,9 @@ describe("WatchView signed-out resume", () => {
     expect(screen.queryByRole("button", { name: /Resume from/ })).toBeNull();
   });
 });
+
+it("shows when a migrated video was published after its upload", async () => {
+  const published_at = new Date(Date.now() - 2.5 * 86400000).toISOString();
+  render(<WatchView id="v1" initialVideo={{ ...video(), created_at: "2001-01-01T00:00:00Z", published_at }} />);
+  await waitFor(() => expect(document.body.textContent).toContain("2d ago"));
+});

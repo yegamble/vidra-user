@@ -441,7 +441,7 @@ export function WatchView({
 
   const meta: string[] = [];
   if (typeof video.views === "number") meta.push(t("watch.meta.views", { count: formatCount(video.views) }));
-  const when = relativeTime(video.created_at);
+  const when = relativeTime(video.published_at ?? video.created_at);
   if (when) meta.push(when);
 
   // The detail response carries the owning channel's handle/display name (Wave A

@@ -70,7 +70,7 @@ function UpNextRow({ video }: { video: Video }) {
 
   const meta: string[] = [];
   if (typeof video.views === "number") meta.push(`${formatCount(video.views)} views`);
-  const when = relativeTime(video.created_at);
+  const when = relativeTime(video.published_at ?? video.created_at);
   if (when) meta.push(when);
 
   // > 0 guard: a sub-second clip probes to 0 whole seconds, and a "0:00" badge

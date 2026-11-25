@@ -7806,6 +7806,11 @@ export interface components {
             sensitive_reason: string;
             /**
              * Format: date-time
+             * @description When the video was published on its source instance, if known. For display and newest-first browsing, fall back to created_at when absent.
+             */
+            published_at?: string;
+            /**
+             * Format: date-time
              * @description Creation time. On a remote card this is the origin's published time (falling back to when the video was fetched).
              */
             created_at: string;
@@ -7828,7 +7833,7 @@ export interface components {
             support?: string;
             /**
              * Format: date-time
-             * @description When the video was FIRST published elsewhere (a PeerTube import's originallyPublishedAt, or a date the creator set). Present on the detail and create/update views when known; omitted for anything first published on this instance, where created_at is the only date.
+             * @description When the video was FIRST published elsewhere (a PeerTube import's originallyPublishedAt, or a date the creator set). Present on the detail and create/update views when known; omitted for anything first published on this instance.
              */
             originally_published_at?: string;
             /** @description Probed duration in whole seconds, recorded by the media probe. Present on the detail endpoint and on card/feed views (feed, search, channel lists, subscriptions, saved, history) so a card can show a length badge or resume progress bar; omitted when unknown (not yet probed). */
@@ -17499,7 +17504,7 @@ export interface operations {
                 limit?: components["parameters"]["PageLimit"];
                 /** @description Rows to skip. Negative values are clamped to 0. */
                 offset?: components["parameters"]["PageOffset"];
-                /** @description Result ordering, using the same `-field`/`field` convention as the admin video list. `relevance` (the default) is trigram similarity then recency — the behaviour this endpoint had before it accepted a sort at all, so existing callers are unaffected. `published_at` is an alias of created_at: local videos carry no separate published_at column, and remote rows project COALESCE(published_at, fetched_at) into the same column. An unrecognised value is a 400, never a silent fallback to a different order. Anything other than `relevance` is served by the local SQL backend (see the description above). */
+                /** @description Result ordering, using the same `-field`/`field` convention as the admin video list. `relevance` (the default) is trigram similarity then recency — the behaviour this endpoint had before it accepted a sort at all, so existing callers are unaffected. Publication sorts use the source publication timestamp for imported videos, when present, and otherwise fall back to the local creation time. For remote rows the origin's publication time falls back to the fetch time. An unrecognised value is a 400, never a silent fallback to a different order. Anything other than `relevance` is served by the local SQL backend (see the description above). */
                 sort?: "relevance" | "-published_at" | "published_at" | "-views" | "views";
                 /** @description Narrow to a free-form tag (matched case-insensitively). Excludes remote results. */
                 tag?: string;
@@ -24635,7 +24640,7 @@ export interface operations {
             query?: {
                 /** @description Case-insensitive title substring filter. */
                 q?: string;
-                /** @description Ordering. Each key is accepted bare (ascending) or `-`-prefixed (descending). `published_at` is an ALIAS of `created_at`: videos carry no separate published_at column and the federated arm projects its own publish time into created_at, so they order the same rows the same way. The default reproduces the previous fixed ordering. */
+                /** @description Ordering. Each key is accepted bare (ascending) or `-`-prefixed (descending). `published_at` is an ALIAS of `created_at`: videos use creation time for this admin inventory and the federated arm projects its own publish time into created_at, so they order the same rows the same way. The default reproduces the previous fixed ordering. */
                 sort?: "-created_at" | "created_at" | "-published_at" | "published_at" | "-views" | "views" | "-duration" | "duration" | "title" | "-title" | "state" | "-state" | "-likes" | "likes" | "-comments" | "comments" | "-size_bytes" | "size_bytes";
                 /** @description Lifecycle states to include. Repeatable and/or comma-separated (`?state=draft&state=failed` and `?state=draft,failed` are equivalent). Absent means all states. */
                 state?: ("draft" | "processing" | "scheduled" | "quarantined" | "transcoding" | "published" | "failed")[];
