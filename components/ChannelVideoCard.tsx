@@ -51,7 +51,7 @@ export function ChannelVideoCard({
   }
 
   const views = typeof video.views === "number" ? t("panels.card.views", { count: formatCount(video.views) }) : null;
-  const age = relativeTime(video.created_at);
+  const age = relativeTime(video.published_at ?? video.created_at);
 
   return (
     <div className="group/card flex flex-col gap-2">

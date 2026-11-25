@@ -168,7 +168,7 @@ function SearchResultRow({
 
   const meta: string[] = [];
   if (typeof video.views === "number") meta.push(`${formatCount(video.views)} views`);
-  const when = relativeTime(video.created_at);
+  const when = relativeTime(video.published_at ?? video.created_at);
   if (when) meta.push(when);
 
   if (restrictedHidden) {

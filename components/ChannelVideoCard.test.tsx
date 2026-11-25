@@ -111,3 +111,9 @@ describe("ChannelVideoCard", () => {
     expect(mocks.previewProps?.previewEnabled).toBe(false);
   });
 });
+
+it("uses the source publication date on an imported channel card", () => {
+  const published_at = new Date(Date.now() - 2.5 * 86400000).toISOString();
+  render(<ChannelVideoCard video={video({ created_at: "2001-01-01T00:00:00Z", published_at })} />);
+  expect(document.body.textContent).toContain("2d ago");
+});

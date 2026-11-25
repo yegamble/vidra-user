@@ -91,7 +91,7 @@ export function VideoCard({
 
   const meta: string[] = [];
   if (typeof video.views === "number") meta.push(`${format.formatCount(video.views)} views`);
-  const when = format.relativeTime(video.created_at);
+  const when = format.relativeTime(video.published_at ?? video.created_at);
   if (when) meta.push(when);
 
   const progressPct =
