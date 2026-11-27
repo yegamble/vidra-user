@@ -46,9 +46,11 @@ const COMPONENT_LABEL: Record<string, string> = {
   // anything leaving this instance?" is asking about a queue.
   federation: "Federation queue",
   ipfs: "IPFS",
+  ipfs_reference: "IPFS reference pinning",
 };
 
-function componentLabel(key: string): string {
+function componentLabel(key: string, hasReference: boolean): string {
+  if (key === "ipfs" && hasReference) return "IPFS asset mirror";
   return COMPONENT_LABEL[key] ?? key.replace(/_/g, " ");
 }
 
@@ -61,31 +63,33 @@ const DETAIL_LABEL: Record<string, string> = {
   dead_lettered: "Dead-lettered",
   last_delivered_at: "Last delivered",
   pending: "Pending",
+  pinned: "Pinned",
+  probed_at: "Last checked",
 };
 
-/**
- * ComponentDetail renders a component's extra facts under its row.
- *
- * ABSENT last_delivered_at means nothing has ever been delivered, and it says
- * so in words rather than printing a zero timestamp — "never" is a state an
- * operator can act on, and 1970 reads as a bug.
- */
-function ComponentDetail({ detail }: { detail?: Record<string, string> }) {
-  if (!detail) return null;
-  const keys = Object.keys(detail).sort();
+function ComponentDetail({ name, detail = {} }: { name: string; detail?: Record<string, string> }) {
+  const reference = name === "ipfs_reference";
+  const facts = reference
+    ? { ...detail, pinned: /^\d+$/.test(detail.pinned ?? "") ? detail.pinned : "Unknown" }
+    : detail;
+  const keys = Object.keys(facts).sort();
   if (keys.length === 0) return null;
-  const hasQueueNumbers = "pending" in detail || "dead_lettered" in detail;
+  const hasDeliveryCounts = name === "federation" && ("pending" in facts || "dead_lettered" in facts);
   return (
     <dl className="flex flex-wrap gap-x-5 gap-y-1 pl-[18px] text-[12.5px] text-fg-muted">
       {keys.map((key) => (
         <div key={key} className="flex items-baseline gap-1.5">
-          <dt className="font-medium">{DETAIL_LABEL[key] ?? key.replace(/_/g, " ")}</dt>
+          <dt className="font-medium">
+            {reference && key === "pinned" ? "Verified pins" : DETAIL_LABEL[key] ?? key.replace(/_/g, " ")}
+          </dt>
           <dd className="tabular-nums">
-            {key === "last_delivered_at" ? formatDateTime(detail[key]) : detail[key]}
+            {key === "last_delivered_at" || key === "probed_at"
+              ? formatDateTime(facts[key]) || "Unknown"
+              : facts[key]}
           </dd>
         </div>
       ))}
-      {hasQueueNumbers && !("last_delivered_at" in detail) ? (
+      {hasDeliveryCounts && !("last_delivered_at" in facts) ? (
         <div className="flex items-baseline gap-1.5">
           <dt className="font-medium">Last delivered</dt>
           <dd>never</dd>
@@ -139,7 +143,9 @@ export function StatusPanel() {
     return <ErrorState message="Could not load system status." onRetry={refresh} />;
   }
 
-  const componentNames = Object.keys(data.components).sort();
+  const hasReference = Object.hasOwn(data.components, "ipfs_reference");
+  const componentNames = Object.keys(data.components).filter((key) => key !== "ipfs_reference").sort();
+  if (hasReference) componentNames.unshift("ipfs_reference");
   const badge = STATUS_BADGE[data.status] ?? STATUS_BADGE.ok;
 
   return (
@@ -195,7 +201,7 @@ export function StatusPanel() {
                       }`}
                     />
                     <span className="truncate text-sm font-medium text-fg">
-                      {componentLabel(name)}
+                      {componentLabel(name, hasReference)}
                     </span>
                   </span>
                   <span
@@ -222,17 +228,7 @@ export function StatusPanel() {
                       {c.error}
                     </span>
                   ) : null}
-                  {/* The FACTS behind the verdict. Only the federation queue
-                      sets these today, and last_delivered_at is the reason the
-                      block exists: a drained queue and an abandoned one both
-                      read as zero pending, and only the time of the last
-                      SUCCESSFUL delivery separates them. The number was
-                      computed on every probe and rendered into nothing.
-
-                      It shows on a healthy card too, not just a failing one:
-                      "ok, and nothing has left this instance since Tuesday" is
-                      the state an operator most needs to be able to notice. */}
-                  <ComponentDetail detail={c.detail} />
+                  <ComponentDetail name={name} detail={c.detail} />
                 </li>
               );
             })}
