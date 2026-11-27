@@ -1226,16 +1226,12 @@ export function VideoPlayer({
               {paused ? <PlayGlyph /> : <PauseGlyph />}
             </OverlayButton>
 
-            {/* Mute joins the bar at a 480px stage; below that it lives in the
-                overflow menu (a phone's hardware volume covers the common case). */}
-            <div className="hidden @min-[480px]/stage:contents">
-              <VolumeControl
-                volume={volume}
-                muted={muted}
-                onToggleMute={toggleMute}
-                onSetVolume={applyVolume}
-              />
-            </div>
+            <VolumeControl
+              volume={volume}
+              muted={muted}
+              onToggleMute={toggleMute}
+              onSetVolume={applyVolume}
+            />
 
             {/* Elapsed always; the "/ total" tail costs ~46px on a long video and is
                 held back until the stage can afford it. The total is never lost to

@@ -52,6 +52,37 @@ async function mockWatchPage(page: Page) {
   );
 }
 
+test.describe("touch audio controls", () => {
+  test.use({ hasTouch: true });
+
+  test("mute and unmute from the visible bar without covering settings", async ({ page }) => {
+    await mockWatchPage(page);
+    await page.goto("/videos/v1");
+    const bar = page.getByTestId("player-controls");
+    const media = page.getByTestId("video-player").locator("video").first();
+    await expect(bar.getByRole("button", { name: "Settings", exact: true })).toBeVisible();
+    // The route-mocked stream has no decoded frames; model its first 720p resize.
+    await media.evaluate((element: HTMLVideoElement) => {
+      Object.defineProperty(element, "videoHeight", { value: 720, configurable: true });
+      element.dispatchEvent(new Event("resize"));
+    });
+    for (const width of [320, 375, 390]) {
+      await page.setViewportSize({ width, height: 800 });
+      await bar.getByRole("button", { name: "Mute", exact: true }).tap();
+      await expect(media).toHaveJSProperty("muted", true);
+      await bar.getByRole("button", { name: "Unmute", exact: true }).tap();
+      await expect(media).toHaveJSProperty("muted", false);
+      const settings = bar.getByRole("button", { name: "Settings", exact: true });
+      const badge = settings.getByTestId("player-resolution");
+      await expect(badge).toHaveText("720p");
+      const iconBox = await settings.locator("svg").boundingBox();
+      const badgeBox = await badge.boundingBox();
+      if (!iconBox || !badgeBox) throw new Error("Settings glyph or quality badge missing");
+      expect(badgeBox.y + badgeBox.height).toBeLessThanOrEqual(iconBox.y);
+    }
+  });
+});
+
 for (const [label, width, height] of [
   ["small Android", 360, 740],
   ["iPhone SE", 375, 667],

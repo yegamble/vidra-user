@@ -31,6 +31,7 @@ export function PlayerOverflowMenu({ toggles, groups, resolution }: {
   groups: OverflowChoiceGroup[];
   resolution?: number | null;
 }) {
+  const showResolution = typeof resolution === "number" && resolution > 0;
   const { open, container, rootRef, buttonRef, popupRef, openPopup, closePopup, popupStyle, remeasure } = usePlayerPopup();
   const [navigation, setNavigation] = useState<{ path: string[]; focusIndex: number }>({ path: [], focusIndex: 0 });
   const { path } = navigation;
@@ -100,12 +101,12 @@ export function PlayerOverflowMenu({ toggles, groups, resolution }: {
 
   return (
     <div ref={rootRef} className="relative shrink-0">
-      <OverlayButton ref={buttonRef} label="Settings" tip={resolution ? `Settings · ${resolution}p` : "Settings"} aria-haspopup="menu" aria-expanded={open}
+      <OverlayButton ref={buttonRef} label="Settings" tip={showResolution ? `Settings · ${resolution}p` : "Settings"} aria-haspopup="menu" aria-expanded={open}
         onClick={() => open ? closePopup() : openRoot()}
         onKeyDown={(e) => { if (e.key === "ArrowDown" && !open) { e.preventDefault(); openRoot(); } }}>
-        <SettingsIcon size={24} strokeWidth={2.3} />
-        {resolution && resolution > 0 ? <span data-testid="player-resolution" aria-hidden="true"
-          className="pointer-events-none absolute -right-0.5 top-0.5 rounded bg-black/90 px-1 text-[9px] font-bold leading-3 text-white ring-1 ring-white/40">{resolution}p</span> : null}
+        <SettingsIcon size={24} className={showResolution ? "translate-y-1" : undefined} />
+        {showResolution ? <span data-testid="player-resolution" aria-hidden="true"
+          className="pointer-events-none absolute right-0 top-0 rounded bg-black/90 px-1 text-[9px] font-bold leading-3 text-white ring-1 ring-white/40">{resolution}p</span> : null}
       </OverlayButton>
       {open && container ? createPortal(
         <MenuSurface ref={popupRef} aria-label={active?.label ?? "Settings"} style={popupStyle}
