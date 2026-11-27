@@ -2556,15 +2556,14 @@ export const api = {
     }),
 
   /**
-   * GET /api/v1/admin/users — accounts newest first (admin only). Optional `q`
-   * filters by a username/email substring. Paginated via limit/offset.
+   * GET /api/v1/admin/users — staff can search and filter accounts before pagination.
    */
   getAdminUsers: (
-    params: PageParams & { q?: string } = {},
+    params: PageParams & { q?: string; filter?: keyof AdminUserListResponse["counts"] } = {},
     signal?: AbortSignal,
   ) =>
     apiRequest<AdminUserListResponse>("/api/v1/admin/users", {
-      query: { q: params.q, ...pageQuery(params) },
+      query: { q: params.q, filter: params.filter, ...pageQuery(params) },
       signal,
     }),
 

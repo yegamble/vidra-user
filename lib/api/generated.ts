@@ -6760,7 +6760,7 @@ export interface paths {
         };
         /**
          * List accounts (admin)
-         * @description Returns accounts, newest first, optionally filtered by a username/email substring (q). Admins and moderators. Paginated via limit (1–200, default 50) and offset; `total` counts the accounts matching the same q, so a client can tell how many pages exist.
+         * @description Admins and moderators can search accounts by username or email substring (q). Results are ordered newest first, with account ID breaking ties. Filter selection precedes pagination. The total counts the selected group. Counts cover every account matching q, independent of the selected group, limit and offset.
          */
         get: operations["listUsers"];
         put?: never;
@@ -9860,6 +9860,14 @@ export interface components {
             mfa_enabled: boolean;
         };
         AdminUserListResponse: components["schemas"]["PageMeta"] & {
+            counts: {
+                /** Format: int64 */
+                all: number;
+                /** Format: int64 */
+                staff: number;
+                /** Format: int64 */
+                deactivated: number;
+            };
             users: components["schemas"]["AdminUser"][];
         };
         /** @description The caller's storage picture: bytes currently stored and the effective quota (per-user override, else the instance default). quota_bytes is null when the caller is unlimited. */
@@ -32845,6 +32853,8 @@ export interface operations {
             query?: {
                 /** @description Username/email substring filter. */
                 q?: string;
+                /** @description All includes deleted-account tombstones. Staff includes every admin and moderator regardless of active status. Deactivated includes inactive accounts without a deletion timestamp. Inactive staff can belong to both staff and deactivated. */
+                filter?: "all" | "staff" | "deactivated";
                 limit?: number;
                 /** @description Rows to skip. Negative values are clamped to 0. */
                 offset?: components["parameters"]["PageOffset"];
@@ -32864,6 +32874,15 @@ export interface operations {
                     "application/json": components["schemas"]["AdminUserListResponse"];
                 };
             };
+            /** @description Invalid account filter. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Missing, invalid, or expired token. */
             401: {
                 headers: {
@@ -32873,7 +32892,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description The caller is not an admin. */
+            /** @description The caller is neither an admin nor a moderator. */
             403: {
                 headers: {
                     [name: string]: unknown;
