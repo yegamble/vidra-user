@@ -11,7 +11,7 @@ import { fractionAt, stepVolume, volumePercent } from "@/lib/player-ui";
 // mute OverlayButton (aria-pressed) beside a real ARIA slider (role="slider",
 // aria-label="Volume"). ArrowUp/Right and ArrowDown/Left step ±5%, Home/End jump
 // to 0/100. Setting a level implies unmute. The slider is hidden on the narrow
-// phone overlay (mute stays; hardware volume covers the rest) and shown from sm.
+// phone overlay and in narrow player columns. The mute button stays visible.
 export function VolumeControl({
   volume,
   muted,
@@ -100,7 +100,7 @@ export function VolumeControl({
           trackRef.current?.releasePointerCapture(e.pointerId);
           setScrubbing(false);
         }}
-        className="focus-ring-media group relative hidden h-11 w-16 cursor-pointer touch-none select-none items-center rounded-full sm:flex"
+        className="focus-ring-media group relative hidden h-11 w-16 cursor-pointer touch-none select-none items-center rounded-full sm:@min-[480px]/stage:flex"
       >
         <div className="relative h-1 w-full overflow-hidden rounded-full bg-white/25 transition-[height] duration-150 ease-out group-hover:h-1.5 group-focus-within:h-1.5 motion-reduce:transition-none">
           <div
