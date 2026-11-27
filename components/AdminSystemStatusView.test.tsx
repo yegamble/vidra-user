@@ -2,6 +2,7 @@
 
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { formatDateTime } from "@/lib/format";
 
 const mocks = vi.hoisted(() => ({
   getSystemStatus: vi.fn(),
@@ -507,5 +508,62 @@ describe("component detail", () => {
     render(<StatusPanel />);
     const row = (await screen.findByText("PostgreSQL")).closest("li");
     expect(within(row as HTMLElement).queryByText("Last delivered")).toBeNull();
+  });
+});
+
+describe("IPFS component status", () => {
+  it("lists the reference probe first and keeps the independent asset mirror status", async () => {
+    const checked = "2026-11-27T18:05:00Z";
+    mocks.getSystemStatus.mockResolvedValue(systemStatus(undefined, {
+      components: {
+        postgres: { status: "ok" },
+        ipfs: { status: "not_configured", detail: { pinned: "0", pending: "0" } },
+        ipfs_reference: { status: "ok", detail: { pinned: "1", probed_at: checked } },
+      },
+    }));
+    render(<StatusPanel />);
+    const reference = (await screen.findByText("IPFS reference pinning")).closest("li")!;
+    const mirror = screen.getByText("IPFS asset mirror").closest("li")!;
+    expect(screen.getAllByRole("listitem")[0]).toBe(reference);
+    expect(within(reference).getByText("OK")).toBeTruthy();
+    expect(within(reference).getByText("Verified pins").nextElementSibling?.textContent).toBe("1");
+    expect(within(reference).getByText("Last checked").nextElementSibling?.textContent).toBe(formatDateTime(checked));
+    expect(within(mirror).getByText("Not configured")).toBeTruthy();
+    expect(within(mirror).getByText("Pinned").nextElementSibling?.textContent).toBe("0");
+    expect(screen.queryByText("Last delivered")).toBeNull();
+  });
+
+  it.each([undefined, { pinned: "unknown" }])("keeps an unverified count unknown on a failed reference probe", async (detail) => {
+    mocks.getSystemStatus.mockResolvedValue(systemStatus(undefined, {
+      components: { ipfs_reference: { status: "down", error: "Probe unavailable", detail } },
+    }));
+    render(<StatusPanel />);
+    const row = (await screen.findByText("IPFS reference pinning")).closest("li")!;
+    expect(within(row).getByText("Down")).toBeTruthy();
+    expect(within(row).getByText("Probe unavailable")).toBeTruthy();
+    expect(within(row).getByText("Verified pins").nextElementSibling?.textContent).toBe("Unknown");
+  });
+
+  it("shows an explicit zero count for an empty reference pin set", async () => {
+    mocks.getSystemStatus.mockResolvedValue(systemStatus(undefined, {
+      components: { ipfs_reference: { status: "ok", detail: { pinned: "0" } } },
+    }));
+    render(<StatusPanel />);
+    const label = await screen.findByText("Verified pins");
+    expect(label.nextElementSibling?.textContent).toBe("0");
+  });
+
+  it("preserves the legacy label and scopes delivery history to federation", async () => {
+    mocks.getSystemStatus.mockResolvedValue(systemStatus(undefined, {
+      components: {
+        ipfs: { status: "paused", detail: { pending: "0" } },
+        other_queue: { status: "ok", detail: { pending: "5" } },
+      },
+    }));
+    render(<StatusPanel />);
+    const mirror = (await screen.findByText("IPFS")).closest("li")!;
+    expect(within(mirror).getByText("Paused")).toBeTruthy();
+    expect(screen.queryByText("IPFS reference pinning")).toBeNull();
+    expect(screen.queryByText("never")).toBeNull();
   });
 });
