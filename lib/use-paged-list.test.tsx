@@ -42,6 +42,13 @@ describe("usePagedList", () => {
     expect(result.current.pageLimit).toBe(20);
   });
 
+  it("keeps group counts with the page that returned them", async () => {
+    const load = vi.fn(async () => ({ ...page([{ id: "a" }]), metadata: { staff: 12 } }));
+    const { result } = renderHook(() => usePagedList<Row, { staff: number }>({ load }));
+    expect(result.current.metadata).toBeUndefined();
+    await waitFor(() => expect(result.current.metadata).toEqual({ staff: 12 }));
+  });
+
   it("believes the server's clamped limit over the one it asked for", async () => {
     nav.params = new URLSearchParams("limit=100");
     const load = vi.fn(async () => page([], { limit: 50, offset: 0 }));

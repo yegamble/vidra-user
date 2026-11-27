@@ -14,8 +14,10 @@ import { useListQuery, type ListQuery, type ListQueryState, type UseListQueryOpt
  * for: the backend clamps `limit`, so believing our own request would mis-size
  * every page label and every Next step.
  */
-export interface ListPage<T> {
+export interface ListPage<T, Meta = never> {
   items: T[];
+  /** Additional server data scoped to exactly this request and page. */
+  metadata?: Meta;
   total: number;
   limit: number;
   offset: number;
@@ -31,7 +33,7 @@ type ListStatus = "loading" | "error" | "ready";
  */
 const NO_ITEMS: unknown[] = [];
 
-export interface UsePagedListOptions<T> extends UseListQueryOptions {
+export interface UsePagedListOptions<T, Meta = never> extends UseListQueryOptions {
   /**
    * Fetch one page. Receives the current `{limit, offset, sort, filters}` and an
    * abort signal; returns the normalised page.
@@ -42,11 +44,12 @@ export interface UsePagedListOptions<T> extends UseListQueryOptions {
    * sort, the window) rather than captured from surrounding component state.
    * That is the same constraint that makes the state shareable as a URL.
    */
-  load: (query: ListQueryState, signal: AbortSignal) => Promise<ListPage<T>>;
+  load: (query: ListQueryState, signal: AbortSignal) => Promise<ListPage<T, Meta>>;
 }
 
-export interface PagedList<T> extends ListQuery {
+export interface PagedList<T, Meta = never> extends ListQuery {
   status: ListStatus;
+  metadata?: Meta;
   /** The rows of the current page. Empty while loading, on error, and for an empty page. */
   items: T[];
   /** How many rows match the current filters instance-wide — the header count. */
@@ -95,7 +98,7 @@ export interface PagedList<T> extends ListQuery {
  * Callers must render inside a `<Suspense>` boundary — `useListQuery` reads
  * `useSearchParams()`. `ListBoundary` is that boundary.
  */
-export function usePagedList<T>(options: UsePagedListOptions<T>): PagedList<T> {
+export function usePagedList<T, Meta = never>(options: UsePagedListOptions<T, Meta>): PagedList<T, Meta> {
   const { load, ...queryOptions } = options;
   const query = useListQuery(queryOptions);
   const { limit, offset, sort, filters } = query;
@@ -117,7 +120,7 @@ export function usePagedList<T>(options: UsePagedListOptions<T>): PagedList<T> {
   });
 
   const [attempt, setAttempt] = useState(0);
-  const [loaded, setLoaded] = useState<{ state: ListQueryState; attempt: number; page: ListPage<T> } | null>(null);
+  const [loaded, setLoaded] = useState<{ state: ListQueryState; attempt: number; page: ListPage<T, Meta> } | null>(null);
   const [failed, setFailed] = useState<{ state: ListQueryState; attempt: number } | null>(null);
 
   useEffect(() => {
@@ -176,6 +179,7 @@ export function usePagedList<T>(options: UsePagedListOptions<T>): PagedList<T> {
   return {
     ...query,
     status,
+    metadata: current?.metadata,
     items: current?.items ?? (NO_ITEMS as T[]),
     total: current?.total ?? 0,
     // Fall back on what we asked for so the pager is sized sanely on the first

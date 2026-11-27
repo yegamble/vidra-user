@@ -1140,9 +1140,9 @@ describe("api endpoints", () => {
     expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/stats");
   });
 
-  it("getAdminUsers targets the admin users endpoint with the q filter", async () => {
-    await api.getAdminUsers({ q: "ada", limit: 100 });
-    expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/users?q=ada&limit=100");
+  it("getAdminUsers sends search and account filters together", async () => {
+    await api.getAdminUsers({ q: "ada", filter: "staff", limit: 100 });
+    expect(calledUrl()).toBe("http://localhost:8080/api/v1/admin/users?q=ada&filter=staff&limit=100");
   });
 
   it("getAdminUsers omits q when not provided", async () => {
