@@ -243,58 +243,39 @@ describe("AdminUsersView search", () => {
   });
 });
 
-describe("AdminUsersView facet counts", () => {
-  it("says the counts are page-scoped once a second page exists", async () => {
-    mocks.getAdminUsers.mockResolvedValue({
-      users: [
-        account(0, { role: "admin" }),
-        account(1, { role: "moderator" }),
-        account(2, { is_active: false }),
-        account(3),
-      ],
-      total: TOTAL,
-      limit: PAGE,
-      offset: 0,
-    });
-    render(<AdminUsersView />);
+describe("AdminUsersView account filters", () => {
+  const counts = { all: TOTAL, staff: 12, deactivated: 26 };
 
-    // Counted over the loaded rows — which is all they can ever be.
-    const facets = await screen.findByRole("group", { name: "Filter this page of users" });
-    expect(facets.textContent).toContain("· 4");
-    expect(facets.textContent).toContain("· 2");
-    expect(facets.textContent).toContain("· 1");
-    // And the number next to 4,649 accounts is not allowed to read as a total.
-    expect(
-      screen.getByText(/accounts on\s+this page, not all/).textContent?.replace(/\s+/g, " "),
-    ).toContain("not all 4649");
+  it("shows search-wide counts even when the current page has no staff", async () => {
+    mocks.getAdminUsers.mockResolvedValue({ ...page(0, PAGE), counts });
+    render(<AdminUsersView />);
+    expect(await screen.findByRole("button", { name: "All, 4649" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Staff, 12" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Deactivated, 26" })).toBeTruthy();
   });
 
-  it("drops the caveat when the page is the whole instance", async () => {
-    mocks.getAdminUsers.mockResolvedValue({
-      users: [account(0, { role: "admin" }), account(1)],
-      total: 2,
-      limit: PAGE,
-      offset: 0,
-    });
+  it("finds staff beyond the current page, preserving the search and resetting the offset", async () => {
+    navigation.reset("/admin/users", "q=person&offset=10");
+    mocks.getAdminUsers.mockResolvedValueOnce({ ...page(10, PAGE), counts });
     render(<AdminUsersView />);
-
-    const facets = await screen.findByRole("group", { name: "Filter this page of users" });
-    expect(facets.textContent).toContain("· 2");
-    expect(screen.queryByText(/not all/)).toBeNull();
+    const chip = await screen.findByRole("button", { name: "Staff, 12" });
+    mocks.getAdminUsers.mockResolvedValueOnce({
+      ...page(0, PAGE, 12), users: Array.from({ length: PAGE }, (_, i) => account(42 + i, { role: "moderator" })), counts,
+    });
+    fireEvent.click(chip);
+    expect(await screen.findByRole("button", { name: "Open person42" })).toBeTruthy();
+    expect(requestedPage(1)).toMatchObject({ q: "person", filter: "staff", offset: 0 });
+    expect(screen.getByText("1–10 of 12")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Staff, 12" }).getAttribute("aria-pressed")).toBe("true");
   });
 
-  it("a facet that empties a page does not claim the instance has none", async () => {
-    mocks.getAdminUsers.mockResolvedValue(page(0, PAGE));
+  it("distinguishes an empty deactivated group from an empty instance", async () => {
+    navigation.reset("/admin/users", "filter=deactivated");
+    mocks.getAdminUsers.mockResolvedValue({ ...page(0, 0, 0), counts: { ...counts, deactivated: 0 } });
     render(<AdminUsersView />);
-    await screen.findByText("1–10 of 4649");
-
-    // Not one staff account on this page of 10 regular users.
-    fireEvent.click(screen.getByRole("button", { name: /^Staff/ }));
-
-    const empties = await screen.findAllByText(
-      "No accounts on this page match this filter. Try another page, or another facet.",
-    );
-    expect(empties.length).toBeGreaterThan(0);
+    expect(await screen.findByText("No matching users")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "All, 4649" })).toBeTruthy();
+    expect(requestedPage(0)).toMatchObject({ filter: "deactivated" });
   });
 });
 
