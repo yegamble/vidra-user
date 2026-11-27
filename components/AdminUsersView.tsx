@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 
 import { useT } from "@/components/I18nProvider";
-import { SLOT, slot, withSlot, withSlots } from "@/components/admin/messageSlot";
+import { SLOT, withSlot } from "@/components/admin/messageSlot";
 import { AdminPagination, RolePill } from "@/components/admin/AdminControls";
 import { UnlockSignInButton } from "@/components/admin/UnlockSignInButton";
 import { BanUserDialog } from "@/components/admin/BanUserDialog";
@@ -23,7 +23,7 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Spinner } from "@/components/ui/Spinner";
 import { Toggle } from "@/components/ui/Toggle";
 import { api, errorMessage } from "@/lib/api";
-import type { AdminUser, UserRole } from "@/lib/api";
+import type { AdminUser, AdminUserListResponse, UserRole } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { formatBytes, formatMonthYear, relativeTime } from "@/lib/format";
 import type { PlainMessageKey, Translate } from "@/lib/i18n";
@@ -48,7 +48,10 @@ const roleOptions = (t: Translate) => ROLE_OPTIONS.map((o) => ({ value: o.value,
 // formatBytes' "GB" unit) and stored as an exact byte count.
 const GIB = 1024 ** 3;
 
-type QuotaFilter = "all" | "staff" | "deactivated";
+type AccountFilter = keyof AdminUserListResponse["counts"];
+function accountFilter(value: string | undefined): AccountFilter {
+  return value === "staff" || value === "deactivated" ? value : "all";
+}
 
 type UserPatch = {
   role?: UserRole;
@@ -84,12 +87,7 @@ const SELF_REASON = "admin.users.guard.self";
 const OWNER_REASON = "admin.users.guard.owner";
 const LAST_ADMIN_REASON = "admin.users.guard.lastAdmin";
 
-/**
- * Whether the loaded rows are the WHOLE instance. The accounts endpoint filters
- * by search text only — there is no role or status parameter — so a searched or
- * paged view cannot prove how many admins exist, and a "last admin" claim there
- * would be a guess. In that state the control stays enabled and core answers.
- */
+// Only a complete unsearched roster can establish that an account is the last admin.
 function rosterIsComplete(loaded: number, total: number, query: string) {
   return query.trim() === "" && total <= loaded;
 }
@@ -197,45 +195,52 @@ function UsersList({
   // is only ever set from the desktop table; mobile keeps its inline-control
   // cards, so it stays null there.
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [filter, setFilter] = useState<QuotaFilter>("all");
   const [creating, setCreating] = useState(false);
 
-  const list = usePagedList<AdminUser>({
-    filterKeys: ["q"],
+  const list = usePagedList<AdminUser, AdminUserListResponse["counts"]>({
+    filterKeys: ["q", "filter"],
     load: (query, signal) =>
       api
         .getAdminUsers(
-          { q: query.filters.q, limit: query.limit, offset: query.offset },
+          {
+            q: query.filters.q,
+            filter: accountFilter(query.filters.filter),
+            limit: query.limit,
+            offset: query.offset,
+          },
           signal,
         )
         .then((res) => ({
           items: res.users,
+          metadata: res.counts,
           total: res.total,
           limit: res.limit,
           offset: res.offset,
         })),
   });
 
-  const { items: users, total, pageLimit, pageOffset, patch, drop } = list;
+  const { items: users, total, pageLimit, pageOffset, metadata: counts, patch, reload } = list;
+  const hasFilters = list.status !== "ready" || Boolean(counts);
+  const filter = hasFilters ? accountFilter(list.filters.filter) : "all";
   const query = list.filters.q ?? "";
 
-  // Reflect a saved edit back into the list (the PATCH returns the updated user).
   const onUpdated = useCallback(
-    (updated: AdminUser) =>
-      patch((all) => all.map((u) => (u.id === updated.id ? updated : u))),
-    [patch],
+    (updated: AdminUser) => {
+      const previous = users.find((user) => user.id === updated.id);
+      if (previous?.role !== updated.role || previous?.is_active !== updated.is_active) {
+        // The account may move between groups and another row may enter the page.
+        reload();
+      } else {
+        patch((rows) => rows.map((user) => user.id === updated.id ? updated : user));
+      }
+    },
+    [users, reload, patch],
   );
 
-  // A hard-deleted account is gone for good — drop its row, close its detail,
-  // and take it off the total so the pager doesn't keep counting a row that no
-  // longer exists anywhere.
-  const onDeleted = useCallback(
-    (id: string) => {
-      drop((u) => u.id !== id);
-      setSelectedId((cur) => (cur === id ? null : cur));
-    },
-    [drop],
-  );
+  const onDeleted = useCallback((id: string) => {
+    setSelectedId((current) => current === id ? null : current);
+    reload();
+  }, [reload]);
 
   // Leaving the current page — by searching, paging, or resizing the page —
   // takes the open detail with it: the account it was showing is no longer in
@@ -245,37 +250,6 @@ function UsersList({
     run();
   }, []);
 
-  // Facet counts over the loaded page. They cannot be anything else: the list
-  // endpoint filters by search text only (no role or status parameter exists),
-  // so there is no request that could answer "how many admins does this instance
-  // have" — and inventing one from a single page would put a wrong number in
-  // front of an operator. They are therefore labelled as page-scoped in the
-  // group's accessible name, unconditionally, rather than only once a second
-  // page exists.
-  const counts = useMemo(
-    () => ({
-      all: users.length,
-      staff: users.filter((u) => u.role !== "user").length,
-      deactivated: users.filter((u) => u.is_active === false).length,
-    }),
-    [users],
-  );
-
-  // True when the instance has more accounts than this page holds — the state
-  // in which a page-scoped count would otherwise pass for an instance-wide one.
-  const paged = total > users.length;
-
-  // A facet that empties a page has not proved the instance has no such
-  // accounts — only that this page has none.
-  const facetEmptyMessage = paged ? t("admin.users.facetEmptyPaged") : t("admin.users.facetEmpty");
-
-  const visible = useMemo(() => {
-    if (filter === "staff") return users.filter((u) => u.role !== "user");
-    if (filter === "deactivated")
-      return users.filter((u) => u.is_active === false);
-    return users;
-  }, [users, filter]);
-
   const selected = selectedId
     ? (users.find((u) => u.id === selectedId) ?? null)
     : null;
@@ -284,8 +258,8 @@ function UsersList({
   // promoting a second admin releases the last-admin gate on the next render.
   const guardFor = useCallback(
     (u: AdminUser) =>
-      accountGuard(u, { isSelf: u.id === currentUserId, users, total, query }),
-    [currentUserId, users, total, query],
+      accountGuard(u, { isSelf: u.id === currentUserId, users, total: counts?.all ?? total, query }),
+    [currentUserId, users, counts?.all, total, query],
   );
 
   const pager = (
@@ -328,39 +302,17 @@ function UsersList({
           onSubmit={(next) => leavePage(() => list.setFilter("q", next))}
         />
 
-        <div className="flex flex-col gap-1.5">
-          <FilterChipGroup<QuotaFilter>
-            size="sm"
-            // The name says "this page" whether or not there IS a second page:
-            // the counts are page-scoped by construction, and a label that only
-            // admits it sometimes teaches the wrong reading the rest of the time.
-            label={t("admin.users.filterLabel")}
-            value={filter}
-            onChange={setFilter}
-            options={[
-              { value: "all", label: t("admin.users.filter.all"), count: counts.all },
-              { value: "staff", label: t("admin.users.filter.staff"), count: counts.staff },
-              {
-                value: "deactivated",
-                label: t("admin.users.filter.deactivated"),
-                count: counts.deactivated,
-              },
-            ]}
-          />
-          {/* Only worth spelling out once there is a second page. On an instance
-              that fits on one, the page IS the instance and the counts are totals. */}
-          {paged ? (
-            <p className="px-1 text-[11.5px] leading-relaxed text-fg-muted">
-              {withSlots(
-                t("admin.users.pageScoped", { accounts: slot("accounts"), total: slot("total") }),
-                {
-                  accounts: <span className="tabular-nums">{counts.all}</span>,
-                  total: <span className="tabular-nums">{total}</span>,
-                },
-              )}
-            </p>
-          ) : null}
-        </div>
+        {hasFilters && <FilterChipGroup<AccountFilter>
+          size="sm"
+          label={t("admin.users.filterLabel")}
+          value={filter}
+          onChange={(next) => leavePage(() => list.setFilter("filter", next === "all" ? undefined : next))}
+          options={[
+            { value: "all", label: t("admin.users.filter.all"), count: counts?.all },
+            { value: "staff", label: t("admin.users.filter.staff"), count: counts?.staff },
+            { value: "deactivated", label: t("admin.users.filter.deactivated"), count: counts?.deactivated },
+          ]}
+        />}
       </div>
 
       {list.status === "loading" ? (
@@ -378,14 +330,14 @@ function UsersList({
             title={
               pageOffset > 0
                 ? t("admin.users.empty.offset.title")
-                : query
+                : query || filter !== "all"
                   ? t("admin.users.empty.search.title")
                   : t("admin.users.empty.none.title")
             }
             message={
               pageOffset > 0
                 ? t("admin.users.empty.offset.message")
-                : query
+                : query || filter !== "all"
                   ? t("admin.users.empty.search.message")
                   : t("admin.users.empty.none.message")
             }
@@ -396,27 +348,18 @@ function UsersList({
         <>
           {/* Mobile: the DR11 per-user cards with inline controls. */}
           <ul className="flex flex-col gap-3 lg:hidden">
-            {visible.length === 0 ? (
-              <li>
-                <EmptyState
-                  title={t("admin.users.emptyView")}
-                  message={facetEmptyMessage}
+            {users.map((u) => (
+              <li key={u.id}>
+                <UserRow
+                  user={u}
+                  isSelf={u.id === currentUserId}
+                  viewerIsAdmin={viewerIsAdmin}
+                  guard={guardFor(u)}
+                  onUpdated={onUpdated}
+                  onDeleted={onDeleted}
                 />
               </li>
-            ) : (
-              visible.map((u) => (
-                <li key={u.id}>
-                  <UserRow
-                    user={u}
-                    isSelf={u.id === currentUserId}
-                    viewerIsAdmin={viewerIsAdmin}
-                    guard={guardFor(u)}
-                    onUpdated={onUpdated}
-                    onDeleted={onDeleted}
-                  />
-                </li>
-              ))
-            )}
+            ))}
           </ul>
 
           {/* Desktop console: the design's users table → user detail. */}
@@ -433,14 +376,9 @@ function UsersList({
                 onDeleted={onDeleted}
                 onTransferred={list.reload}
               />
-            ) : visible.length === 0 ? (
-              <EmptyState
-                title={t("admin.users.emptyView")}
-                message={facetEmptyMessage}
-              />
             ) : (
               <UsersTable
-                users={visible}
+                users={users}
                 currentUserId={currentUserId}
                 onOpen={setSelectedId}
               />

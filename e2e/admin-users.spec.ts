@@ -188,19 +188,22 @@ test("an admin can change a user's role via the segmented control in the detail"
   page,
 }) => {
   await signIn(page, "admin");
+  let alice = adminUser("u2", "alice", "user");
   await page.route(USERS, (route) =>
     route.fulfill({
       json: {
-        users: [adminUser("u1", "boss", "admin"), adminUser("u2", "alice", "user")],
+        users: [adminUser("u1", "boss", "admin"), alice],
+        counts: { all: 2, staff: alice.role === "user" ? 1 : 2, deactivated: 0 },
         total: 2,
         limit: 100,
         offset: 0,
       },
     }),
   );
-  await page.route(UPDATE, (route) =>
-    route.fulfill({ json: adminUser("u2", "alice", "moderator") }),
-  );
+  await page.route(UPDATE, (route) => {
+    alice = adminUser("u2", "alice", "moderator");
+    return route.fulfill({ json: alice });
+  });
 
   const desktop = await openUsers(page);
   await desktop.getByRole("button", { name: "Open alice" }).click();
@@ -270,10 +273,12 @@ test("an admin can set and reset a user's storage quota override", async ({ page
 
 test("an admin can deactivate a user", async ({ page }) => {
   await signIn(page, "admin");
+  let alice = { ...adminUser("u2", "alice", "user"), ban_reason: "" };
   await page.route(USERS, (route) =>
     route.fulfill({
       json: {
-        users: [adminUser("u1", "boss", "admin"), adminUser("u2", "alice", "user")],
+        users: [adminUser("u1", "boss", "admin"), alice],
+        counts: { all: 2, staff: 1, deactivated: alice.is_active ? 0 : 1 },
         total: 2,
         limit: 100,
         offset: 0,
@@ -283,9 +288,8 @@ test("an admin can deactivate a user", async ({ page }) => {
   let patched: unknown = null;
   await page.route(UPDATE, (route) => {
     patched = route.request().postDataJSON();
-    return route.fulfill({
-      json: { ...adminUser("u2", "alice", "user", false), ban_reason: "posting spam links" },
-    });
+    alice = { ...alice, is_active: false, ban_reason: "posting spam links" };
+    return route.fulfill({ json: alice });
   });
 
   const desktop = await openUsers(page);
@@ -309,17 +313,20 @@ test("an admin can deactivate a user", async ({ page }) => {
 
 test("an admin can permanently delete a user after the double confirm", async ({ page }) => {
   await signIn(page, "admin");
+  let deletedUrl = "";
   await page.route(USERS, (route) =>
     route.fulfill({
       json: {
-        users: [adminUser("u1", "boss", "admin"), adminUser("u2", "alice", "user")],
+        users: [adminUser("u1", "boss", "admin"), deletedUrl
+          ? { ...adminUser("u2", "deleted-u2", "user", false), deleted_at: "2026-01-02T00:00:00Z" }
+          : adminUser("u2", "alice", "user")],
+        counts: { all: 2, staff: 1, deactivated: 0 },
         total: 2,
         limit: 100,
         offset: 0,
       },
     }),
   );
-  let deletedUrl = "";
   await page.route(UPDATE, (route) => {
     if (route.request().method() !== "DELETE") return route.fallback();
     deletedUrl = route.request().url();
