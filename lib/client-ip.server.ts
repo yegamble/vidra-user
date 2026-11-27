@@ -128,13 +128,12 @@ function looksLikeIpv6(value: string): boolean {
 // them:
 //
 //   lib/instance-config.server.ts, lib/instance-homepage.server.ts,
-//   lib/video.server.ts, lib/featured.server.ts
+//   lib/featured.server.ts
 //
-// All four use `next: { revalidate: N }`. Their responses are shared across
+// These use `next: { revalidate: N }`. Their responses are shared across
 // every viewer, and the Next data cache keys on the request headers — adding a
 // per-viewer header would mint one cache entry per client IP, turning a fetch
 // that fires once a minute into one that fires on every render. That is
-// strictly worse for the limiter than the shared bucket it would be fixing, and
-// reading headers() would drag `/videos/[id]`'s metadata pass dynamic as well.
+// strictly worse for the limiter than the shared bucket it would be fixing.
 // A cached fetch runs at most once per revalidation window, so it is not what
 // exhausts the budget in the first place.

@@ -23,6 +23,7 @@ export async function GET(
     const decoded = peertubeShortUUIDToUUID(id);
     if (decoded !== null) video = await getPublicVideoByLegacyUUID(decoded);
   }
+  if (video instanceof Response) return video;
   const target = video === null ? id : video.id;
   return new Response(null, {
     status: 302,

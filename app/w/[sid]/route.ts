@@ -29,6 +29,7 @@ export async function GET(
   if (sourceUUID === null) return new Response("Not found", { status: 404 });
 
   const video = await getPublicVideoByLegacyUUID(sourceUUID);
+  if (video instanceof Response) return video;
   if (video === null) return new Response("Not found", { status: 404 });
 
   // Straight to the canonical /v/{code} — one hop, not two. Before the flip
