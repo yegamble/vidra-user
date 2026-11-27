@@ -17781,6 +17781,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description The database is temporarily unavailable (database_unavailable) or the lookup exceeded the request deadline (request_timeout). */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
     getVideo: {
@@ -17814,6 +17823,15 @@ export interface operations {
             };
             /** @description No video with that id, or it is not visible to this ordinary non-owner caller. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The database is temporarily unavailable (database_unavailable) or the lookup exceeded the request deadline (request_timeout). */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
