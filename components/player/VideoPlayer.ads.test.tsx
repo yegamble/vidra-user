@@ -3,14 +3,15 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { useRef, type ComponentProps } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { InstanceAdsProvider } from "@/components/InstanceAdsProvider";
+import { StaffDocumentBoundary } from "@/components/StaffDocumentBoundary";
 import type { Video } from "@/lib/api";
 import type { InstanceResponse } from "@/lib/api/types";
 import type { VastDocument } from "@/lib/vast";
 import { resetPlayerSettings } from "@/lib/player-settings";
 import { VideoPlayer } from "./VideoPlayer";
-const mocks = vi.hoisted(() => ({ loadVast: vi.fn(), trackVast: vi.fn(), markVastPlayed: vi.fn(), engine: vi.fn(),
+const mocks = vi.hoisted(() => ({ pathname: "/", loadVast: vi.fn(), trackVast: vi.fn(), markVastPlayed: vi.fn(), engine: vi.fn(),
   onPlay: vi.fn(), onPause: vi.fn(), onTimeUpdate: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push() {} }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push() {} }), usePathname: () => mocks.pathname }));
 vi.mock("@/lib/instance-defaults", async original => ({ ...await original<typeof import("@/lib/instance-defaults")>(), primeInstanceDefaults() {} }));
 vi.mock("@/lib/vast-client", () => ({ loadVast: mocks.loadVast, trackVast: mocks.trackVast }));
 vi.mock("@/lib/vast-cooldown", () => ({ canPlayVast: () => true, markVastPlayed: mocks.markVastPlayed }));
@@ -28,6 +29,23 @@ function Harness(props: Options) {
   return <VideoPlayer video={VIDEO} videoRef={ref} startAt={null} {...props}
     onPlay={mocks.onPlay} onPause={mocks.onPause} onTimeUpdate={mocks.onTimeUpdate} />;
 }
+it.each(["/admin", "/admin/videos", "/moderation/quarantine", "/mod/reports"])(
+  "keeps preroll, midroll and postroll off on %s even with explicit tags", (pathname) => {
+    mocks.pathname = pathname;
+    const { container } = render(
+      <StaffDocumentBoundary isolateScripts={false}>
+        <Harness variant="embed" autoplay adBreaks={{ before: "/before", mid: "/mid", midAt: 1, after: "/after" }} />
+      </StaffDocumentBoundary>,
+    );
+    const video = container.querySelector("video")!;
+    fireEvent.play(video);
+    Object.defineProperty(video, "currentTime", { configurable: true, value: 2 });
+    fireEvent.timeUpdate(video);
+    fireEvent.ended(video);
+    expect(mocks.loadVast).not.toHaveBeenCalled();
+    expect(mocks.trackVast).not.toHaveBeenCalled();
+  },
+);
 it("advertises API transport readiness before preroll loads content metadata", () => {
   const { container } = render(<Harness variant="embed" adBreaks={{ before: "/tag.xml" }} />);
   const content = container.querySelector("video")!;
@@ -37,6 +55,7 @@ it("advertises API transport readiness before preroll loads content metadata", (
 });
 let resolveAd: (ad: VastDocument | null) => void;
 beforeEach(() => {
+  mocks.pathname = "/";
   vi.useFakeTimers(); localStorage.clear();
   mocks.loadVast.mockImplementation(() => new Promise(resolve => { resolveAd = resolve; }));
   vi.spyOn(HTMLMediaElement.prototype, "play").mockImplementation(function (this: HTMLMediaElement) {

@@ -21,6 +21,7 @@ import { PlaybackFeedback } from "@/components/player/PlaybackFeedback";
 import { EndCard } from "@/components/player/EndCard";
 import { PrerollAd } from "@/components/player/PrerollAd";
 import { useVastPreroll } from "@/components/player/use-vast-preroll";
+import { useStaffDocument } from "@/components/StaffDocumentBoundary";
 import { useVastBreaks } from "@/components/player/use-vast-breaks";
 import { markVastPlayed } from "@/lib/vast-cooldown";
 import { useT } from "@/components/I18nProvider";
@@ -211,7 +212,8 @@ export function VideoPlayer({
 }) {
   const t = useT();
   const instanceAds = useInstanceAds();
-  const adBreaks = adBreaksOverride !== undefined ? adBreaksOverride : instanceAds === undefined ? { pending: true }
+  const staff = useStaffDocument();
+  const adBreaks = staff ? null : adBreaksOverride !== undefined ? adBreaksOverride : instanceAds === undefined ? { pending: true }
     // Embeds with ads turned off make no tag request at all.
     : instanceAds && !(variant === "embed" && instanceAds.embed_enabled === false)
       ? { before: instanceAds.vast_tag_url || null, mid: instanceAds.midroll_tag_url || null,

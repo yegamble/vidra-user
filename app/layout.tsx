@@ -14,7 +14,8 @@ import { I18nProvider } from "@/components/I18nProvider";
 import { InstanceAdsProvider } from "@/components/InstanceAdsProvider";
 import { InstanceBanner } from "@/components/InstanceBanner";
 import { InstanceAnalytics } from "@/components/InstanceAnalytics";
-import { InstanceCustomization } from "@/components/InstanceCustomization";
+import { InstanceCustomization, instanceCustomScriptHash } from "@/components/InstanceCustomization";
+import { StaffDocumentBoundary } from "@/components/StaffDocumentBoundary";
 import { SitePageMenu } from "@/components/SitePageMenu";
 import { getSitePageMenu } from "@/lib/site-pages.server";
 import { Sidebar } from "@/components/Sidebar";
@@ -121,41 +122,43 @@ export default async function RootLayout({
         <a href="#main-content" className="skip-link">
           {t("a11y.skipToContent")}
         </a>
-        {/* Three providers, one indent: all are context with no markup. */}
-        <I18nProvider locale={locale} messages={messages}><SoftwareBrandProvider hidden={hideSoftwareName(instance)}><InstanceAdsProvider ads={ageGate ? null : instance ? instance.ads ?? null : undefined}>
-          <AuthProvider>
-            <SecureMessagingBootstrap />
-            <PlayerSettingsBootstrap />
-            <ContentPreferencesBootstrap />
-            <ToastProvider>
-              <Header instance={instance} />
-              <div className="flex w-full flex-1">
-                <Sidebar />
-                {/* overflow-x-clip: the watch page's ambient glow deliberately
-                    bleeds past the player (components/watch/AmbientGlow.tsx), and
-                    this column is where that bleed is absorbed so the document
-                    never scrolls sideways (e2e/responsive.spec.ts). CLIP, not
-                    hidden: `hidden` would make this a scroll container, which
-                    breaks sticky descendants and scroll-into-view on focus. */}
-                <div
-                  id="main-content"
-                  tabIndex={-1}
-                  className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-clip focus:outline-none"
-                >
-                  <InstanceBanner instance={instance} nonce={nonce} />
-                  {ageGate ? null : (
-                    <InstanceAnalytics analytics={instance ? instance.analytics ?? null : undefined} nonce={nonce ?? ""} />
-                  )}
-                  <AgeGate pending={ageGate} minimumAge={ageGateMinimum(instance)} publicPageSlugs={publicPageSlugs}>
-                    {children}
-                    <SitePageMenu pages={pageMenu} />
-                  </AgeGate>
+        <StaffDocumentBoundary isolateScripts={!ageGate && Boolean(instanceCustomScriptHash(instance))}>
+          {/* Three providers, one indent: all are context with no markup. */}
+          <I18nProvider locale={locale} messages={messages}><SoftwareBrandProvider hidden={hideSoftwareName(instance)}><InstanceAdsProvider ads={ageGate ? null : instance ? instance.ads ?? null : undefined}>
+            <AuthProvider>
+              <SecureMessagingBootstrap />
+              <PlayerSettingsBootstrap />
+              <ContentPreferencesBootstrap />
+              <ToastProvider>
+                <Header instance={instance} />
+                <div className="flex w-full flex-1">
+                  <Sidebar />
+                  {/* overflow-x-clip: the watch page's ambient glow deliberately
+                      bleeds past the player (components/watch/AmbientGlow.tsx), and
+                      this column is where that bleed is absorbed so the document
+                      never scrolls sideways (e2e/responsive.spec.ts). CLIP, not
+                      hidden: `hidden` would make this a scroll container, which
+                      breaks sticky descendants and scroll-into-view on focus. */}
+                  <div
+                    id="main-content"
+                    tabIndex={-1}
+                    className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-clip focus:outline-none"
+                  >
+                    <InstanceBanner instance={instance} nonce={nonce} />
+                    {ageGate ? null : (
+                      <InstanceAnalytics analytics={instance ? instance.analytics ?? null : undefined} nonce={nonce ?? ""} />
+                    )}
+                    <AgeGate pending={ageGate} minimumAge={ageGateMinimum(instance)} publicPageSlugs={publicPageSlugs}>
+                      {children}
+                      <SitePageMenu pages={pageMenu} />
+                    </AgeGate>
+                  </div>
                 </div>
-              </div>
-              <BottomTabBar />
-            </ToastProvider>
-          </AuthProvider>
-        </InstanceAdsProvider></SoftwareBrandProvider></I18nProvider>
+                <BottomTabBar />
+              </ToastProvider>
+            </AuthProvider>
+          </InstanceAdsProvider></SoftwareBrandProvider></I18nProvider>
+        </StaffDocumentBoundary>
       </body>
     </html>
   );
