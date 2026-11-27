@@ -38,10 +38,10 @@ export function WatchChannelCard({
   const t = useT();
   const { formatCount } = useFormat();
   return (
-    <div className="flex items-center gap-3 py-1">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 py-1">
       <Link
         href={`/channels/${handle}`}
-        className="focus-ring group flex min-w-0 flex-1 items-center gap-3 rounded-lg"
+        className="focus-ring group flex min-w-0 flex-[1_1_14rem] items-center gap-3 rounded-lg"
       >
         <Avatar src={channelAvatarUrl(handle)} name={name} className="h-10 w-10 text-[15px]" />
         <div className="min-w-0">
@@ -55,15 +55,17 @@ export function WatchChannelCard({
           ) : null}
         </div>
       </Link>
-      <FollowButton
-        handle={handle}
-        channelName={name}
-        initialFollowing={isFollowing}
-        initialNotificationSetting={notificationSetting}
-        onDelta={onDelta}
-        className="shrink-0 px-4"
-      />
-      {videoId ? <RemoteInteractionButton kind="video" id={videoId} className="shrink-0" /> : null}
+      <div className="flex max-w-full flex-wrap items-center gap-3">
+        <FollowButton
+          handle={handle}
+          channelName={name}
+          initialFollowing={isFollowing}
+          initialNotificationSetting={notificationSetting}
+          onDelta={onDelta}
+          className="shrink-0 px-4"
+        />
+        {videoId ? <RemoteInteractionButton kind="video" id={videoId} className="shrink-0" /> : null}
+      </div>
     </div>
   );
 }

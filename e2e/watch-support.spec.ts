@@ -93,6 +93,38 @@ test("shows the channel row with follower count and a Follow affordance", async 
   await expect(prompt.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/login?return_to=%2Fvideos%2Fv1");
 });
 
+test("channel identity stays readable beside or above its watch actions", async ({ page }) => {
+  await mockWatch(page, []);
+  await page.goto("/videos/v1");
+  const channel = page.getByRole("link", { name: /Grade House.*48.2K followers/ });
+  const follow = page.getByRole("button", { name: "Follow", exact: true });
+  const interact = page.getByRole("button", { name: "Interact from your instance" });
+  await expect(channel).toBeVisible();
+  await expect(interact).toBeVisible();
+
+  for (const width of [320, 375, 390, 1280]) {
+    await page.setViewportSize({ width, height: 800 });
+    const [identity, followBox, interactBox] = await Promise.all([
+      channel.boundingBox(), follow.boundingBox(), interact.boundingBox(),
+    ]);
+    if (!identity || !followBox || !interactBox) throw new Error("Missing watch channel controls");
+    for (const label of ["Grade House", "48.2K followers"]) {
+      const fits = await channel.getByText(label, { exact: true }).evaluate((element) => {
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        return range.getClientRects().length === 1 && element.scrollWidth <= element.clientWidth;
+      });
+      expect(fits, `${label} must fit on one line at ${width}px`).toBe(true);
+    }
+    for (const button of [followBox, interactBox]) {
+      expect(button.x).toBeGreaterThanOrEqual(0);
+      expect(button.x + button.width).toBeLessThanOrEqual(width);
+      if (width < 640) expect(button.y).toBeGreaterThanOrEqual(identity.y + identity.height);
+      else expect(button.x).toBeGreaterThanOrEqual(identity.x + identity.width);
+    }
+  }
+});
+
 test("Support opens a dialog with the QR, mono address, and verified pill", async ({ page }) => {
   await mockWatch(page, [ethAddress(true)]);
   await page.goto("/videos/v1");
