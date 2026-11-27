@@ -3,7 +3,7 @@
 //
 // Every one of them wants the same body — build the URL, ask for JSON, treat a
 // non-OK response as absent, parse, and swallow anything thrown — and they
-// differ only in three knobs that MUST stay per-site:
+// share fetch behavior while keeping the following choices at each call site:
 //
 //   freshness       Whether the read bypasses the Next data cache (a navigation
 //                   destination, or a document whose staleness is a correctness
@@ -45,14 +45,15 @@ export type ServerJsonOptions<T> = {
   timeoutMs?: number;
   /** Value to resolve for a 404, when "absent" is a valid, stable state rather than a failure. */
   on404?: T;
+  /** Legacy redirect handlers can answer a retryable failure before committing to a target. */
+  onTransientFailure?: (status: 429 | 503, retryAfter: string | null) => T;
 };
 
 /**
  * Read one public JSON document from vidra-core server-side. Anonymous (no
  * bearer token — it sees exactly what a link-preview crawler sees) and it never
- * throws: an unreachable backend, a non-OK status, a timeout, or a non-JSON body
- * all resolve to null so the caller degrades to its fallback instead of erroring
- * the page.
+ * throws. By default a failed read resolves to null. Route handlers can
+ * distinguish an absent document from a transient failure using the callbacks.
  *
  * `path` is everything after the API base, e.g. `/api/v1/instance`.
  */
@@ -93,9 +94,12 @@ export async function serverJson<T>(
         : { signal: AbortSignal.timeout(options.timeoutMs) }),
     });
     if (res.status === 404 && options.on404 !== undefined) return options.on404;
+    if (res.status === 429 || res.status === 408 || res.status >= 500) {
+      return options.onTransientFailure?.(res.status === 429 ? 429 : 503, res.headers.get("Retry-After")) ?? null;
+    }
     if (!res.ok) return null;
     return (await res.json()) as T;
   } catch {
-    return null;
+    return options.onTransientFailure?.(503, null) ?? null;
   }
 }

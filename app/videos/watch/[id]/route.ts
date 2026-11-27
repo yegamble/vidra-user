@@ -27,6 +27,7 @@ export async function GET(
   const { id } = await params;
   const video = await getPublicVideoByLegacyUUID(id);
 
+  if (video instanceof Response) return video;
   // Falling back to /videos/{id} rather than 404ing keeps the behaviour the
   // next.config rule had for an unresolvable id: the watch page renders and
   // reports "not found" itself, and a private video still reaches its owner

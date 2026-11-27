@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@/lib/client-ip.server", () => ({
+  clientIpForwardHeaders: async () => ({ "x-forwarded-for": "192.0.2.17" }),
+}));
+
 import {
   getPublicVideo,
   getPublicVideoByCode,
@@ -46,24 +50,30 @@ describe("the public watch document reads", () => {
     const spy = fetchSpy();
     await getPublicVideo("11111111-1111-4111-8111-111111111111");
     const init = initOf(spy);
+    expect(new Headers(init.headers).get("x-forwarded-for")).toBe("192.0.2.17");
     expect(init.cache).toBe("no-store");
     expect(init.next).toBeUndefined();
+    expect(init.signal).toBeInstanceOf(AbortSignal);
   });
 
   it("reads a video by short code uncached", async () => {
     const spy = fetchSpy();
     await getPublicVideoByCode("abcdefghijk");
     const init = initOf(spy);
+    expect(new Headers(init.headers).get("x-forwarded-for")).toBe("192.0.2.17");
     expect(init.cache).toBe("no-store");
     expect(init.next).toBeUndefined();
+    expect(init.signal).toBeInstanceOf(AbortSignal);
   });
 
   it("resolves a legacy uuid uncached, so a deleted video stops redirecting", async () => {
     const spy = fetchSpy();
     await getPublicVideoByLegacyUUID("22222222-2222-4222-8222-222222222222");
     const init = initOf(spy);
+    expect(new Headers(init.headers).get("x-forwarded-for")).toBe("192.0.2.17");
     expect(init.cache).toBe("no-store");
     expect(init.next).toBeUndefined();
+    expect(init.signal).toBeInstanceOf(AbortSignal);
   });
 
   it("still resolves null when the video is gone, rather than reusing a body", async () => {

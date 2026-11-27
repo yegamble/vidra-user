@@ -102,19 +102,15 @@ test("a LEGACY short link lands on the watch page and ends on the canonical code
   );
 });
 
-test("a legacy /videos/watch/ link redirects to the canonical watch page, query intact", async ({
-  page,
-}) => {
-  await mockWatch(page);
-  // The format vidra-core federation and its Bluesky auto-poster minted; this
-  // app never routed it, so it 404s without the next.config.ts redirect.
-  await page.goto(`/videos/watch/${VIDEO_ID}?t=5`);
-
-  // The route handler cannot resolve it here (a server-side fetch, which
-  // page.route does not intercept), so it falls back to /videos/{uuid} — the
-  // old behaviour — and the watch page rewrites the bar to the canonical code.
-  await expect(page).toHaveURL(new RegExp(`/v/${CODE}\\?t=5$`));
-  await expect(page.getByRole("heading", { name: "Short Link Me" })).toBeVisible();
+test("a legacy watch link can be retried when the resolver is offline", async ({ page }) => {
+  // This browser-only lane intentionally runs without a server-side API.
+  // The backed lane tests the redirect and the resulting player's title.
+  const path = `/videos/watch/${VIDEO_ID}?t=5`;
+  const response = await page.goto(path);
+  expect(response?.status()).toBe(503);
+  expect(response?.headers()["cache-control"]).toContain("no-store");
+  expect(new URL(page.url()).pathname).toBe(`/videos/watch/${VIDEO_ID}`);
+  await expect(page.getByText("Video lookup temporarily unavailable. Please try again.")).toBeVisible();
 });
 
 test("an unresolvable short link 404s instead of redirecting", async ({ page }) => {

@@ -1,9 +1,4 @@
-// Server-side public-video fetch (config-parity W15, completing W4's watch-page
-// og:image precedence). Mirrors lib/instance-config.server.ts: React cache()
-// deduplicates within one render pass, the Next data cache revalidates across
-// requests, and every failure resolves to null — a missing/private/password
-// video (the public GET answers 404) or an unreachable backend degrades to the
-// layout's instance metadata defaults without erroring the page.
+// Server-side anonymous reads for watch metadata and PeerTube redirect handlers.
 
 import { cache } from "react";
 
@@ -36,7 +31,11 @@ import { serverJson } from "@/lib/server-json";
 // could share one backend read for up to a minute. On a hot video that is the
 // difference between ~1 request/minute and one per view. WatchView's own client
 // fetch is unchanged.
-const PUBLIC_VIDEO_FRESHNESS = "no-store" as const;
+const PUBLIC_VIDEO_READ = {
+  freshness: "no-store",
+  forwardClientIp: true,
+  timeoutMs: 5000,
+} as const;
 
 /**
  * Fetch one video's public detail document server-side (anonymous — no bearer
@@ -44,9 +43,7 @@ const PUBLIC_VIDEO_FRESHNESS = "no-store" as const;
  */
 export const getPublicVideo = cache(
   async (id: string): Promise<Video | null> =>
-    serverJson<Video>(`/api/v1/videos/${encodeURIComponent(id)}`, {
-      freshness: PUBLIC_VIDEO_FRESHNESS,
-    }),
+    serverJson<Video>(`/api/v1/videos/${encodeURIComponent(id)}`, PUBLIC_VIDEO_READ),
 );
 
 /**
@@ -60,14 +57,13 @@ export const getPublicVideo = cache(
  */
 export const getPublicVideoByCode = cache(
   async (code: string): Promise<Video | null> =>
-    serverJson<Video>(`/api/v1/videos/resolve?code=${encodeURIComponent(code)}`, {
-      freshness: PUBLIC_VIDEO_FRESHNESS,
-    }),
+    serverJson<Video>(`/api/v1/videos/resolve?code=${encodeURIComponent(code)}`, PUBLIC_VIDEO_READ),
 );
 
 /**
  * Resolve a uuid from an OLDER public URL to the video it now names,
- * server-side and anonymous. Never throws.
+ * server-side and anonymous. Return a retryable HTTP response to the route when
+ * the public lookup cannot determine whether a video exists.
  *
  * Two namespaces reach this and both are uuids, so core serves them with one
  * lookup: this instance's own id (the /videos/watch/{uuid} form remote
@@ -75,8 +71,14 @@ export const getPublicVideoByCode = cache(
  * a PeerTube instance, which is what its /w/{shortUUID} links decode to.
  */
 export const getPublicVideoByLegacyUUID = cache(
-  async (uuid: string): Promise<Video | null> =>
-    serverJson<Video>(`/api/v1/videos/resolve?legacy_uuid=${encodeURIComponent(uuid)}`, {
-      freshness: PUBLIC_VIDEO_FRESHNESS,
+  async (uuid: string): Promise<Video | Response | null> =>
+    serverJson<Video | Response>(`/api/v1/videos/resolve?legacy_uuid=${encodeURIComponent(uuid)}`, {
+      ...PUBLIC_VIDEO_READ,
+      onTransientFailure(status, retryAfter) {
+        const headers = new Headers({ "Cache-Control": "no-store" });
+        // Core's limiter reports a delay in whole seconds.
+        if (retryAfter && /^\d+$/.test(retryAfter)) headers.set("Retry-After", retryAfter);
+        return new Response("Video lookup temporarily unavailable. Please try again.", { status, headers });
+      },
     }),
 );
