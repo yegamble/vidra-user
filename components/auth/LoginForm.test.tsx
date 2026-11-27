@@ -50,6 +50,14 @@ afterEach(() => {
   challengeMock.mockReset();
 });
 
+describe("Sign-in form transport", () => {
+  it.each([false, true])("uses POST for the initial form (second factor: %s)", (mfaPending) => {
+    getInstanceMock.mockResolvedValue({ oauth_providers: [], atproto_login: false });
+    const { container } = render(<LoginForm mfaPending={mfaPending} />);
+    expect(container.querySelector("form")?.method).toBe("post");
+  });
+});
+
 // The SSO second factor lands here. The callback issued NO session, parked the
 // mfa_token in an httpOnly cookie, and redirected with the FLAG ?mfa=required —
 // the page's whole input is that flag, which is exactly the point: a token in

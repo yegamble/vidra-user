@@ -257,6 +257,7 @@ export function LoginForm({
   if (challenging) {
     return (
       <form
+        method="post"
         noValidate
         onSubmit={(e) => {
           e.preventDefault();
@@ -307,7 +308,7 @@ export function LoginForm({
           type="submit"
           size="lg"
           className="w-full"
-          disabled={submitting || (recoveryMode ? code.trim() === "" : code.length < 6)}
+          disabled={status === "restoring" || submitting || (recoveryMode ? code.trim() === "" : code.length < 6)}
         >
           {submitting ? "Verifying…" : "Verify code"}
         </Button>
@@ -350,6 +351,7 @@ export function LoginForm({
 
   return (
     <form
+      method="post"
       noValidate
       onSubmit={(e) => {
         e.preventDefault();
@@ -409,7 +411,7 @@ export function LoginForm({
         </Link>
       </div>
 
-      <Button type="submit" size="lg" className="w-full" disabled={submitting}>
+      <Button type="submit" size="lg" className="w-full" disabled={status === "restoring" || submitting}>
         {submitting ? "Signing in…" : "Sign in"}
       </Button>
 
