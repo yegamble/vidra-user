@@ -27,6 +27,11 @@ import { buildAccentOverrideCss } from "@/lib/contrast";
 
 const HEX_HASH = /^[0-9a-f]{8,128}$/i;
 
+export function instanceCustomScriptHash(instance: InstanceConfigSnapshot | null) {
+  const hash = instance?.customization?.js_hash;
+  return hash && HEX_HASH.test(hash) ? hash : null;
+}
+
 // nonce: under the enforced nonce + 'strict-dynamic' CSP a parser-inserted
 // <script src> runs only with it; CSP3 browsers ignore the API-origin allowlist.
 // scripts=false leaves the custom script out (the age gate holds it back until
@@ -35,9 +40,8 @@ type Props = { instance: InstanceConfigSnapshot | null; nonce?: string; scripts?
 export function InstanceCustomization({ instance, nonce, scripts = true }: Props) {
   const customization = instance?.customization;
   const cssHash = customization?.css_hash;
-  const jsHash = customization?.js_hash;
   const css = cssHash && HEX_HASH.test(cssHash) ? cssHash : null;
-  const js = scripts && jsHash && HEX_HASH.test(jsHash) ? jsHash : null;
+  const js = scripts ? instanceCustomScriptHash(instance) : null;
   const accentCss = buildAccentOverrideCss(customization?.primary_color ?? "");
   if (!css && !js && !accentCss) return null;
   return (
