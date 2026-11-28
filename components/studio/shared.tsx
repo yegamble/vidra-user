@@ -200,6 +200,9 @@ export function scheduleToIso(local: string): string | undefined {
 // creator SEES is the catalog's studio.errors.safetyScan, which must equal it
 // in English (pinned by safety-scan.test.tsx).
 export const SAFETY_SCAN_REJECTED_MESSAGE =
+  "This file was rejected by the instance's safety scan.";
+// Older upload sessions and import jobs retain the sentence written by their worker.
+const PREVIOUS_SAFETY_SCAN_REJECTED_MESSAGE =
   "This file was rejected by the instance's safety scan and was not stored.";
 
 // SAFETY_SCAN_REJECTED_CODE is the stable machine-readable reason. The UI keys
@@ -236,7 +239,9 @@ export function importOrUploadError(err: unknown, source: "file" | "url", t: Tra
     // upload_failed. Recognise the sentence there so the same outcome does not
     // get the generic "check the URL" copy, which would send a creator to debug
     // a link that was fetched perfectly well.
-    if (err.message === SAFETY_SCAN_REJECTED_MESSAGE) return t("studio.errors.safetyScan");
+    if (err.message === SAFETY_SCAN_REJECTED_MESSAGE || err.message === PREVIOUS_SAFETY_SCAN_REJECTED_MESSAGE) {
+      return t("studio.errors.safetyScan");
+    }
     if (source === "url" && err.status === 422) {
       return t("studio.errors.urlUnreachable");
     }

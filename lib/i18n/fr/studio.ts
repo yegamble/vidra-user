@@ -401,7 +401,7 @@ export const studio = {
   "studio.upload.stage.metadata": "Récupération des métadonnées",
   "studio.upload.stage.downloading": "Téléchargement",
   "studio.upload.stage.processing": "Analyse et traitement",
-  "studio.errors.safetyScan": "Ce fichier a été rejeté par l’analyse de sécurité de l’instance et n’a pas été stocké.",
+  "studio.errors.safetyScan": "Ce fichier a été rejeté par l’analyse de sécurité de l’instance.",
   "studio.errors.scannerNotConfigured": "Cette instance ne peut pas accepter de fichiers actuellement : son outil d’analyse de sécurité est indisponible. Rien n’a été stocké — réessayez plus tard ou contactez l’administrateur.",
   "studio.errors.unsupportedType": "Ce type de vidéo n’est pas pris en charge.",
   "studio.errors.tooLarge": "Ce fichier est trop volumineux.",
