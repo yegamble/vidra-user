@@ -21,6 +21,7 @@ export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
   readonly requestId?: string;
+  readonly retryAfter?: string;
   readonly fields?: FieldError[];
   /**
    * The video a `password_required` 401 refers to. Core sends it ONLY on that
@@ -43,6 +44,7 @@ export class ApiError extends Error {
     code: string;
     message: string;
     requestId?: string;
+    retryAfter?: string;
     fields?: FieldError[];
     videoId?: string;
     mailReason?: MailSendFailureReason;
@@ -53,6 +55,7 @@ export class ApiError extends Error {
     this.status = args.status;
     this.code = args.code;
     this.requestId = args.requestId;
+    this.retryAfter = args.retryAfter;
     this.fields = args.fields;
     this.videoId = args.videoId;
     this.mailReason = args.mailReason;
@@ -115,7 +118,7 @@ function buildUrl(path: string, query?: RequestOptions["query"]): string {
  * status to an ApiError. Shared by the fetch client (below) and the XHR upload
  * path (upload.ts) so both transports surface identical errors.
  */
-export function apiErrorFromBody(status: number, text: string): ApiError {
+export function apiErrorFromBody(status: number, text: string, retryAfter?: string): ApiError {
   let code = "http_error";
   let message = `request failed with status ${status}`;
   let requestId: string | undefined;
@@ -139,6 +142,7 @@ export function apiErrorFromBody(status: number, text: string): ApiError {
   }
   return new ApiError({
     status,
+    retryAfter,
     code,
     message,
     requestId,
@@ -156,7 +160,7 @@ async function toApiError(res: Response): Promise<ApiError> {
   } catch {
     // An unreadable body — keep the generic message.
   }
-  return apiErrorFromBody(res.status, text);
+  return apiErrorFromBody(res.status, text, res.headers.get("Retry-After") ?? undefined);
 }
 
 // doRequest performs one HTTP round trip (no retry logic) with the given

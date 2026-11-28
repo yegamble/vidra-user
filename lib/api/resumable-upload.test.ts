@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { setAccessToken } from "./auth-store";
 import { ApiError } from "./client";
+import { UPLOAD_CANCELLED_CODE } from "./upload";
 import { api } from "./endpoints";
 import {
   findResumableUploadSession,
@@ -93,6 +94,7 @@ describe("resumableUpload", () => {
     vi.spyOn(api, "getVideo").mockResolvedValue(publishedVideo());
   });
   afterEach(() => {
+    vi.useRealTimers();
     setAccessToken(null);
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
@@ -250,6 +252,66 @@ describe("resumableUpload", () => {
     const err = await resumableUpload("v1", makeFile(), { retryBaseMs: 0 }).catch((e: unknown) => e);
     expect((err as ApiError).status).toBe(409);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["chunk", "complete"] as const)("waits for Retry-After before repeating the same %s request", async (stage) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-28T10:00:00Z"));
+    vi.mocked(api.completeUploadSession).mockRestore();
+    const attempts: RequestInit[] = [];
+    const firstAttempt = Promise.withResolvers<void>();
+    fetchMock.mockImplementation((url: string, opts: RequestInit) => {
+      const target = stage === "chunk" ? "/chunks/0" : "/complete";
+      if (url.endsWith(target) && attempts.push(opts) === 1) {
+        firstAttempt.resolve();
+        const retry = stage === "chunk" ? "60" : "Sat, 28 Nov 2026 10:01:00 GMT";
+        return new Response(null, { status: 429, headers: { "Retry-After": retry } });
+      }
+      const complete = url.endsWith("/complete");
+      const n = complete ? 2 : Number(url.split("/").pop());
+      return chunkResponse(statusFor([0, 1, 2].slice(0, n + 1), complete ? "completed" : "active"));
+    });
+    const result = resumableUpload("v1", makeFile()).catch((err: unknown) => err);
+    // Computing the file fingerprint uses native crypto before the first PUT.
+    await firstAttempt.promise;
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(59_999);
+    expect(attempts).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(attempts).toHaveLength(2);
+    expect(attempts[0].body).toBe(attempts[1].body);
+    await expect(result).resolves.toMatchObject({ video: { id: "v1" } });
+  });
+
+  it("cancels a rate-limit wait without repeating the PUT", async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const firstAttempt = Promise.withResolvers<void>();
+    fetchMock.mockImplementation(() => {
+      firstAttempt.resolve();
+      return new Response(null, { status: 429, headers: { "Retry-After": "60" } });
+    });
+    const result = resumableUpload("v1", makeFile(), { signal: controller.signal }).catch((err: unknown) => err);
+    await firstAttempt.promise;
+    await vi.advanceTimersByTimeAsync(1_000);
+    controller.abort();
+    await expect(result).resolves.toMatchObject({ code: UPLOAD_CANCELLED_CODE });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("preserves the resumable session when Retry-After exceeds the automatic wait limit", async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 429, headers: { "Retry-After": "3600" } }));
+    await expect(resumableUpload("v1", makeFile())).rejects.toMatchObject({ status: 429 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(findResumableUploadSession({ name: "clip.mp4", size: 10 })?.uploadId).toBe("up1");
+  });
+
+  it("uses the configured retry budget when a rate limit has no usable delay", async () => {
+    fetchMock.mockImplementation(() => new Response(null, { status: 429, headers: { "Retry-After": "unavailable" } }));
+    await expect(resumableUpload("v1", makeFile(), { chunkRetries: 2, retryBaseMs: 0 })).rejects.toMatchObject({ status: 429 });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(api.completeUploadSession).not.toHaveBeenCalled();
   });
 
   // --- asynchronous completion (202 → poll) --------------------------------
