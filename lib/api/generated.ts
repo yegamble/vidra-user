@@ -2308,6 +2308,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/videos/{id}/ipfs-reference/{generation}/{file}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read an individually approved current public HLS reference
+         * @description This optional same-origin source reads through the operator's IPFS reference node. Follow relative playlist links with literal directory separators. GET and HEAD check publication approval and live eligibility on every request. Responses are private and must not be cached.
+         */
+        get: operations["getApprovedReferenceFile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/videos/{id}/hls/master.m3u8": {
         parameters: {
             query?: never;
@@ -18566,6 +18586,60 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
+            };
+        };
+    };
+    getApprovedReferenceFile: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description A single byte range. */
+                Range?: string;
+            };
+            path: {
+                id: string;
+                generation: string;
+                /** @description Relative path within the approved HLS tree. */
+                file: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description An approved HLS playlist or media file. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Requested byte range. */
+            206: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unknown, ineligible, replaced or unapproved media. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unsatisfiable or unsupported byte range. */
+            416: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Reference playback is temporarily unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
