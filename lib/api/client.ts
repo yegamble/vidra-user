@@ -170,15 +170,18 @@ async function doRequest<T>(
   const url = buildUrl(path, opts.query);
   const correlationId = requestId();
 
-  // A FormData body is a multipart upload: let the browser set the
-  // content-type (with its boundary) and send it as-is, no JSON encoding.
-  const isForm = typeof FormData !== "undefined" && opts.body instanceof FormData;
-
   const headers: Record<string, string> = {
     accept: "application/json",
     "x-correlation-id": correlationId,
   };
-  if (opts.body !== undefined && !isForm) {
+  let body: BodyInit | undefined;
+  if (typeof FormData !== "undefined" && opts.body instanceof FormData) {
+    body = opts.body; // The browser supplies the multipart boundary.
+  } else if (typeof Blob !== "undefined" && opts.body instanceof Blob) {
+    body = opts.body; // A file slice can be streamed again after token renewal.
+    headers["content-type"] = "application/octet-stream";
+  } else if (opts.body !== undefined) {
+    body = JSON.stringify(opts.body);
     headers["content-type"] = "application/json";
   }
   if (token) {
@@ -212,12 +215,7 @@ async function doRequest<T>(
     res = await fetch(url, {
       method,
       headers,
-      body:
-        opts.body === undefined
-          ? undefined
-          : isForm
-            ? (opts.body as FormData)
-            : JSON.stringify(opts.body),
+      body,
       signal: opts.signal,
       ...(opts.credentials ? { credentials: opts.credentials } : {}),
       ...(opts.keepalive ? { keepalive: true } : {}),
