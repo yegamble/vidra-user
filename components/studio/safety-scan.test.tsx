@@ -47,7 +47,7 @@ describe("safety-scan rejection copy", () => {
     // async paths write that string onto the upload session and the import job,
     // so a drift here shows the creator two different sentences for one outcome.
     expect(SAFETY_SCAN_REJECTED_MESSAGE).toBe(
-      "This file was rejected by the instance's safety scan and was not stored.",
+      "This file was rejected by the instance's safety scan.",
     );
   });
 
@@ -63,6 +63,15 @@ describe("safety-scan rejection copy", () => {
     });
     expect(importOrUploadError(err, "url", t)).toBe(SAFETY_SCAN_REJECTED_MESSAGE);
     expect(importOrUploadError(err, "file", t)).toBe(SAFETY_SCAN_REJECTED_MESSAGE);
+  });
+
+  it("renders current copy for a refusal recorded by an older worker", () => {
+    const err = new ApiError({
+      status: 422,
+      code: "upload_failed",
+      message: "This file was rejected by the instance's safety scan and was not stored.",
+    });
+    expect(importOrUploadError(err, "url", t)).toBe("This file was rejected by the instance's safety scan.");
   });
 
   it("tells an unconfigured-scanner refusal apart from a rejected file", () => {

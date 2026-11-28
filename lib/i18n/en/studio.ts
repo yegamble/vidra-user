@@ -370,7 +370,7 @@ export const studio = {
   "studio.upload.stage.downloading": "Downloading",
   "studio.upload.stage.processing": "Scanning & processing",
   // Upload / import / replace failures (shared.tsx helpers).
-  "studio.errors.safetyScan": "This file was rejected by the instance's safety scan and was not stored.",
+  "studio.errors.safetyScan": "This file was rejected by the instance's safety scan.",
   "studio.errors.scannerNotConfigured": "This instance cannot accept files right now: its safety scanner is not available. Nothing was stored — try again later, or ask the operator.",
   "studio.errors.unsupportedType": "That is not a supported video type.",
   "studio.errors.tooLarge": "That file is too large.",
