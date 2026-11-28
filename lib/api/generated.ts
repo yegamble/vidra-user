@@ -7995,7 +7995,7 @@ export interface components {
             authoritative_hls_url?: string;
             /**
              * Format: uri
-             * @description Optional public IPFS gateway master playlist URL for the exact current promoted generation, including its actual imported filename. Present only for clear public published media with a complete, eligible public pin, delivery enabled, and an affirmative gateway health observation. Never append credentials or playback tokens. Try with a bounded startup/stall deadline, then fall back to authoritative_hls_url. Omission never blocks ordinary playback.
+             * @description Optional IPFS HLS master for the current eligible public generation. An individually approved native S3 reference uses a same-origin URL after the reference bridge confirms readiness. An enabled, healthy public asset mirror can supply a gateway URL, including an imported video's actual master filename. Never append credentials or playback tokens. Try with a bounded startup/stall deadline, then fall back to authoritative_hls_url. Omission never blocks ordinary playback.
              */
             ipfs_hls_url?: string;
             /**
@@ -18606,19 +18606,34 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description An approved HLS playlist or media file. */
+            /** @description The complete approved HLS playlist or media file. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/vnd.apple.mpegurl": string;
+                    "text/vtt": string;
+                    "video/mp4": string;
+                    "video/mp2t": string;
+                    "audio/mp4": string;
+                    "audio/aac": string;
+                };
             };
-            /** @description Requested byte range. */
+            /** @description The requested byte range in the file's original media type. */
             206: {
                 headers: {
+                    "Content-Range"?: string;
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/vnd.apple.mpegurl": string;
+                    "text/vtt": string;
+                    "video/mp4": string;
+                    "video/mp2t": string;
+                    "audio/mp4": string;
+                    "audio/aac": string;
+                };
             };
             /** @description Unknown, ineligible, replaced or unapproved media. */
             404: {
