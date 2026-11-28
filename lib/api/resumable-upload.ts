@@ -77,10 +77,19 @@ function isCancelled(err: unknown): boolean {
   return err instanceof ApiError && err.status === 0 && err.code === UPLOAD_CANCELLED_CODE;
 }
 
-// A chunk PUT is retriable only on a transient failure: a network error
-// (status 0) or a 5xx. A 4xx (404/409/413/422) will not get better on retry.
-function isRetriable(err: unknown): boolean {
-  return err instanceof ApiError && !isCancelled(err) && (err.status === 0 || err.status >= 500);
+// The same chunk and completion are safe to replay after a temporary failure.
+function isRetriable(err: unknown): err is ApiError {
+  return err instanceof ApiError && !isCancelled(err) && (err.status === 0 || err.status === 429 || err.status >= 500);
+}
+
+function uploadRetryDelay(err: ApiError, backoff: number): number {
+  if (err.status !== 429 || !err.retryAfter) return backoff;
+  const hint = err.retryAfter.trim();
+  const delay = /^\d+$/.test(hint) ? Number(hint) * 1_000 : Date.parse(hint) - Date.now();
+  // Preserve the resumable session for a later retry if the server requires a
+  // long wait. Clamping the delay would retry before that window has elapsed.
+  if (delay > 5 * 60_000) throw err;
+  return Number.isNaN(delay) ? backoff : Math.max(backoff, delay);
 }
 
 // --- localStorage session store ---------------------------------------------
@@ -263,7 +272,7 @@ async function putChunkWithRetry(
       if (isCancelled(err)) throw err;
       if (!isRetriable(err)) throw err;
       lastErr = err;
-      if (attempt < retries - 1) await abortableDelay(base * 2 ** attempt, opts.signal);
+      if (attempt < retries - 1) await abortableDelay(uploadRetryDelay(err, base * 2 ** attempt), opts.signal);
     }
   }
   // Retries exhausted: surface the last transient failure honestly. The session
@@ -295,7 +304,7 @@ async function completeWithRetry(
       if (isCancelled(err)) throw err;
       if (!isRetriable(err)) throw err;
       lastErr = err;
-      if (attempt < retries - 1) await abortableDelay(base * 2 ** attempt, opts.signal);
+      if (attempt < retries - 1) await abortableDelay(uploadRetryDelay(err, base * 2 ** attempt), opts.signal);
     }
   }
   throw lastErr instanceof ApiError
