@@ -1,4 +1,3 @@
-import { requestId } from "./request-id";
 // Resumable (chunked) upload orchestration for the studio's original-file upload.
 //
 // The flow: open a session (POST /videos/:id/upload-session), PUT each chunk of
@@ -21,11 +20,9 @@ import { requestId } from "./request-id";
 // browser refresh) leaves a resumable session recorded in localStorage so the
 // same file, re-picked, can resume from the chunks that already landed.
 
-import { apiBaseUrl } from "@/lib/config";
 import { logger } from "@/lib/logger";
 
-import { ApiError, apiErrorFromBody } from "./client";
-import { getAccessToken } from "./auth-store";
+import { ApiError, apiRequest } from "./client";
 import { api } from "./endpoints";
 import { computeFileFingerprint } from "./fingerprint";
 import type { UploadProgress } from "./upload";
@@ -150,41 +147,6 @@ export function findResumableUploadSession(file: { name: string; size: number })
 
 // --- chunk transport ---------------------------------------------------------
 
-// putUploadChunk stores one chunk (raw octet-stream body) at index n. Unlike the
-// JSON client, this streams a Blob body, so it lives here rather than in the
-// fetch/JSON client. Errors map through the SAME envelope parser as apiRequest.
-async function putUploadChunk(
-  uploadId: string,
-  n: number,
-  chunk: Blob,
-  signal?: AbortSignal,
-): Promise<UploadStatusResponse> {
-  const url = `${apiBaseUrl}/api/v1/uploads/${encodeURIComponent(uploadId)}/chunks/${n}`;
-  const correlationId = requestId();
-  const token = getAccessToken();
-  const headers: Record<string, string> = {
-    accept: "application/json",
-    "content-type": "application/octet-stream",
-    "x-correlation-id": correlationId,
-  };
-  if (token) headers.authorization = `Bearer ${token}`;
-
-  let res: Response;
-  try {
-    res = await fetch(url, { method: "PUT", headers, body: chunk, signal });
-  } catch (cause) {
-    if (signal?.aborted) throw cancelledError();
-    logger.warn("upload chunk network error", { upload_id: uploadId, chunk: n, correlation_id: correlationId });
-    void cause;
-    throw new ApiError({ status: 0, code: "network_error", message: "could not reach the server" });
-  }
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw apiErrorFromBody(res.status, text);
-  }
-  return (await res.json()) as UploadStatusResponse;
-}
-
 // abortableDelay resolves after ms, or rejects as a cancellation if aborted.
 function abortableDelay(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -292,8 +254,13 @@ async function putChunkWithRetry(
   for (let attempt = 0; attempt < retries; attempt++) {
     if (opts.signal?.aborted) throw cancelledError();
     try {
-      return await putUploadChunk(uploadId, n, chunk, opts.signal);
+      return await apiRequest<UploadStatusResponse>(`/api/v1/uploads/${encodeURIComponent(uploadId)}/chunks/${n}`, {
+        method: "PUT",
+        body: chunk,
+        signal: opts.signal,
+      });
     } catch (err) {
+      if (opts.signal?.aborted) throw cancelledError();
       if (isCancelled(err)) throw err;
       if (!isRetriable(err)) throw err;
       lastErr = err;

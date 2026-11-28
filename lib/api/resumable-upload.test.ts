@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { setAccessToken } from "./auth-store";
 import { ApiError } from "./client";
 import { api } from "./endpoints";
 import {
@@ -92,6 +93,7 @@ describe("resumableUpload", () => {
     vi.spyOn(api, "getVideo").mockResolvedValue(publishedVideo());
   });
   afterEach(() => {
+    setAccessToken(null);
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -153,6 +155,38 @@ describe("resumableUpload", () => {
     // Progress ends at 100; the session is forgotten after completion.
     expect(seen.at(-1)).toBe(100);
     expect(findResumableUploadSession({ name: "clip.mp4", size: 10 })).toBeNull();
+  });
+
+  it("renews an expired token mid-transfer and resends only the interrupted chunk", async () => {
+    setAccessToken("first-token");
+    const file = new File(["abcdefghij"], "clip.mp4");
+    const sent: { index: number; token: string; bytes: string }[] = [];
+    let renewals = 0;
+    fetchMock.mockImplementation(async (url: string, init: RequestInit) => {
+      if (url.endsWith("/auth/refresh")) {
+        renewals++;
+        expect(init.credentials).toBe("include");
+        return Response.json({ token: "second-token" });
+      }
+      const index = Number(url.slice(url.lastIndexOf("/") + 1));
+      const headers = new Headers(init.headers);
+      const token = headers.get("authorization") ?? "";
+      expect(headers.get("content-type")).toBe("application/octet-stream");
+      sent.push({ index, token, bytes: await (init.body as Blob).text() });
+      if (index === 1 && token === "Bearer first-token") return new Response(null, { status: 401 });
+      return chunkResponse(statusFor(Array.from({ length: index + 1 }, (_, i) => i)));
+    });
+
+    await resumableUpload("v1", file);
+
+    expect(renewals).toBe(1);
+    expect(sent).toEqual([
+      { index: 0, token: "Bearer first-token", bytes: "abcd" },
+      { index: 1, token: "Bearer first-token", bytes: "efgh" },
+      { index: 1, token: "Bearer second-token", bytes: "efgh" },
+      { index: 2, token: "Bearer second-token", bytes: "ij" },
+    ]);
+    expect(api.completeUploadSession).toHaveBeenCalledTimes(1);
   });
 
   it("resumes by skipping already-received chunks", async () => {
