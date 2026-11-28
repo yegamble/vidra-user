@@ -284,6 +284,22 @@ describe("resumableUpload", () => {
     expect(findResumableUploadSession({ name: "clip.mp4", size: 10 })).toBeNull();
   });
 
+  it("keeps waiting while the server confirms a long-running upload", async () => {
+    acceptingChunks();
+    vi.spyOn(api, "completeUploadSession").mockResolvedValue(statusFor([0, 1, 2], "queued"));
+    const realNow = Date.now();
+    let time = realNow;
+    vi.spyOn(Date, "now").mockImplementation(() => time);
+    const poll = vi.spyOn(api, "getUploadSession").mockImplementationOnce(async () => {
+      time += 45 * 60_000;
+      return statusFor([0, 1, 2], "processing");
+    }).mockResolvedValueOnce(statusFor([0, 1, 2], "completed"));
+    vi.spyOn(api, "getVideo").mockResolvedValue(publishedVideo());
+    const res = await resumableUpload("v1", makeFile(), { pollIntervalMs: 0 });
+    expect(poll).toHaveBeenCalledTimes(2);
+    expect(res.video.state).toBe("published");
+  });
+
   it("rejects with the server's reason when the session ends failed", async () => {
     acceptingChunks();
     vi.spyOn(api, "completeUploadSession").mockResolvedValue(statusFor([0, 1, 2], "queued"));

@@ -64,9 +64,8 @@ const DEFAULT_POLL_INTERVAL_MS = 2_000;
 /** The poll interval never grows past this — a stalled bar needs a live signal. */
 const MAX_POLL_INTERVAL_MS = 10_000;
 /**
- * Overall cap on server-side processing. Generous, because a multi-gigabyte
- * upload behind a busy queue legitimately takes a while; finite, because a
- * promise that never settles is a spinner that never stops.
+ * Stop polling after this long without a status response. A large video can
+ * spend longer in the processing queue while the server keeps reporting it.
  */
 const DEFAULT_PROCESSING_TIMEOUT_MS = 30 * 60_000;
 
@@ -211,7 +210,7 @@ export interface ResumableUploadOptions {
    */
   pollIntervalMs?: number;
   /**
-   * Overall cap on the server-side processing phase (default 30 min). Past it
+   * Optional overall cap on the server-side processing phase. Past it
    * the promise rejects with UPLOAD_PROCESSING_TIMEOUT_CODE rather than polling
    * forever; the bytes are safely stored either way.
    */
@@ -335,8 +334,8 @@ function legacyCompletionVideo(body: unknown): Video | null {
  * caller lost access) is fatal.
  *
  * The interval backs off mildly so a long transcode-heavy queue does not turn
- * into hundreds of requests, and the whole phase is capped so the promise always
- * settles.
+ * into hundreds of requests. A prolonged loss of contact ends polling, while
+ * a server-confirmed running job keeps its processing status.
  */
 async function awaitFinalized(
   uploadId: string,
@@ -344,14 +343,16 @@ async function awaitFinalized(
   opts: ResumableUploadOptions,
 ): Promise<UploadStatusResponse> {
   const base = opts.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
-  const deadline = Date.now() + (opts.processingTimeoutMs ?? DEFAULT_PROCESSING_TIMEOUT_MS);
+  const now = Date.now();
+  const deadline = opts.processingTimeoutMs === undefined ? Infinity : now + opts.processingTimeoutMs;
+  let lastConfirmedAt = now;
   let status = first;
   let wait = base;
   let consecutivePollErrors = 0;
 
   while (status.state === "queued" || status.state === "processing") {
     if (opts.signal?.aborted) throw cancelledError();
-    if (Date.now() > deadline) {
+    if (Date.now() > deadline || (consecutivePollErrors > 0 && Date.now() - lastConfirmedAt > DEFAULT_PROCESSING_TIMEOUT_MS)) {
       throw new ApiError({
         status: 0,
         code: UPLOAD_PROCESSING_TIMEOUT_CODE,
@@ -362,12 +363,13 @@ async function awaitFinalized(
     await abortableDelay(wait, opts.signal);
     try {
       status = await api.getUploadSession(uploadId, opts.signal);
+      lastConfirmedAt = Date.now();
       consecutivePollErrors = 0;
     } catch (err) {
       if (isCancelled(err)) throw err;
       // A 4xx means the session is genuinely gone/inaccessible; anything else is
       // transient and the job is still queued server-side.
-      if (err instanceof ApiError && err.status >= 400 && err.status < 500) throw err;
+      if (err instanceof ApiError && err.status >= 400 && err.status < 500 && err.status !== 429) throw err;
       consecutivePollErrors += 1;
       logger.warn("upload status poll failed", {
         upload_id: uploadId,
